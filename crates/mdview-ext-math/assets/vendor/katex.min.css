@@ -1,0 +1,22 @@
+/* mdview KaTeX stub stylesheet.
+   The real katex.min.css is fetched by build.rs when network is available. */
+.katex {
+  font-family: "KaTeX_Main", "Times New Roman", serif;
+  font-size: 1.05em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.katex-display {
+  display: block;
+  margin: 1em 0;
+  text-align: center;
+}
+.mdv-math {
+  display: inline-block;
+  padding: 0 0.15em;
+}
+.mdv-math-block {
+  display: block;
+  padding: 0.5em 0;
+  text-align: center;
+}
