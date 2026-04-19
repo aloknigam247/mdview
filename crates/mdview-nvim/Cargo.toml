@@ -1,0 +1,20 @@
+[package]
+name = "mdview-nvim"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Neovim bridge for mdview (named-pipe / Unix-socket server + theme cache)"
+
+[dependencies]
+dirs = "5"
+futures-core = "0.3"
+rmpv = { version = "1", features = ["with-serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["full", "test-util"] }
