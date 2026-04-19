@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>mdview</title>
+    <style id="mdv-theme"></style>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        line-height: 1.7;
+        background: var(--mdv-bg, #fff);
+        color: var(--mdv-fg, #222);
+      }
+      main#mdv {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 2.5rem 1.75rem 4rem;
+      }
+      pre,
+      table {
+        border-radius: var(--mdv-radius-md, 12px);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 0 rgba(0, 0, 0, 0.03);
+      }
+      pre {
+        padding: 1rem 1.25rem;
+        overflow-x: auto;
+        background: var(--mdv-code-bg, #f6f8fa);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      blockquote {
+        border-left: 3px solid var(--mdv-accent, #3b82f6);
+        padding: 0.25rem 1rem;
+        color: var(--mdv-muted, #555);
+      }
+    </style>
+  </head>
+  <body>
+    <main id="mdv"><article id="mdv-content"></article></main>
+    <script type="module" src="./client.js"></script>
+  </body>
+</html>
