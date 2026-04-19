@@ -1,0 +1,5 @@
+/target
+/tests/e2e-local/node_modules
+/tests/e2e-local/test-results
+/tests/e2e-local/playwright-report
+/__snapshots__/*.actual.html
