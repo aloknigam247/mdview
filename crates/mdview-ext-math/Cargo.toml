@@ -8,6 +8,7 @@ description = "Math extension for mdview: latex2mathml terminal fallback + KaTeX
 [dependencies]
 comrak = "0.29"
 latex2mathml = "0.2"
+mdview-core = { path = "../mdview-core" }
 thiserror = "1"
 
 [build-dependencies]

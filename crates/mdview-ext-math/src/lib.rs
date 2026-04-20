@@ -7,13 +7,13 @@
 //! - Terminal: uses `latex2mathml` and converts the resulting MathML tree to a
 //!   Unicode expression.
 
-mod _stubs;
 mod mathml_unicode;
 
 use comrak::nodes::NodeValue;
 
-pub use crate::_stubs::{
-    Asset, AstNode, Html, MdViewExtension, RenderCtx, StyleSpec, TermChunk, TermChunks, Theme,
+pub use comrak::nodes::AstNode;
+pub use mdview_core::{
+    Asset, Html, MdViewExtension, RenderCtx, StyleSpec, TermChunk, TermChunks, Theme,
 };
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -44,7 +44,7 @@ impl MdViewExtension for Math {
         opts.extension.math_dollars = true;
     }
 
-    fn render_html<'a>(&self, node: &'a AstNode<'a>, _ctx: &RenderCtx) -> Option<Html> {
+    fn render_html<'a>(&self, node: &'a AstNode<'a>, _ctx: &RenderCtx<'_>) -> Option<Html> {
         let data = node.data.borrow();
         let NodeValue::Math(m) = &data.value else {
             return None;
@@ -58,7 +58,11 @@ impl MdViewExtension for Math {
         }))
     }
 
-    fn render_terminal<'a>(&self, node: &'a AstNode<'a>, _ctx: &RenderCtx) -> Option<TermChunks> {
+    fn render_terminal<'a>(
+        &self,
+        node: &'a AstNode<'a>,
+        _ctx: &RenderCtx<'_>,
+    ) -> Option<TermChunks> {
         let data = node.data.borrow();
         let NodeValue::Math(m) = &data.value else {
             return None;
@@ -66,7 +70,7 @@ impl MdViewExtension for Math {
         let text = tex_to_unicode(&m.literal)
             .filter(|u| !u.trim().is_empty())
             .unwrap_or_else(|| fallback_box(&m.literal));
-        Some(TermChunks(vec![TermChunk { text, style: None }]))
+        Some(vec![TermChunk::plain(text)])
     }
 
     fn client_assets(&self) -> &'static [Asset] {
@@ -128,7 +132,8 @@ mod tests {
         find_math_nodes(root, &mut math);
         assert_eq!(math.len(), 1, "expected one math node");
 
-        let ctx = RenderCtx::default();
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
         let ext = Math;
 
         let html = ext.render_html(math[0], &ctx).expect("html");
@@ -137,7 +142,7 @@ mod tests {
         assert!(html.0.starts_with("<span"), "html: {}", html.0);
 
         let term = ext.render_terminal(math[0], &ctx).expect("term");
-        let text = term.0[0].text.clone();
+        let text = term[0].text.clone();
         assert!(
             text.contains('\u{00B2}'),
             "expected superscript 2 in terminal output, got {text:?}"
@@ -153,7 +158,8 @@ mod tests {
         find_math_nodes(root, &mut math);
         assert!(!math.is_empty(), "expected display math node");
 
-        let ctx = RenderCtx::default();
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
         let ext = Math;
 
         let html = ext.render_html(math[0], &ctx).expect("html");
@@ -166,7 +172,7 @@ mod tests {
 
         let term = ext.render_terminal(math[0], &ctx).expect("term");
         assert!(
-            !term.0[0].text.is_empty(),
+            !term[0].text.is_empty(),
             "terminal output should be non-empty"
         );
     }
