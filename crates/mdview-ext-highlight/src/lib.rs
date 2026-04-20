@@ -70,7 +70,7 @@ impl MdViewExtension for Highlight {
         "highlight"
     }
 
-    fn render_html(&self, node: &AstNode, _ctx: &RenderCtx) -> Option<Html> {
+    fn render_html<'a>(&self, node: &'a AstNode<'a>, _ctx: &RenderCtx<'_>) -> Option<Html> {
         let (lang, source) = Self::code_info(node)?;
         let syntax = Self::syntax_for(&lang);
         let mut gen =
@@ -97,10 +97,14 @@ impl MdViewExtension for Highlight {
         )))
     }
 
-    fn render_terminal(&self, node: &AstNode, ctx: &RenderCtx) -> Option<TermChunks> {
+    fn render_terminal<'a>(
+        &self,
+        node: &'a AstNode<'a>,
+        ctx: &RenderCtx<'_>,
+    ) -> Option<TermChunks> {
         let (lang, source) = Self::code_info(node)?;
         let syntax = Self::syntax_for(&lang);
-        let theme = Self::theme_for(ctx.theme.name);
+        let theme = Self::theme_for(ctx.theme.name.as_str());
         let mut h = HighlightLines::new(syntax, theme);
         let mut out = String::new();
         for line in LinesWithEndings::from(&source) {
@@ -108,13 +112,7 @@ impl MdViewExtension for Highlight {
             out.push_str(&as_24_bit_terminal_escaped(&ranges[..], false));
         }
         out.push_str("\x1b[0m");
-        Some(TermChunks {
-            chunks: vec![TermChunk {
-                text: out,
-                style: None,
-                ansi: None,
-            }],
-        })
+        Some(vec![TermChunk::plain(out)])
     }
 }
 
@@ -200,13 +198,10 @@ mod tests {
             .find(|child| matches!(child.data.borrow().value, NodeValue::CodeBlock(_)))
     }
 
-    fn make_ctx(theme_name: &'static str) -> RenderCtx {
-        RenderCtx {
-            theme: Theme {
-                name: theme_name,
-                ..Theme::default()
-            },
-            truecolor: true,
+    fn make_theme(theme_name: &'static str) -> Theme {
+        Theme {
+            name: theme_name.to_string(),
+            ..Theme::default()
         }
     }
 
@@ -215,10 +210,9 @@ mod tests {
         let opts = ComrakOptions::default();
         let root = parse_document(&arena, src, &opts);
         let node = first_code_block(root).expect("has code block");
-        Highlight
-            .render_html(node, &make_ctx(theme_name))
-            .expect("html")
-            .0
+        let theme = make_theme(theme_name);
+        let ctx = RenderCtx::new(&theme);
+        Highlight.render_html(node, &ctx).expect("html").0
     }
 
     fn render_term_for(src: &str, theme_name: &'static str) -> String {
@@ -226,10 +220,11 @@ mod tests {
         let opts = ComrakOptions::default();
         let root = parse_document(&arena, src, &opts);
         let node = first_code_block(root).expect("has code block");
+        let theme = make_theme(theme_name);
+        let ctx = RenderCtx::new(&theme);
         Highlight
-            .render_terminal(node, &make_ctx(theme_name))
+            .render_terminal(node, &ctx)
             .expect("terminal")
-            .chunks
             .into_iter()
             .map(|c| c.text)
             .collect()
@@ -302,8 +297,10 @@ mod tests {
         let opts = ComrakOptions::default();
         let root = parse_document(&arena, "just a paragraph\n", &opts);
         let p = root.first_child().expect("has child");
-        assert!(Highlight.render_html(p, &make_ctx("light")).is_none());
-        assert!(Highlight.render_terminal(p, &make_ctx("light")).is_none());
+        let theme = make_theme("light");
+        let ctx = RenderCtx::new(&theme);
+        assert!(Highlight.render_html(p, &ctx).is_none());
+        assert!(Highlight.render_terminal(p, &ctx).is_none());
     }
 
     #[test]
