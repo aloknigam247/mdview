@@ -10,7 +10,9 @@ use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use mdview_ext_mermaid::{scan, AstNode, MdViewExtension, Mermaid, RenderCtx};
+use comrak::nodes::NodeValue;
+use comrak::{parse_document, Arena, ComrakOptions};
+use mdview_ext_mermaid::{MdViewExtension, Mermaid, RenderCtx, Theme};
 
 const ADDR: &str = "127.0.0.1:7684";
 
@@ -54,20 +56,22 @@ fn main() -> std::io::Result<()> {
 
 fn build_page(src: &str) -> String {
     let ext = Mermaid;
-    let ctx = RenderCtx::default();
+    let theme = Theme::default();
+    let ctx = RenderCtx::new(&theme);
+    let arena = Arena::new();
+    let root = parse_document(&arena, src, &ComrakOptions::default());
+
     let mut out = String::new();
     out.push_str("<!doctype html><html><head><meta charset=\"utf-8\">");
     out.push_str("<title>mermaid demo</title>");
     out.push_str("<style>body{font-family:ui-sans-serif,system-ui;padding:2rem;background:#fff;}.mermaid{margin:1rem 0;}</style>");
     out.push_str("</head><body>\n");
-    for block in scan::mermaid_blocks(src) {
-        let node = AstNode::FencedCode {
-            info: "mermaid".into(),
-            literal: block,
-        };
-        if let Some(html) = ext.render_html(&node, &ctx) {
-            out.push_str(&html.0);
-            out.push('\n');
+    for node in root.descendants() {
+        if matches!(node.data.borrow().value, NodeValue::CodeBlock(_)) {
+            if let Some(html) = ext.render_html(node, &ctx) {
+                out.push_str(&html.0);
+                out.push('\n');
+            }
         }
     }
     out.push_str("<script src=\"/vendor/mermaid.min.js\"></script>\n");
