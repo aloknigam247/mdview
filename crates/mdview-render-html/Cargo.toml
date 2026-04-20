@@ -12,9 +12,9 @@ thiserror = "1"
 [dev-dependencies]
 
 [[example]]
-name = "demo_serve"
-path = "examples/demo_serve.rs"
+name = "render_html_serve"
+path = "examples/render_html_serve.rs"
 
 [[example]]
-name = "demo_snapshot"
-path = "examples/demo_snapshot.rs"
+name = "render_html_snapshot"
+path = "examples/render_html_snapshot.rs"

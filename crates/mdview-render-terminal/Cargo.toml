@@ -17,5 +17,5 @@ unicode-width = "0.1"
 path = "src/lib.rs"
 
 [[example]]
-name = "demo_snapshot"
-path = "examples/demo_snapshot.rs"
+name = "render_terminal_snapshot"
+path = "examples/render_terminal_snapshot.rs"

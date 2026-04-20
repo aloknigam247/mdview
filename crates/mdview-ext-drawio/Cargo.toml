@@ -15,9 +15,9 @@ which = "6"
 tiny_http = "0.12"
 
 [[example]]
-name = "demo_snapshot"
-path = "examples/demo_snapshot.rs"
+name = "ext_drawio_snapshot"
+path = "examples/ext_drawio_snapshot.rs"
 
 [[example]]
-name = "demo_serve"
-path = "examples/demo_serve.rs"
+name = "ext_drawio_serve"
+path = "examples/ext_drawio_serve.rs"

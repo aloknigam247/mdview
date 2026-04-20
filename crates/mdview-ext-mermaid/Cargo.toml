@@ -17,9 +17,9 @@ which = "6"
 tempfile = "3"
 
 [[example]]
-name = "demo_snapshot"
-path = "examples/demo_snapshot.rs"
+name = "ext_mermaid_snapshot"
+path = "examples/ext_mermaid_snapshot.rs"
 
 [[example]]
-name = "demo_serve"
-path = "examples/demo_serve.rs"
+name = "ext_mermaid_serve"
+path = "examples/ext_mermaid_serve.rs"

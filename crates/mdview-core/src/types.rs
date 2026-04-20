@@ -80,29 +80,29 @@ impl Default for Radii {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Typography {
-    pub body: &'static str,
-    pub headings: &'static str,
-    pub mono: &'static str,
+    pub body: String,
+    pub headings: String,
+    pub mono: String,
 }
 
 impl Default for Typography {
     fn default() -> Self {
         Self {
-            body: "ui-sans-serif, system-ui, sans-serif",
-            headings: "ui-sans-serif, system-ui, sans-serif",
-            mono: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            body: "ui-sans-serif, system-ui, sans-serif".into(),
+            headings: "ui-sans-serif, system-ui, sans-serif".into(),
+            mono: "ui-monospace, SFMono-Regular, Menlo, monospace".into(),
         }
     }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Theme {
-    pub colors: BTreeMap<&'static str, &'static str>,
-    pub name: &'static str,
+    pub colors: BTreeMap<String, String>,
+    pub name: String,
     pub radii: Radii,
-    pub styles: BTreeMap<&'static str, StyleSpec>,
+    pub styles: BTreeMap<String, StyleSpec>,
     pub typography: Typography,
 }
 

@@ -14,9 +14,9 @@ thiserror = "1.0"
 tiny_http = "0.12"
 
 [[example]]
-name = "demo_snapshot"
-path = "examples/demo_snapshot.rs"
+name = "ext_highlight_snapshot"
+path = "examples/ext_highlight_snapshot.rs"
 
 [[example]]
-name = "demo_serve"
-path = "examples/demo_serve.rs"
+name = "ext_highlight_serve"
+path = "examples/ext_highlight_serve.rs"
