@@ -2634,7 +2634,8 @@ name = "mdview-ext-drawio"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "comrak 0.26.0",
+ "comrak 0.29.0",
+ "mdview-core",
  "serde_json",
  "thiserror 1.0.69",
  "tiny_http",

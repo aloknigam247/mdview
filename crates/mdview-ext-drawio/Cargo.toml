@@ -6,9 +6,10 @@ publish = false
 
 [dependencies]
 base64 = "0.22"
-comrak = "0.26"
+comrak = { workspace = true }
+mdview-core = { path = "../mdview-core" }
 serde_json = "1"
-thiserror = "1"
+thiserror = { workspace = true }
 which = "6"
 
 [dev-dependencies]
