@@ -5,7 +5,7 @@
 //! minimal replacements so this binary can build and test in isolation.
 
 use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -75,45 +75,89 @@ pub async fn run_nvim(cli: &Cli) -> Result<()> {
 }
 
 pub async fn run_tauri_child(cli: &Cli) -> Result<()> {
-    let port = backend::pick_auto_port();
-    let file: Option<PathBuf> = cli.file.clone();
-    let server = tokio::spawn(async move { backend::serve_stub(port, file.as_deref()).await });
+    let file = cli
+        .file
+        .as_ref()
+        .context("tauri mode requires a FILE argument")?;
+    let src = std::fs::read_to_string(file)
+        .with_context(|| format!("reading {}", file.display()))?;
+    let title = file
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("mdview")
+        .to_string();
+    let html = crate::render::render_page(&src, &title)?;
+    let srv = crate::server::serve_html(html).await?;
+    let port = srv.port;
+    eprintln!("mdview: serving on http://127.0.0.1:{port}");
 
-    #[cfg(feature = "tauri-shell")]
+    let url = format!("http://127.0.0.1:{port}");
+
+    #[cfg(feature = "gui")]
     {
-        run_tauri_event_loop(port)?;
+        // wry runs the event loop on the current thread and blocks until the
+        // window is closed. Keep `srv` alive for the whole session.
+        run_gui_event_loop(&url)?;
     }
 
-    #[cfg(not(feature = "tauri-shell"))]
+    #[cfg(not(feature = "gui"))]
     {
-        // Headless fallback for isolated builds / CI without system webview.
-        // Block briefly so the spawned server task has a chance to initialise.
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        let _ = port;
+        open_in_browser(&url);
+        eprintln!("mdview: opened {url} in default browser — press Ctrl+C to stop.");
+        tokio::signal::ctrl_c().await.ok();
     }
 
-    server.abort();
+    drop(srv);
     Ok(())
 }
 
-#[cfg(feature = "tauri-shell")]
-fn run_tauri_event_loop(port: u16) -> Result<()> {
-    let url = format!("http://127.0.0.1:{port}");
-    tauri::Builder::default()
-        .setup(move |app| {
-            use tauri::WebviewWindowBuilder;
-            let _ = WebviewWindowBuilder::new(
-                app,
-                "main",
-                tauri::WebviewUrl::External(url.parse().unwrap()),
-            )
-            .title("mdview")
-            .inner_size(1200.0, 800.0)
-            .min_inner_size(600.0, 400.0)
-            .build()?;
-            Ok(())
-        })
-        .run(tauri::generate_context!())
-        .map_err(|e| anyhow::anyhow!("tauri: {e}"))?;
-    Ok(())
+#[cfg(not(feature = "gui"))]
+fn open_in_browser(url: &str) {
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "", url])
+            .spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(url).spawn();
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+    }
+}
+
+#[cfg(feature = "gui")]
+fn run_gui_event_loop(url: &str) -> Result<()> {
+    use tao::dpi::LogicalSize;
+    use tao::event::{Event, WindowEvent};
+    use tao::event_loop::{ControlFlow, EventLoop};
+    use tao::window::WindowBuilder;
+    use wry::WebViewBuilder;
+
+    let event_loop = EventLoop::new();
+    let window = WindowBuilder::new()
+        .with_title("mdview")
+        .with_inner_size(LogicalSize::new(1200.0, 800.0))
+        .with_min_inner_size(LogicalSize::new(600.0, 400.0))
+        .build(&event_loop)
+        .map_err(|e| anyhow::anyhow!("window build: {e}"))?;
+
+    let _webview = WebViewBuilder::new()
+        .with_url(url)
+        .build(&window)
+        .map_err(|e| anyhow::anyhow!("webview build: {e}"))?;
+
+    event_loop.run(move |event, _target, control_flow| {
+        *control_flow = ControlFlow::Wait;
+        if let Event::WindowEvent {
+            event: WindowEvent::CloseRequested,
+            ..
+        } = event
+        {
+            *control_flow = ControlFlow::Exit;
+        }
+    });
 }

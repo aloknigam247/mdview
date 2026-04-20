@@ -11,6 +11,8 @@ mod cli;
 #[allow(unsafe_code)]
 mod daemonize;
 mod pipeline;
+mod render;
+mod server;
 
 #[cfg(feature = "stubs")]
 #[allow(non_snake_case)]

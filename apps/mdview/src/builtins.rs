@@ -1,13 +1,16 @@
 use mdview_core::MdViewExtension;
 
+// Selective-match extensions (those gated on a specific fenced-block
+// info-string) must precede the catch-all `Highlight`, which matches any
+// code block and would otherwise shadow the diagram extensions.
 #[allow(dead_code)]
 pub fn builtin_extensions() -> Vec<Box<dyn MdViewExtension>> {
     vec![
         Box::new(mdview_ext_drawio::Drawio),
-        Box::new(mdview_ext_highlight::Highlight),
-        Box::new(mdview_ext_math::Math),
         Box::new(mdview_ext_mermaid::Mermaid),
         Box::new(mdview_ext_plotly::Plotly),
+        Box::new(mdview_ext_math::Math),
+        Box::new(mdview_ext_highlight::Highlight),
     ]
 }
 
