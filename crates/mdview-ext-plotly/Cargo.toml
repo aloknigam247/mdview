@@ -1,0 +1,23 @@
+[package]
+name = "mdview-ext-plotly"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Plotly fenced-code extension for mdview"
+
+[dependencies]
+comrak = "0.26"
+serde_json = "1"
+thiserror = "1"
+which = "6"
+
+[dev-dependencies]
+tiny_http = "0.12"
+
+[[example]]
+name = "demo_snapshot"
+path = "examples/demo_snapshot.rs"
+
+[[example]]
+name = "demo_serve"
+path = "examples/demo_serve.rs"
