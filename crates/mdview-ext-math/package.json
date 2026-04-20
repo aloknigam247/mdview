@@ -1,0 +1,8 @@
+{
+  "name": "mdview-ext-math-e2e",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "playwright": "^1.47.0"
+  }
+}
