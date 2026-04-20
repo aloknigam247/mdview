@@ -13,12 +13,12 @@ pub use _stubs::{
 
 const CLIENT_ASSETS: &[Asset] = &[
     Asset {
-        path: "vendor/drawio-viewer.js",
         mime: "application/javascript",
+        path: "vendor/drawio-viewer.js",
     },
     Asset {
-        path: "vendor/mdv-drawio-init.js",
         mime: "application/javascript",
+        path: "vendor/mdv-drawio-init.js",
     },
 ];
 
@@ -29,38 +29,34 @@ impl MdViewExtension for Drawio {
         "drawio"
     }
 
-    fn render_html(&self, node: &AstNode, _ctx: &RenderCtx) -> Option<Html> {
+    fn render_html<'a>(&self, node: &'a AstNode<'a>, _ctx: &RenderCtx<'_>) -> Option<Html> {
         let (info, body) = extract_fenced(node)?;
         if !is_drawio_info(&info) {
             return None;
         }
-        let encoded = B64.encode(body.as_bytes());
+        let b64 = B64.encode(body.as_bytes());
         let options = parse_options(&info);
         let scale_attr = options
             .get("scale")
             .map(|v| format!(" data-scale=\"{}\"", escape_attr(v)))
             .unwrap_or_default();
-        let html = format!(
-            "<div class=\"drawio-viewer\" data-xml-b64=\"{}\"{}></div>",
-            encoded, scale_attr
-        );
-        Some(Html(html))
+        Some(Html(format!(
+            "<div class=\"drawio-viewer\" data-xml-b64=\"{b64}\"{scale_attr}></div>"
+        )))
     }
 
-    fn render_terminal(&self, node: &AstNode, _ctx: &RenderCtx) -> Option<TermChunks> {
+    fn render_terminal<'a>(
+        &self,
+        node: &'a AstNode<'a>,
+        _ctx: &RenderCtx<'_>,
+    ) -> Option<TermChunks> {
         let (info, body) = extract_fenced(node)?;
         if !is_drawio_info(&info) {
             return None;
         }
         match sidecar::run_sidecar("drawio", &body) {
-            Ok(svg) => {
-                let sixel = render_sixel_stub(&svg);
-                Some(TermChunks(vec![TermChunk::Sixel(sixel)]))
-            }
-            Err(_) => {
-                let placeholder = placeholder_ascii(&body);
-                Some(TermChunks(vec![TermChunk::AsciiPlaceholder(placeholder)]))
-            }
+            Ok(svg) => Some(vec![TermChunk::plain(sixel_wrap(&svg))]),
+            Err(_) => Some(vec![TermChunk::plain(placeholder_ascii(&body))]),
         }
     }
 
@@ -69,7 +65,7 @@ impl MdViewExtension for Drawio {
     }
 }
 
-fn extract_fenced(node: &AstNode) -> Option<(String, String)> {
+fn extract_fenced(node: &AstNode<'_>) -> Option<(String, String)> {
     match &node.data.borrow().value {
         NodeValue::CodeBlock(cb) => Some((cb.info.clone(), cb.literal.clone())),
         _ => None,
@@ -102,19 +98,14 @@ fn escape_attr(s: &str) -> String {
         .replace('>', "&gt;")
 }
 
-fn render_sixel_stub(svg: &str) -> Vec<u8> {
-    let mut out = Vec::with_capacity(svg.len() + 8);
-    out.extend_from_slice(b"\x1bPq");
-    out.extend_from_slice(svg.as_bytes());
-    out.extend_from_slice(b"\x1b\\");
-    out
+fn sixel_wrap(svg: &str) -> String {
+    format!("\x1bPq{svg}\x1b\\")
 }
 
 fn placeholder_ascii(body: &str) -> String {
     let lines = body.lines().count();
     format!(
-        "╭─ drawio diagram ({} lines) ─╮\n│ (sidecar unavailable)        │\n╰──────────────────────────────╯",
-        lines
+        "╭─ drawio diagram ({lines} lines) ─╮\n│ (sidecar unavailable)        │\n╰──────────────────────────────╯"
     )
 }
 
@@ -138,7 +129,8 @@ mod tests {
         let md = "```drawio\n<mxfile><hello/></mxfile>\n```\n";
         let root = parse_document(&arena, md, &ComrakOptions::default());
         let cb = first_code_block(root).expect("code block");
-        let ctx = RenderCtx::default();
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
         let html = Drawio.render_html(cb, &ctx).expect("html output");
         let body = "<mxfile><hello/></mxfile>\n";
         let expected = B64.encode(body.as_bytes());
@@ -156,7 +148,8 @@ mod tests {
         let md = "```drawio:scale=1.2\n<mxfile/>\n```\n";
         let root = parse_document(&arena, md, &ComrakOptions::default());
         let cb = first_code_block(root).expect("code block");
-        let ctx = RenderCtx::default();
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
         let html = Drawio.render_html(cb, &ctx).expect("html output");
         assert!(html.0.contains("data-scale=\"1.2\""), "got: {}", html.0);
     }
@@ -167,7 +160,8 @@ mod tests {
         let md = "```rust\nfn main() {}\n```\n";
         let root = parse_document(&arena, md, &ComrakOptions::default());
         let cb = first_code_block(root).expect("code block");
-        let ctx = RenderCtx::default();
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
         assert!(Drawio.render_html(cb, &ctx).is_none());
         assert!(Drawio.render_terminal(cb, &ctx).is_none());
     }
@@ -178,18 +172,16 @@ mod tests {
         let md = "```drawio\n<mxfile/>\n```\n";
         let root = parse_document(&arena, md, &ComrakOptions::default());
         let cb = first_code_block(root).expect("code block");
-        let ctx = RenderCtx::default();
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
         let chunks = Drawio.render_terminal(cb, &ctx).expect("chunks");
-        assert_eq!(chunks.0.len(), 1);
-        match &chunks.0[0] {
-            TermChunk::AsciiPlaceholder(s) => {
-                assert!(s.contains("drawio diagram"), "got: {}", s);
-            }
-            TermChunk::Sixel(_) => {
-                // ok if a real sidecar happens to be installed
-            }
-            other => panic!("unexpected chunk: {:?}", other),
-        }
+        assert_eq!(chunks.len(), 1);
+        let text = &chunks[0].text;
+        assert!(
+            text.contains("drawio diagram") || text.starts_with("\x1bPq"),
+            "got: {}",
+            text
+        );
     }
 
     #[test]
@@ -197,8 +189,6 @@ mod tests {
         let assets = Drawio.client_assets();
         assert_eq!(assets.len(), 2);
         assert!(assets.iter().any(|a| a.path == "vendor/drawio-viewer.js"));
-        assert!(assets
-            .iter()
-            .any(|a| a.path == "vendor/mdv-drawio-init.js"));
+        assert!(assets.iter().any(|a| a.path == "vendor/mdv-drawio-init.js"));
     }
 }

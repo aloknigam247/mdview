@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use comrak::nodes::NodeValue;
 use comrak::{parse_document, Arena, ComrakOptions};
-use mdview_ext_drawio::{Drawio, MdViewExtension, RenderCtx};
+use mdview_ext_drawio::{Drawio, MdViewExtension, RenderCtx, Theme};
 
 fn main() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -12,7 +12,8 @@ fn main() {
 
     let arena = Arena::new();
     let root = parse_document(&arena, &src, &ComrakOptions::default());
-    let ctx = RenderCtx::default();
+    let theme = Theme::default();
+    let ctx = RenderCtx::new(&theme);
 
     let mut out = String::new();
     for node in root.descendants() {
