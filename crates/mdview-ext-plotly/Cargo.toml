@@ -6,9 +6,10 @@ license = "MIT OR Apache-2.0"
 description = "Plotly fenced-code extension for mdview"
 
 [dependencies]
-comrak = "0.26"
+comrak = { workspace = true }
+mdview-core = { path = "../mdview-core" }
 serde_json = "1"
-thiserror = "1"
+thiserror = { workspace = true }
 which = "6"
 
 [dev-dependencies]
