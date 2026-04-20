@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use comrak::nodes::NodeValue;
 use comrak::{parse_document, Arena, ComrakOptions};
-use mdview_ext_math::{AstNode, Math, MdViewExtension, RenderCtx};
+use mdview_ext_math::{AstNode, Math, MdViewExtension, RenderCtx, Theme};
 
 fn main() {
     let fixture = find_fixture();
@@ -23,7 +23,8 @@ fn main() {
 
     let mut html = String::from("<!doctype html>\n<html><head><meta charset=\"utf-8\"><link rel=\"stylesheet\" href=\"vendor/katex.min.css\"><script defer src=\"vendor/katex.min.js\"></script><script defer src=\"vendor/mdv-math-init.js\"></script></head><body>\n");
     let mut term = String::new();
-    let ctx = RenderCtx::default();
+    let theme = Theme::default();
+    let ctx = RenderCtx::new(&theme);
     walk(root, &Math, &ctx, &mut html, &mut term);
     html.push_str("\n</body></html>\n");
 
@@ -47,7 +48,7 @@ fn find_fixture() -> PathBuf {
 fn walk<'a>(
     node: &'a AstNode<'a>,
     ext: &Math,
-    ctx: &RenderCtx,
+    ctx: &RenderCtx<'_>,
     html_out: &mut String,
     term_out: &mut String,
 ) {
@@ -58,7 +59,7 @@ fn walk<'a>(
             html_out.push('\n');
         }
         if let Some(t) = ext.render_terminal(node, ctx) {
-            for ch in t.0 {
+            for ch in t {
                 term_out.push_str(&ch.text);
             }
             term_out.push('\n');

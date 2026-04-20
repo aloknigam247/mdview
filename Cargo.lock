@@ -2658,6 +2658,7 @@ version = "0.1.0"
 dependencies = [
  "comrak 0.29.0",
  "latex2mathml",
+ "mdview-core",
  "reqwest 0.12.28",
  "thiserror 1.0.69",
  "tiny_http",

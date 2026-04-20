@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use comrak::nodes::NodeValue;
 use comrak::{parse_document, Arena, ComrakOptions};
-use mdview_ext_math::{AstNode, Math, MdViewExtension, RenderCtx};
+use mdview_ext_math::{AstNode, Math, MdViewExtension, RenderCtx, Theme};
 use tiny_http::{Header, Response, Server};
 
 const ADDR: &str = "127.0.0.1:7683";
@@ -71,7 +71,8 @@ fn render_page(src: &str) -> String {
     let root = parse_document(&arena, src, &opts);
 
     let mut body = String::new();
-    let ctx = RenderCtx::default();
+    let theme = Theme::default();
+    let ctx = RenderCtx::new(&theme);
     walk(root, &Math, &ctx, &mut body);
 
     format!(
@@ -84,7 +85,7 @@ fn render_page(src: &str) -> String {
     )
 }
 
-fn walk<'a>(node: &'a AstNode<'a>, ext: &Math, ctx: &RenderCtx, out: &mut String) {
+fn walk<'a>(node: &'a AstNode<'a>, ext: &Math, ctx: &RenderCtx<'_>, out: &mut String) {
     if matches!(node.data.borrow().value, NodeValue::Math(_)) {
         if let Some(h) = ext.render_html(node, ctx) {
             out.push_str(&h.0);
