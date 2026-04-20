@@ -3,7 +3,9 @@
 use std::fs;
 use std::path::PathBuf;
 
-use mdview_ext_mermaid::{scan, AstNode, MdViewExtension, Mermaid, RenderCtx};
+use comrak::nodes::NodeValue;
+use comrak::{parse_document, Arena, ComrakOptions};
+use mdview_ext_mermaid::{MdViewExtension, Mermaid, RenderCtx, Theme};
 
 fn main() -> std::io::Result<()> {
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -11,18 +13,20 @@ fn main() -> std::io::Result<()> {
     let src = fs::read_to_string(&fixture)?;
 
     let ext = Mermaid;
-    let ctx = RenderCtx::default();
+    let theme = Theme::default();
+    let ctx = RenderCtx::new(&theme);
+
+    let arena = Arena::new();
+    let root = parse_document(&arena, &src, &ComrakOptions::default());
 
     let mut out = String::new();
     out.push_str("<!doctype html><html><head><meta charset=\"utf-8\"><title>mermaid demo</title></head><body>\n");
-    for block in scan::mermaid_blocks(&src) {
-        let node = AstNode::FencedCode {
-            info: "mermaid".into(),
-            literal: block,
-        };
-        if let Some(html) = ext.render_html(&node, &ctx) {
-            out.push_str(&html.0);
-            out.push('\n');
+    for node in root.descendants() {
+        if matches!(node.data.borrow().value, NodeValue::CodeBlock(_)) {
+            if let Some(html) = ext.render_html(node, &ctx) {
+                out.push_str(&html.0);
+                out.push('\n');
+            }
         }
     }
     out.push_str("<script src=\"vendor/mermaid.min.js\"></script>\n");

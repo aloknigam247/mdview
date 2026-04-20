@@ -6,9 +6,11 @@ pub mod scan;
 pub mod sidecar;
 
 pub use _stubs::{
-    Asset, AstNode, Html, MdViewExtension, RenderCtx, SixelRenderer, TermChunk, TermChunks, Theme,
+    Asset, AstNode, Html, MdViewExtension, RenderCtx, SixelRenderer, StyleSpec, TermChunk,
+    TermChunks, Theme,
 };
 
+use comrak::nodes::NodeValue;
 use serde::Serialize;
 
 const CLIENT_ASSETS: &[Asset] = &[
@@ -31,9 +33,9 @@ struct SidecarJob<'a> {
 }
 
 impl Mermaid {
-    fn extract_source(node: &AstNode) -> Option<&str> {
-        match node {
-            AstNode::FencedCode { info, literal } if is_mermaid_info(info) => Some(literal),
+    fn extract_source(node: &AstNode) -> Option<String> {
+        match &node.data.borrow().value {
+            NodeValue::CodeBlock(cb) if is_mermaid_info(&cb.info) => Some(cb.literal.clone()),
             _ => None,
         }
     }
@@ -42,14 +44,14 @@ impl Mermaid {
     ///
     /// Exposed for integration where the real `mdview-sixel` crate supplies
     /// a `SixelRenderer` implementation.
-    pub fn render_terminal_with<R: SixelRenderer>(
+    pub fn render_terminal_with<'a, R: SixelRenderer>(
         &self,
-        node: &AstNode,
-        _ctx: &RenderCtx,
+        node: &'a AstNode<'a>,
+        _ctx: &RenderCtx<'_>,
         renderer: &R,
     ) -> Option<TermChunks> {
         let source = Self::extract_source(node)?;
-        Some(render_terminal_impl(source, renderer))
+        Some(render_terminal_impl(&source, renderer))
     }
 }
 
@@ -58,17 +60,21 @@ impl MdViewExtension for Mermaid {
         "mermaid"
     }
 
-    fn render_html(&self, node: &AstNode, _ctx: &RenderCtx) -> Option<Html> {
+    fn render_html<'a>(&self, node: &'a AstNode<'a>, _ctx: &RenderCtx<'_>) -> Option<Html> {
         let source = Self::extract_source(node)?;
         Some(Html(format!(
             "<div class=\"mermaid\">{}</div>",
-            escape_html(source)
+            escape_html(&source)
         )))
     }
 
-    fn render_terminal(&self, node: &AstNode, _ctx: &RenderCtx) -> Option<TermChunks> {
+    fn render_terminal<'a>(
+        &self,
+        node: &'a AstNode<'a>,
+        _ctx: &RenderCtx<'_>,
+    ) -> Option<TermChunks> {
         let source = Self::extract_source(node)?;
-        Some(ascii_placeholder(source))
+        Some(ascii_placeholder(&source))
     }
 
     fn client_assets(&self) -> &'static [Asset] {
@@ -115,7 +121,9 @@ fn render_terminal_impl<R: SixelRenderer>(source: &str, renderer: &R) -> TermChu
         _ => return ascii_placeholder(source),
     };
     match renderer.render_image(&svg) {
-        Ok(bytes) => TermChunks::from_image(bytes),
+        Ok(bytes) => vec![TermChunk::plain(
+            String::from_utf8_lossy(&bytes).into_owned(),
+        )],
         Err(_) => ascii_placeholder(source),
     }
 }
@@ -160,7 +168,7 @@ fn ascii_placeholder(source: &str) -> TermChunks {
     let hint_line = format_line(hint, inner_width);
 
     let text = format!("{top}\n{content}\n{hint_line}\n{bottom}\n");
-    TermChunks::from_text(text)
+    vec![TermChunk::plain(text)]
 }
 
 fn format_line(content: &str, inner_width: usize) -> String {
@@ -178,35 +186,63 @@ fn format_line(content: &str, inner_width: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use comrak::{parse_document, Arena, ComrakOptions};
 
-    fn fence(info: &str, body: &str) -> AstNode {
-        AstNode::FencedCode {
-            info: info.into(),
-            literal: body.into(),
-        }
+    fn first_code_block<'a>(root: &'a AstNode<'a>) -> Option<&'a AstNode<'a>> {
+        root.descendants()
+            .find(|n| matches!(n.data.borrow().value, NodeValue::CodeBlock(_)))
+    }
+
+    fn joined_text(chunks: &TermChunks) -> String {
+        chunks
+            .iter()
+            .map(|c| c.text.as_str())
+            .collect::<Vec<_>>()
+            .join("")
     }
 
     #[test]
     fn html_emits_mermaid_div_with_source() {
-        let ext = Mermaid;
-        let node = fence("mermaid", "graph TD; A-->B;");
-        let html = ext.render_html(&node, &RenderCtx::default()).unwrap();
+        let arena = Arena::new();
+        let root = parse_document(
+            &arena,
+            "```mermaid\ngraph TD; A-->B;\n```\n",
+            &ComrakOptions::default(),
+        );
+        let node = first_code_block(root).expect("code block");
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
+        let html = Mermaid.render_html(node, &ctx).unwrap();
         assert!(html.0.contains("class=\"mermaid\""));
         assert!(html.0.contains("graph TD; A--&gt;B;"));
     }
 
     #[test]
     fn html_ignores_non_mermaid_fences() {
-        let ext = Mermaid;
-        let node = fence("rust", "fn main(){}");
-        assert!(ext.render_html(&node, &RenderCtx::default()).is_none());
+        let arena = Arena::new();
+        let root = parse_document(
+            &arena,
+            "```rust\nfn main(){}\n```\n",
+            &ComrakOptions::default(),
+        );
+        let node = first_code_block(root).expect("code block");
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
+        assert!(Mermaid.render_html(node, &ctx).is_none());
     }
 
     #[test]
     fn html_accepts_info_with_trailing_classes() {
-        let ext = Mermaid;
-        let node = fence("mermaid theme=default", "graph LR; X-->Y;");
-        assert!(ext.render_html(&node, &RenderCtx::default()).is_some());
+        let arena = Arena::new();
+        let root = parse_document(
+            &arena,
+            "```mermaid theme=default\ngraph LR; X-->Y;\n```\n",
+            &ComrakOptions::default(),
+        );
+        let node = first_code_block(root).expect("code block");
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
+        assert!(Mermaid.render_html(node, &ctx).is_some());
     }
 
     #[test]
@@ -216,12 +252,17 @@ mod tests {
         let prev_path = std::env::var_os("PATH");
         std::env::set_var("PATH", "");
 
-        let ext = Mermaid;
-        let node = fence("mermaid", "graph TD; A-->B;");
-        let chunks = ext
-            .render_terminal(&node, &RenderCtx::default())
-            .expect("chunks");
-        let text = chunks.joined_text();
+        let arena = Arena::new();
+        let root = parse_document(
+            &arena,
+            "```mermaid\ngraph TD; A-->B;\n```\n",
+            &ComrakOptions::default(),
+        );
+        let node = first_code_block(root).expect("code block");
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
+        let chunks = Mermaid.render_terminal(node, &ctx).expect("chunks");
+        let text = joined_text(&chunks);
         assert!(text.starts_with("╭"));
         assert!(text.contains("mermaid"));
         assert!(text.contains("(install sidecar to see rendered diagram)"));
@@ -256,14 +297,20 @@ mod tests {
         std::fs::set_permissions(&script, p).unwrap();
         std::env::set_var(sidecar::SIDECAR_ENV, &script);
 
-        let ext = Mermaid;
-        let node = fence("mermaid", "graph TD; A-->B;");
-        let chunks = ext
-            .render_terminal_with(&node, &RenderCtx::default(), &EchoRenderer)
+        let arena = Arena::new();
+        let root = parse_document(
+            &arena,
+            "```mermaid\ngraph TD; A-->B;\n```\n",
+            &ComrakOptions::default(),
+        );
+        let node = first_code_block(root).expect("code block");
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
+        let chunks = Mermaid
+            .render_terminal_with(node, &ctx, &EchoRenderer)
             .unwrap();
-        assert_eq!(chunks.0.len(), 1);
-        let img = chunks.0[0].image.as_ref().unwrap();
-        assert_eq!(img, b"SIXEL:<svg>ok</svg>");
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].text, "SIXEL:<svg>ok</svg>");
         std::env::remove_var(sidecar::SIDECAR_ENV);
     }
 
@@ -279,20 +326,27 @@ mod tests {
         .unwrap();
         std::env::set_var(sidecar::SIDECAR_ENV, &script);
 
-        let ext = Mermaid;
-        let node = fence("mermaid", "graph TD; A-->B;");
-        let result = ext.render_terminal_with(&node, &RenderCtx::default(), &EchoRenderer);
+        let arena = Arena::new();
+        let root = parse_document(
+            &arena,
+            "```mermaid\ngraph TD; A-->B;\n```\n",
+            &ComrakOptions::default(),
+        );
+        let node = first_code_block(root).expect("code block");
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
+        let result = Mermaid.render_terminal_with(node, &ctx, &EchoRenderer);
         let chunks = result.expect("chunks");
-        let has_image = chunks.0.iter().any(|c| c.image.is_some());
-        let has_placeholder = chunks.joined_text().contains("mermaid");
-        assert!(has_image || has_placeholder);
+        let text = joined_text(&chunks);
+        let has_sixel = text.contains("SIXEL:");
+        let has_placeholder = text.contains("mermaid");
+        assert!(has_sixel || has_placeholder);
         std::env::remove_var(sidecar::SIDECAR_ENV);
     }
 
     #[test]
     fn client_assets_declares_mermaid_bundle() {
-        let ext = Mermaid;
-        let assets = ext.client_assets();
+        let assets = Mermaid.client_assets();
         assert_eq!(assets.len(), 2);
         let paths: Vec<&str> = assets.iter().map(|a| a.path).collect();
         assert!(paths.contains(&"vendor/mermaid.min.js"));
