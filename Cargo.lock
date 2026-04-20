@@ -2646,6 +2646,7 @@ name = "mdview-ext-highlight"
 version = "0.1.0"
 dependencies = [
  "comrak 0.29.0",
+ "mdview-core",
  "once_cell",
  "syntect",
  "thiserror 1.0.69",

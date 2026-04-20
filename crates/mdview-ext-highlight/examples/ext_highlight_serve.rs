@@ -13,13 +13,11 @@ fn render_page(src: &str) -> String {
     let arena = Arena::new();
     let opts = ComrakOptions::default();
     let root = parse_document(&arena, src, &opts);
-    let ctx = RenderCtx {
-        theme: Theme {
-            name: "light",
-            ..Theme::default()
-        },
-        truecolor: true,
+    let theme = Theme {
+        name: "light".to_string(),
+        ..Theme::default()
     };
+    let ctx = RenderCtx::new(&theme);
     let mut body = String::new();
     for child in root.children() {
         if matches!(child.data.borrow().value, NodeValue::CodeBlock(_)) {

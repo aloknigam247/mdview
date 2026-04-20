@@ -16,13 +16,11 @@ fn render_html(src: &str) -> String {
     let arena = Arena::new();
     let opts = ComrakOptions::default();
     let root = parse_document(&arena, src, &opts);
-    let ctx = RenderCtx {
-        theme: Theme {
-            name: "light",
-            ..Theme::default()
-        },
-        truecolor: true,
+    let theme = Theme {
+        name: "light".to_string(),
+        ..Theme::default()
     };
+    let ctx = RenderCtx::new(&theme);
     let mut out = String::from("<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>code demo</title><style>body{font-family:ui-sans-serif,system-ui;padding:24px;background:#fafafa;}pre.mdv-code{border-radius:12px;padding:16px;background:#f4f4f5;box-shadow:0 1px 2px rgba(0,0,0,0.08);overflow:auto;}code{font-family:ui-monospace,Menlo,Consolas,monospace;}</style></head><body>\n");
     for child in root.children() {
         if matches!(child.data.borrow().value, NodeValue::CodeBlock(_)) {
@@ -40,18 +38,16 @@ fn render_ansi(src: &str) -> String {
     let arena = Arena::new();
     let opts = ComrakOptions::default();
     let root = parse_document(&arena, src, &opts);
-    let ctx = RenderCtx {
-        theme: Theme {
-            name: "dark",
-            ..Theme::default()
-        },
-        truecolor: true,
+    let theme = Theme {
+        name: "dark".to_string(),
+        ..Theme::default()
     };
+    let ctx = RenderCtx::new(&theme);
     let mut out = String::new();
     for child in root.children() {
         if matches!(child.data.borrow().value, NodeValue::CodeBlock(_)) {
             if let Some(chunks) = Highlight.render_terminal(child, &ctx) {
-                for c in chunks.chunks {
+                for c in chunks {
                     out.push_str(&c.text);
                 }
                 out.push('\n');
