@@ -2,7 +2,7 @@
 
 > A lightweight, modern markdown renderer for your terminal, your desktop, and your Neovim buffer.
 
-![mdview screenshot](tests/e2e/artifacts/everything.png)
+![mdview screenshot](docs/screenshots/hero.png)
 
 `mdview` renders GitHub-flavored markdown with built-in support for syntax
 highlighting, math, mermaid, draw.io, and plotly — all bundled into a single
@@ -26,7 +26,7 @@ cargo install --locked --path apps/mdview
 
 ### Prebuilt binaries
 
-Grab the latest archive from the [releases page](https://github.com/aloknigam/mdview/releases):
+Grab the latest archive from the [releases page](https://github.com/aloknigam247/mdview/releases):
 
 | Platform | Archive |
 |---|---|
@@ -41,7 +41,7 @@ Extract and drop `mdview` (or `mdview.exe`) somewhere on your `PATH`.
 ### From source
 
 ```sh
-git clone https://github.com/aloknigam/mdview
+git clone https://github.com/aloknigam247/mdview
 cd mdview
 cargo build --workspace --release
 # Optional: terminal sidecar for mermaid / drawio / plotly in the terminal surface
@@ -80,13 +80,44 @@ Install the plugin with your package manager of choice. With
 
 ```lua
 {
-  "aloknigam/mdview",
+  "aloknigam247/mdview",
   build = "cargo install --locked --path apps/mdview",
   cmd = { "MdView", "MdViewStop", "MdViewRebuildThemeCache" },
   ft = { "markdown" },
   opts = { debounce_ms = 100 },
 }
 ```
+
+## Gallery
+
+All of the following are rendered from a single file —
+[`fixtures/showcase.md`](./fixtures/showcase.md) — which you can open with
+`mdview fixtures/showcase.md` to see them live.
+
+### GFM core
+
+| | |
+|---|---|
+| **Inline styles** — bold, italic, strikethrough, inline code, links, autolinks, `<sub>` / `<sup>` | ![inline styles](docs/screenshots/inline-styles.png) |
+| **Lists** — bullet, ordered, deeply nested, task-list checkboxes | ![lists](docs/screenshots/lists.png) |
+| **Tables** — GFM with left / center / right alignment and rounded corners | ![tables](docs/screenshots/tables.png) |
+| **Blockquote** — accent bar + rounded container | ![blockquote](docs/screenshots/blockquote.png) |
+
+### Extensions
+
+| | |
+|---|---|
+| **Syntax highlight** — via `syntect`, server-rendered into inline-styled spans | ![code highlight](docs/screenshots/code-highlight.png) |
+| **Math** — `$…$` inline, `$$…$$` display, ` ```math ` fenced blocks — rendered by KaTeX | ![math](docs/screenshots/math.png) |
+| **Mermaid** — flowcharts, sequence, class, state diagrams | ![mermaid](docs/screenshots/mermaid.png) |
+| **Draw.io** — embedded `<mxfile>` XML in a fenced block | ![drawio](docs/screenshots/drawio.png) |
+| **Plotly** — JSON chart specs in a fenced block, interactive | ![plotly](docs/screenshots/plotly.png) |
+
+### Layout
+
+No fixed page width — mdview grows horizontally for long lines / wide content:
+
+![wide content](docs/screenshots/wide-content.png)
 
 ## Theme customisation
 
