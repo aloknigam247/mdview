@@ -28,6 +28,10 @@ pub fn render_page(src: &str, title: &str) -> Result<String> {
     opts.extension.footnotes = true;
     opts.extension.math_dollars = true;
     opts.extension.math_code = true;
+    // Pass through inline HTML (e.g. <sub>, <sup>, <details>, <kbd>); we're a
+    // local viewer for the user's own files, not a server rendering untrusted
+    // markdown.
+    opts.render.unsafe_ = true;
     registry.apply_parser_opts(&mut opts);
 
     let mut body = String::new();
@@ -70,7 +74,9 @@ fn wrap_page(body: &str, title: &str) -> String {
   }}
   html, body {{ background: var(--bg); color: var(--fg); }}
   body {{ font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-          max-width: 860px; margin: 40px auto; padding: 0 24px; line-height: 1.7; }}
+          margin: 32px; padding: 0; line-height: 1.7;
+          min-width: min-content; }}
+  article.mdv {{ max-width: none; }}
   article.mdv h1, article.mdv h2, article.mdv h3, article.mdv h4 {{ line-height: 1.25; }}
   article.mdv h1 {{ font-size: 2.1em; border-bottom: 1px solid var(--border); padding-bottom: .2em; }}
   article.mdv h2 {{ font-size: 1.6em; margin-top: 1.8em; }}
@@ -78,7 +84,8 @@ fn wrap_page(body: &str, title: &str) -> String {
   article.mdv a:hover {{ text-decoration: underline; }}
   article.mdv pre {{ background: var(--code-bg); padding: 16px; border-radius: 10px;
                      overflow-x: auto; border: 1px solid var(--border);
-                     box-shadow: 0 1px 2px rgba(0,0,0,.04); }}
+                     box-shadow: 0 1px 2px rgba(0,0,0,.04);
+                     white-space: pre; }}
   article.mdv code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
                       font-size: .92em; }}
   article.mdv :not(pre) > code {{ background: var(--code-bg); padding: 2px 6px;
@@ -88,6 +95,12 @@ fn wrap_page(body: &str, title: &str) -> String {
                        box-shadow: 0 1px 2px rgba(0,0,0,.04); }}
   article.mdv th, article.mdv td {{ border-bottom: 1px solid var(--border);
                                     padding: 10px 14px; text-align: left; }}
+  /* GFM-style alignment: comrak emits align="left|center|right" on <th>/<td>.
+     These selectors defer to the explicit attribute (a CSS text-align: left
+     alone would otherwise suppress center/right from the markdown :--: syntax). */
+  article.mdv th[align="center"], article.mdv td[align="center"] {{ text-align: center; }}
+  article.mdv th[align="right"],  article.mdv td[align="right"]  {{ text-align: right; }}
+  article.mdv th[align="left"],   article.mdv td[align="left"]   {{ text-align: left; }}
   article.mdv tr:last-child td {{ border-bottom: 0; }}
   article.mdv th {{ background: var(--code-bg); font-weight: 600; }}
   article.mdv blockquote {{ border-left: 3px solid var(--accent); margin: 0;
@@ -95,7 +108,21 @@ fn wrap_page(body: &str, title: &str) -> String {
                             border-radius: 0 10px 10px 0; }}
   article.mdv hr {{ border: 0; height: 1px; background: var(--border); margin: 2em 0; }}
   article.mdv img {{ max-width: 100%; border-radius: 8px; }}
+  article.mdv ul, article.mdv ol {{ padding-inline-start: 24px; }}
   article.mdv .mermaid, article.mdv .plotly-chart, article.mdv .drawio-viewer {{ margin: 24px 0; }}
+  /* Cap diagram containers to viewport width so they don't balloon with the
+     expanded page width from long content elsewhere on the page. */
+  article.mdv .plotly-chart {{ max-width: min(900px, calc(100vw - 64px)); }}
+  article.mdv .mermaid, article.mdv .drawio-viewer, article.mdv .mxgraph {{
+    max-width: calc(100vw - 64px); overflow-x: auto;
+  }}
+  /* Keep display math aligned to the content area rather than centering across
+     the full page width (which would push it offscreen when long content
+     has stretched the body). */
+  article.mdv .mdv-math-block, article.mdv .katex-display, article.mdv [data-math-style="display"] {{
+    text-align: left; width: fit-content; max-width: 100%; margin: 12px 0;
+  }}
+  article.mdv .mdv-math, article.mdv [data-math-style="inline"] {{ display: inline-block; }}
   article.mdv pre.mdv-code {{ padding: 0; }}
   article.mdv pre.mdv-code code {{ display: block; padding: 16px; }}
 </style>
@@ -109,27 +136,21 @@ fn wrap_page(body: &str, title: &str) -> String {
 <script src="https://viewer.diagrams.net/js/viewer-static.min.js"></script>
 <script>
   window.addEventListener('DOMContentLoaded', () => {{
-    // comrak emits <span data-math-style="inline|display">TEX</span>; render each with katex.
+    // Math rendering: covers comrak's inline/block spans AND the math extension's
+    // .mdv-math / .mdv-math-block (which carry the raw TeX in data-tex).
     if (window.katex) {{
       document.querySelectorAll('[data-math-style]').forEach(el => {{
         const display = el.getAttribute('data-math-style') === 'display';
-        try {{
-          katex.render(el.textContent, el, {{ displayMode: display, throwOnError: false }});
-        }} catch (e) {{ console.warn('katex:', e); }}
+        try {{ katex.render(el.textContent, el, {{ displayMode: display, throwOnError: false }}); }}
+        catch (e) {{ console.warn('katex:', e); }}
+      }});
+      document.querySelectorAll('.mdv-math, .mdv-math-block').forEach(el => {{
+        const display = el.classList.contains('mdv-math-block');
+        const tex = el.getAttribute('data-tex') || el.textContent;
+        try {{ katex.render(tex, el, {{ displayMode: display, throwOnError: false }}); }}
+        catch (e) {{ console.warn('katex:', e); }}
       }});
     }}
-    // Fenced ```math blocks — lifted out of their <pre><code> wrapper and rendered.
-    document.querySelectorAll('pre.mdv-code[data-lang="math"] code, pre code.language-math').forEach(el => {{
-      const pre = el.closest('pre');
-      const span = document.createElement('div');
-      span.setAttribute('data-math-style', 'display');
-      span.textContent = el.textContent.trim();
-      pre.replaceWith(span);
-      if (window.katex) {{
-        try {{ katex.render(span.textContent, span, {{ displayMode: true, throwOnError: false }}); }}
-        catch (e) {{ console.warn('katex:', e); }}
-      }}
-    }});
     if (window.mermaid) {{
       mermaid.initialize({{ startOnLoad: false, theme: 'default' }});
       mermaid.run({{ querySelector: '.mermaid' }}).catch(e => console.warn('mermaid:', e));

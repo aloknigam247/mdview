@@ -46,12 +46,14 @@ impl MdViewExtension for Math {
 
     fn render_html<'a>(&self, node: &'a AstNode<'a>, _ctx: &RenderCtx<'_>) -> Option<Html> {
         let data = node.data.borrow();
-        let NodeValue::Math(m) = &data.value else {
-            return None;
+        let (tex, display) = match &data.value {
+            NodeValue::Math(m) => (m.literal.clone(), m.display_math),
+            NodeValue::CodeBlock(cb) if is_math_info(&cb.info) => (cb.literal.clone(), true),
+            _ => return None,
         };
-        let attr = escape_html(&m.literal, true);
-        let body = escape_html(&m.literal, false);
-        Some(Html(if m.display_math {
+        let attr = escape_html(&tex, true);
+        let body = escape_html(&tex, false);
+        Some(Html(if display {
             format!("<div class=\"mdv-math-block\" data-tex=\"{attr}\">\\[{body}\\]</div>")
         } else {
             format!("<span class=\"mdv-math\" data-tex=\"{attr}\">\\({body}\\)</span>")
@@ -64,18 +66,27 @@ impl MdViewExtension for Math {
         _ctx: &RenderCtx<'_>,
     ) -> Option<TermChunks> {
         let data = node.data.borrow();
-        let NodeValue::Math(m) = &data.value else {
-            return None;
+        let tex = match &data.value {
+            NodeValue::Math(m) => m.literal.clone(),
+            NodeValue::CodeBlock(cb) if is_math_info(&cb.info) => cb.literal.clone(),
+            _ => return None,
         };
-        let text = tex_to_unicode(&m.literal)
+        let text = tex_to_unicode(&tex)
             .filter(|u| !u.trim().is_empty())
-            .unwrap_or_else(|| fallback_box(&m.literal));
+            .unwrap_or_else(|| fallback_box(&tex));
         Some(vec![TermChunk::plain(text)])
     }
 
     fn client_assets(&self) -> &'static [Asset] {
         ASSETS
     }
+}
+
+fn is_math_info(info: &str) -> bool {
+    info.split_whitespace()
+        .next()
+        .map(|tok| tok.eq_ignore_ascii_case("math"))
+        .unwrap_or(false)
 }
 
 fn tex_to_unicode(tex: &str) -> Option<String> {
