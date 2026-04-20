@@ -11,12 +11,11 @@
 
 mod _stubs;
 
-pub use _stubs::{
-    Asset, AstNode, Html, MdViewExtension, RenderCtx, TermChunk, TermChunks, Theme,
-};
+pub use _stubs::{Asset, AstNode, Html, MdViewExtension, RenderCtx, TermChunk, TermChunks, Theme};
 
 use comrak::nodes::NodeValue;
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 const PLACEHOLDER_LINES: &[&str] = &[
@@ -25,6 +24,9 @@ const PLACEHOLDER_LINES: &[&str] = &[
     "│  sidecar unavailable         │",
     "╰──────────────────────────────╯",
 ];
+
+const SIDECAR_BIN: &str = "mdview-sidecar";
+const SIDECAR_ENV: &str = "MDVIEW_SIDECAR";
 
 static CLIENT_ASSETS: &[Asset] = &[
     Asset {
@@ -52,7 +54,7 @@ pub enum PlotlyError {
 pub struct Plotly;
 
 impl Plotly {
-    fn fenced_plotly_source<'a>(node: &AstNode<'a>) -> Option<String> {
+    fn fenced_plotly_source<'a>(node: &'a AstNode<'a>) -> Option<String> {
         match &node.data.borrow().value {
             NodeValue::CodeBlock(block) => {
                 let info = block.info.trim();
@@ -82,23 +84,26 @@ impl Plotly {
         ))
     }
 
-    fn locate_sidecar(ctx: &RenderCtx) -> Option<std::path::PathBuf> {
-        match &ctx.sidecar_path {
-            Some(p) if p.exists() => Some(p.clone()),
-            Some(_) => None,
-            None => which::which("mdview-sidecar").ok(),
+    fn locate_sidecar() -> Option<PathBuf> {
+        if let Some(env_path) = std::env::var_os(SIDECAR_ENV) {
+            let p = PathBuf::from(env_path);
+            if p.exists() {
+                return Some(p);
+            }
+            return None;
+        }
+        which::which(SIDECAR_BIN).ok()
+    }
+
+    fn emit_terminal(source: &str) -> TermChunks {
+        match Self::run_sidecar(source) {
+            Ok(svg) => vec![TermChunk::plain(String::from_utf8_lossy(&svg).into_owned())],
+            Err(_) => vec![TermChunk::plain(placeholder_text())],
         }
     }
 
-    fn emit_terminal(source: &str, ctx: &RenderCtx) -> TermChunks {
-        match Self::run_sidecar(source, ctx) {
-            Ok(svg) => TermChunks(vec![TermChunk::Sixel(svg)]),
-            Err(_) => TermChunks(vec![TermChunk::Placeholder(placeholder_text())]),
-        }
-    }
-
-    fn run_sidecar(source: &str, ctx: &RenderCtx) -> Result<Vec<u8>, PlotlyError> {
-        let sidecar = Self::locate_sidecar(ctx).ok_or(PlotlyError::SidecarMissing)?;
+    fn run_sidecar(source: &str) -> Result<Vec<u8>, PlotlyError> {
+        let sidecar = Self::locate_sidecar().ok_or(PlotlyError::SidecarMissing)?;
         let job = serde_json::json!({
             "kind": "plotly",
             "source": source,
@@ -125,14 +130,14 @@ impl MdViewExtension for Plotly {
         "plotly"
     }
 
-    fn render_html(&self, n: &AstNode<'_>, _ctx: &RenderCtx) -> Option<Html> {
+    fn render_html<'a>(&self, n: &'a AstNode<'a>, _ctx: &RenderCtx<'_>) -> Option<Html> {
         let source = Self::fenced_plotly_source(n)?;
         Some(Self::emit_html(&source))
     }
 
-    fn render_terminal(&self, n: &AstNode<'_>, ctx: &RenderCtx) -> Option<TermChunks> {
+    fn render_terminal<'a>(&self, n: &'a AstNode<'a>, _ctx: &RenderCtx<'_>) -> Option<TermChunks> {
         let source = Self::fenced_plotly_source(n)?;
-        Some(Self::emit_terminal(&source, ctx))
+        Some(Self::emit_terminal(&source))
     }
 
     fn client_assets(&self) -> &'static [Asset] {
@@ -167,7 +172,8 @@ pub fn render_markdown_html(markdown: &str) -> String {
     let root = comrak::parse_document(&arena, markdown, &opts);
 
     let mut out = String::new();
-    let ctx = RenderCtx::default();
+    let theme = Theme::default();
+    let ctx = RenderCtx::new(&theme);
     let ext = Plotly;
 
     for node in root.children() {
@@ -230,7 +236,9 @@ mod tests {
             &arena,
             "```plotly\n{\"data\":[{\"x\":[1,2],\"y\":[3,4],\"type\":\"scatter\"}]}\n```\n",
         );
-        let html = Plotly.render_html(node, &RenderCtx::default()).unwrap();
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
+        let html = Plotly.render_html(node, &ctx).unwrap();
         assert!(html.0.contains("class=\"plotly-chart\""));
         assert!(html.0.contains("data-spec=\""));
     }
@@ -239,7 +247,9 @@ mod tests {
     fn ignores_non_plotly_fence() {
         let arena = comrak::Arena::new();
         let node = parse_first_block(&arena, "```rust\nfn main(){}\n```\n");
-        assert!(Plotly.render_html(node, &RenderCtx::default()).is_none());
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
+        assert!(Plotly.render_html(node, &ctx).is_none());
     }
 
     #[test]
@@ -249,7 +259,9 @@ mod tests {
             &arena,
             "```plotly\n{\"data\":[{\"text\":\"<bad>&\\\"stuff\\\"\"}]}\n```\n",
         );
-        let html = Plotly.render_html(node, &RenderCtx::default()).unwrap();
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
+        let html = Plotly.render_html(node, &ctx).unwrap();
         assert!(!html.0.contains("<bad>"));
         assert!(html.0.contains("&lt;bad&gt;"));
         assert!(html.0.contains("&quot;"));
@@ -260,29 +272,32 @@ mod tests {
     fn invalid_json_yields_null_spec() {
         let arena = comrak::Arena::new();
         let node = parse_first_block(&arena, "```plotly\nnot json at all\n```\n");
-        let html = Plotly.render_html(node, &RenderCtx::default()).unwrap();
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
+        let html = Plotly.render_html(node, &ctx).unwrap();
         assert!(html.0.contains("data-spec=\"null\""));
     }
 
     #[test]
     fn terminal_falls_back_to_placeholder_when_sidecar_missing() {
+        let prev_env = std::env::var_os(SIDECAR_ENV);
+        std::env::set_var(SIDECAR_ENV, "/definitely/nonexistent/mdview-sidecar-xyzzy");
+
         let arena = comrak::Arena::new();
         let node = parse_first_block(
             &arena,
             "```plotly\n{\"data\":[{\"x\":[1],\"y\":[2]}]}\n```\n",
         );
-        let mut ctx = RenderCtx::default();
-        ctx.sidecar_path = Some(std::path::PathBuf::from(
-            "/definitely/nonexistent/mdview-sidecar-xyzzy",
-        ));
+        let theme = Theme::default();
+        let ctx = RenderCtx::new(&theme);
         let chunks = Plotly.render_terminal(node, &ctx).unwrap();
-        assert_eq!(chunks.0.len(), 1);
-        match &chunks.0[0] {
-            TermChunk::Placeholder(txt) => {
-                assert!(txt.contains("placeholder"));
-                assert!(txt.contains("╭"));
-            }
-            other => panic!("expected placeholder, got {other:?}"),
+        assert_eq!(chunks.len(), 1);
+        assert!(chunks[0].text.contains("placeholder"));
+        assert!(chunks[0].text.contains("╭"));
+
+        match prev_env {
+            Some(v) => std::env::set_var(SIDECAR_ENV, v),
+            None => std::env::remove_var(SIDECAR_ENV),
         }
     }
 
