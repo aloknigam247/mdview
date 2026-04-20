@@ -59,12 +59,12 @@ mod tests {
         }
     }
 
-    fn has_heading(root: &AstNode<'_>) -> bool {
+    fn has_heading<'a>(root: &'a AstNode<'a>) -> bool {
         root.descendants()
             .any(|n| matches!(n.data.borrow().value, NodeValue::Heading(_)))
     }
 
-    fn has_table(root: &AstNode<'_>) -> bool {
+    fn has_table<'a>(root: &'a AstNode<'a>) -> bool {
         root.descendants()
             .any(|n| matches!(n.data.borrow().value, NodeValue::Table(_)))
     }

@@ -12,7 +12,7 @@ pub mod _stubs;
 pub mod keymap;
 pub mod search;
 
-use std::io::{self, Write};
+use std::io::{self};
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
 
@@ -301,7 +301,7 @@ fn draw_sixels<B: ratatui::backend::Backend + io::Write>(
             }
         }
     }
-    out.flush()?;
+    std::io::Write::flush(&mut out)?;
     Ok(())
 }
 

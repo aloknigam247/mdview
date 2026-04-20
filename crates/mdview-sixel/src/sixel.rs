@@ -1,6 +1,8 @@
 use crate::{Error, Result};
 use color_quant::NeuQuant;
-use icy_sixel::{sixel_string, DiffusionMethod, PixelFormat};
+use icy_sixel::{
+    sixel_string, DiffusionMethod, MethodForLargest, MethodForRep, PixelFormat, Quality,
+};
 use image::GenericImageView;
 
 /// Decode `png_bytes` and encode the image as a sixel escape sequence.
@@ -32,6 +34,9 @@ pub fn encode_png(png_bytes: &[u8]) -> Result<String> {
         h as i32,
         PixelFormat::RGB888,
         DiffusionMethod::Stucki,
+        MethodForLargest::Auto,
+        MethodForRep::Auto,
+        Quality::AUTO,
     )
     .map_err(|e| Error::Sixel(format!("{e:?}")))
 }
