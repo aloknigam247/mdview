@@ -1,0 +1,17 @@
+[package]
+name = "mdview-pager"
+version = "0.1.0"
+edition = "2021"
+description = "ratatui + crossterm pager for mdview terminal output"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+crossterm = "0.28"
+dirs = "5"
+ratatui = { version = "0.28", default-features = false, features = ["crossterm"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "1"
+toml = "0.8"
+
+[lints.rust]
+unsafe_code = "forbid"
