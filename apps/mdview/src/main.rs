@@ -6,6 +6,7 @@
 use anyhow::Result;
 use clap::Parser;
 
+mod builtins;
 mod cli;
 #[allow(unsafe_code)]
 mod daemonize;

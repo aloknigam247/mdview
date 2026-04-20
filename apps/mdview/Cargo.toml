@@ -17,17 +17,16 @@ tauri-shell = ["dep:tauri"]
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+mdview-core = { path = "../../crates/mdview-core" }
+mdview-ext-drawio = { path = "../../crates/mdview-ext-drawio" }
+mdview-ext-highlight = { path = "../../crates/mdview-ext-highlight" }
+mdview-ext-math = { path = "../../crates/mdview-ext-math" }
+mdview-ext-mermaid = { path = "../../crates/mdview-ext-mermaid" }
+mdview-ext-plotly = { path = "../../crates/mdview-ext-plotly" }
 notify = "6"
 tokio = { version = "1", features = ["full"] }
 
 tauri = { version = "2", features = [], optional = true }
-
-# Sibling crates are resolved via workspace when present; during isolated
-# build the `stubs` feature provides minimal local replacements.
-# [dependencies.mdview-core]
-# path = "../../crates/mdview-core"
-# version = "0.1"
-# optional = true
 
 [target."cfg(windows)".dependencies]
 windows-sys = { version = "0.59", features = [

@@ -614,27 +614,6 @@ checksum = "75984efb6ed102a0d42db99afb6c1948f0380d1d91808d5529916e6c08b49d8d"
 
 [[package]]
 name = "comrak"
-version = "0.26.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "395ab67843c57df5a4ee29d610740828dbc928cc64ecf0f2a1d5cd0e98e107a9"
-dependencies = [
- "caseless",
- "clap",
- "derive_builder",
- "entities",
- "memchr",
- "once_cell",
- "regex",
- "shell-words",
- "slug",
- "syntect",
- "typed-arena",
- "unicode_categories",
- "xdg",
-]
-
-[[package]]
-name = "comrak"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c93ab3577cca16b4a1d80a88c2e0cd8b6e969e51696f0bbb0d1dcb0157109832"
@@ -2613,6 +2592,12 @@ dependencies = [
  "anyhow",
  "clap",
  "libc",
+ "mdview-core",
+ "mdview-ext-drawio",
+ "mdview-ext-highlight",
+ "mdview-ext-math",
+ "mdview-ext-mermaid",
+ "mdview-ext-plotly",
  "notify",
  "tauri",
  "tempfile",
