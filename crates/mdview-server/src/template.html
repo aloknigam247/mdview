@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>mdview</title>
+    <link rel="stylesheet" href="/theme.css" />
+    <style id="mdv-theme"></style>
+  </head>
+  <body data-mdv-live="pending">__MDVIEW_INITIAL_HTML__</body>
+  <script>
+    (function () {
+      window.__mdv_ws_connected = false;
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const url = proto + "//" + location.host + "/__mdview_live";
+      const socket = new WebSocket(url);
+      window.__mdv_ws = socket;
+      socket.addEventListener("open", function () {
+        window.__mdv_ws_connected = true;
+        document.body.setAttribute("data-mdv-live", "connected");
+      });
+      socket.addEventListener("close", function () {
+        window.__mdv_ws_connected = false;
+        document.body.setAttribute("data-mdv-live", "closed");
+      });
+      socket.addEventListener("message", function (event) {
+        let msg;
+        try {
+          msg = JSON.parse(event.data);
+        } catch (_) {
+          return;
+        }
+        if (!msg || !msg.op) return;
+        if (msg.op === "full" || msg.op === "patch") {
+          if (typeof msg.html === "string") {
+            document.body.innerHTML = msg.html;
+          }
+        } else if (msg.op === "theme") {
+          const node = document.getElementById("mdv-theme");
+          if (node && typeof msg.css === "string") {
+            node.textContent = msg.css;
+          }
+        } else if (msg.op === "close") {
+          socket.close();
+        }
+      });
+    })();
+  </script>
+</html>

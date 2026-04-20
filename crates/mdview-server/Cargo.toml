@@ -1,0 +1,24 @@
+[package]
+name = "mdview-server"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Embedded axum + tokio-tungstenite server (loopback) for mdview live preview."
+
+[dependencies]
+axum = { version = "0.7", features = ["ws"] }
+bytes = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.23"
+tower-http = { version = "0.5", features = ["compression-gzip"] }
+
+[dev-dependencies]
+futures-util = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
+[[example]]
+name = "demo_serve"
+path = "examples/demo_serve.rs"
