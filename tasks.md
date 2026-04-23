@@ -1,0 +1,13 @@
+- [ ] FEAT(mappings): create mappings config
+- [ ] FEAT(mappings): q to close window
+- [ ] FEAT(markdown): frontmatter
+- [ ] FEAT(package): install in system
+- [ ] FEAT(package): publish to a package manager
+- [ ] FEAT(perf): lazy load extensions if they are expected to take time UI render
+- [ ] FEAT(terminal): render terminal
+- [ ] FEAT(ui): code map
+- [ ] FEAT(ui): markdown table ui
+- [ ] FEAT(ui): no bullet for todo list
+- [ ] FEAT(ui): scroll bar
+- [ ] FEAT(ui): smooths scrolling
+- [ ] FEAT(ui): table of context, jumpable

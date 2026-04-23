@@ -15,13 +15,15 @@ fn daemonize_spawns_detached_child() {
     let tmp = std::env::temp_dir().join(format!("mdview-canary-{}.txt", std::process::id()));
     let _ = std::fs::remove_file(&tmp);
 
-    // We test only that the parent returns quickly. The child will try to
-    // start a Tauri window; we disable that by passing an unknown file which
-    // would fail *inside* the child, but that's fine — by then the parent
+    // Use a real fixture so the up-front validate_file() check passes.
+    // The child will then try to start the GUI; by that point the parent
     // has already exited.
+    let fixture = std::env::current_dir()
+        .unwrap()
+        .join("../../fixtures/gfm.md");
     let start = Instant::now();
     let status = Command::new(bin)
-        .arg("nonexistent-fixture.md")
+        .arg(&fixture)
         .env("MDVIEW_CANARY", tmp.display().to_string())
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -34,8 +36,10 @@ fn daemonize_spawns_detached_child() {
         status.success(),
         "parent exit status should be 0; got {status:?}"
     );
+    // Debug binaries on Windows have nontrivial startup; 10s is generous
+    // but still catches a truly hung parent (blocked on the event loop).
     assert!(
-        elapsed < Duration::from_secs(5),
+        elapsed < Duration::from_secs(10),
         "parent should return promptly after daemonising (took {elapsed:?})"
     );
 

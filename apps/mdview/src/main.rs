@@ -12,6 +12,7 @@ mod cli;
 mod daemonize;
 mod pipeline;
 mod render;
+mod render_terminal;
 mod server;
 
 #[cfg(feature = "stubs")]

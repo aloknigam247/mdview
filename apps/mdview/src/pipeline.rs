@@ -30,16 +30,15 @@ pub fn run_terminal(cli: &Cli) -> Result<()> {
 fn render_once(file: &Path, cli: &Cli) -> Result<()> {
     let src =
         std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
-    let doc = backend::parse(&src);
-    let rendered = backend::render_terminal(&doc, cli.theme.as_deref());
+    let ansi = crate::render_terminal::render_ansi(&src)?;
 
     if cli.no_pager {
         use std::io::Write;
         let stdout = std::io::stdout();
         let mut lock = stdout.lock();
-        lock.write_all(rendered.ansi.as_bytes())?;
+        lock.write_all(ansi.as_bytes())?;
     } else {
-        backend::write_to_pager(&rendered.ansi)?;
+        backend::write_to_pager(&ansi)?;
     }
     Ok(())
 }
