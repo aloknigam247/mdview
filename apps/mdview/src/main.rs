@@ -31,10 +31,43 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Validate FILE up front so every surface (terminal / gui / nvim) reports a
+    // consistent, user-friendly error with an exit code before doing any work.
+    if let Some(file) = args.file.as_deref() {
+        if let Err(code) = validate_file(file) {
+            std::process::exit(code);
+        }
+    }
+
     match args.mode() {
         Mode::Terminal => pipeline::run_terminal(&args),
         Mode::Nvim => runtime()?.block_on(pipeline::run_nvim(&args)),
         Mode::Tauri => run_tauri(&args),
+    }
+}
+
+fn validate_file(file: &std::path::Path) -> std::result::Result<(), i32> {
+    use std::io::{ErrorKind, Write};
+    let mut err = std::io::stderr();
+    match std::fs::metadata(file) {
+        Ok(md) if md.is_dir() => {
+            let _ = writeln!(err, "mdview: '{}' is a directory, not a file", file.display());
+            Err(2)
+        }
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            let _ = writeln!(err, "mdview: file not found: {}", file.display());
+            let _ = writeln!(err, "hint: check the path is correct, or pipe stdin via a shell redirect.");
+            Err(2)
+        }
+        Err(e) if e.kind() == ErrorKind::PermissionDenied => {
+            let _ = writeln!(err, "mdview: permission denied: {}", file.display());
+            Err(13)
+        }
+        Err(e) => {
+            let _ = writeln!(err, "mdview: cannot access {}: {}", file.display(), e);
+            Err(1)
+        }
     }
 }
 
