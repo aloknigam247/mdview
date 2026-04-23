@@ -4,7 +4,7 @@
 #![deny(unsafe_code)]
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 
 mod builtins;
 mod cli;
@@ -22,6 +22,14 @@ use crate::cli::{Cli, Mode};
 
 fn main() -> Result<()> {
     let args = Cli::parse();
+
+    // No FILE and no headless mode (nvim) — print help and exit 0.
+    // Running `mdview` with nothing to render is almost always a typo.
+    if args.file.is_none() && args.nvim_socket.is_none() {
+        Cli::command().print_help()?;
+        println!();
+        return Ok(());
+    }
 
     match args.mode() {
         Mode::Terminal => pipeline::run_terminal(&args),
