@@ -3,7 +3,7 @@ name = "mdview"
 version = "0.1.0"
 edition = "2021"
 description = "mdview — lightweight Rust markdown renderer (Tauri desktop + terminal + Neovim live preview)"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 
 [[bin]]
 name = "mdview"

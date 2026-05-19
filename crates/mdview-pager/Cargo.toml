@@ -3,7 +3,7 @@ name = "mdview-pager"
 version = "0.1.0"
 edition = "2021"
 description = "ratatui + crossterm pager for mdview terminal output"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 
 [dependencies]
 crossterm = "0.28"
