@@ -72,10 +72,22 @@ fn wrap_page(body: &str, title: &str) -> String {
     :root {{ --fg: #e5e7eb; --bg: #0d1117; --muted: #9ca3af; --accent: #8b9eff;
              --code-bg: #161b22; --border: #30363d; --link: #8ab4f8; }}
   }}
+  html {{ scroll-behavior: smooth; }}
   html, body {{ background: var(--bg); color: var(--fg); }}
-  body {{ font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  body {{ font-family: "Inter", "Inter Variable", ui-sans-serif, system-ui, -apple-system,
+                       "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif;
           margin: 32px; padding: 0; line-height: 1.7;
-          min-width: min-content; }}
+          min-width: min-content;
+          -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }}
+  * {{ scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--accent) 55%, transparent) transparent; }}
+  *::-webkit-scrollbar {{ width: 10px; height: 10px; }}
+  *::-webkit-scrollbar-track {{ background: transparent; }}
+  *::-webkit-scrollbar-thumb {{ background: color-mix(in srgb, var(--accent) 55%, transparent);
+                                border-radius: 8px; border: 2px solid transparent;
+                                background-clip: padding-box; }}
+  *::-webkit-scrollbar-thumb:hover {{ background: var(--accent); background-clip: padding-box;
+                                       border: 2px solid transparent; }}
+  *::-webkit-scrollbar-corner {{ background: transparent; }}
   article.mdv {{ max-width: none; }}
   article.mdv h1, article.mdv h2, article.mdv h3, article.mdv h4 {{ line-height: 1.25; }}
   article.mdv h1 {{ font-size: 2.1em; border-bottom: 1px solid var(--border); padding-bottom: .2em; }}
@@ -86,8 +98,9 @@ fn wrap_page(body: &str, title: &str) -> String {
                      overflow-x: auto; border: 1px solid var(--border);
                      box-shadow: 0 1px 2px rgba(0,0,0,.04);
                      white-space: pre; }}
-  article.mdv code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-                      font-size: .92em; }}
+  article.mdv code {{ font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", "Cascadia Code",
+                                    "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                      font-size: .92em; font-variant-ligatures: contextual; }}
   article.mdv :not(pre) > code {{ background: var(--code-bg); padding: 2px 6px;
                                   border-radius: 4px; border: 1px solid var(--border); }}
   article.mdv table {{ border-collapse: separate; border-spacing: 0;
@@ -125,6 +138,22 @@ fn wrap_page(body: &str, title: &str) -> String {
   article.mdv .mdv-math, article.mdv [data-math-style="inline"] {{ display: inline-block; }}
   article.mdv pre.mdv-code {{ padding: 0; }}
   article.mdv pre.mdv-code code {{ display: block; padding: 16px; }}
+  #mdv-minimap {{ position: fixed; top: 16px; right: 16px; width: 140px; bottom: 16px;
+                  background: color-mix(in srgb, var(--bg) 92%, transparent);
+                  border: 1px solid var(--border); border-radius: 12px;
+                  overflow: hidden; z-index: 1000;
+                  box-shadow: 0 4px 18px rgba(0,0,0,.10);
+                  cursor: ns-resize; transition: opacity .15s ease;
+                  backdrop-filter: blur(6px); }}
+  #mdv-minimap.mdv-hidden {{ opacity: 0; pointer-events: none; }}
+  #mdv-minimap-content {{ transform-origin: top left; pointer-events: none;
+                          user-select: none; position: absolute; top: 6px; left: 6px; }}
+  #mdv-minimap-content article.mdv {{ margin: 0; }}
+  #mdv-minimap-viewport {{ position: absolute; left: 0; right: 0;
+                           border: 1px solid var(--accent);
+                           background: color-mix(in srgb, var(--accent) 18%, transparent);
+                           border-radius: 4px; pointer-events: none; }}
+  @media (max-width: 760px) {{ #mdv-minimap {{ display: none; }} }}
 </style>
 </head>
 <body>
@@ -152,7 +181,23 @@ fn wrap_page(body: &str, title: &str) -> String {
       }});
     }}
     if (window.mermaid) {{
-      mermaid.initialize({{ startOnLoad: false, theme: 'default' }});
+      const __mdvDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const __mdvMermaidVars = __mdvDark ? {{
+        primaryColor: '#313244', primaryTextColor: '#cdd6f4', primaryBorderColor: '#cba6f7',
+        lineColor: '#a6adc8', secondaryColor: '#fab387', tertiaryColor: '#89b4fa',
+        background: '#1e1e2e', mainBkg: '#313244', secondBkg: '#45475a', tertiaryBkg: '#585b70',
+        nodeBorder: '#cba6f7', clusterBkg: '#313244', clusterBorder: '#cba6f7',
+        defaultLinkColor: '#a6adc8', titleColor: '#cdd6f4', edgeLabelBackground: '#313244',
+        actorBkg: '#313244', actorBorder: '#cba6f7', actorTextColor: '#cdd6f4',
+      }} : {{
+        primaryColor: '#ccd0da', primaryTextColor: '#4c4f69', primaryBorderColor: '#8839ef',
+        lineColor: '#6c6f85', secondaryColor: '#fe640b', tertiaryColor: '#1e66f5',
+        background: '#eff1f5', mainBkg: '#ccd0da', secondBkg: '#bcc0cc', tertiaryBkg: '#acb0be',
+        nodeBorder: '#8839ef', clusterBkg: '#ccd0da', clusterBorder: '#8839ef',
+        defaultLinkColor: '#6c6f85', titleColor: '#4c4f69', edgeLabelBackground: '#ccd0da',
+        actorBkg: '#ccd0da', actorBorder: '#8839ef', actorTextColor: '#4c4f69',
+      }};
+      mermaid.initialize({{ startOnLoad: false, theme: 'base', themeVariables: __mdvMermaidVars }});
       mermaid.run({{ querySelector: '.mermaid' }}).catch(e => console.warn('mermaid:', e));
     }}
     document.querySelectorAll('.plotly-chart[data-spec]').forEach(el => {{
@@ -183,6 +228,81 @@ fn wrap_page(body: &str, title: &str) -> String {
         window.GraphViewer.processElements('mxgraph');
       }} catch (e) {{ console.warn('drawio:', e); }}
     }}
+
+    const __mdvSetupMinimap = () => {{
+      const article = document.querySelector('article.mdv');
+      if (!article) return;
+      if (document.getElementById('mdv-minimap')) return;
+
+      const minimap = document.createElement('div');
+      minimap.id = 'mdv-minimap';
+
+      const content = document.createElement('div');
+      content.id = 'mdv-minimap-content';
+      minimap.appendChild(content);
+
+      const clone = article.cloneNode(true);
+      clone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+      clone.querySelectorAll('script, style').forEach(el => el.remove());
+      content.appendChild(clone);
+
+      const viewport = document.createElement('div');
+      viewport.id = 'mdv-minimap-viewport';
+      minimap.appendChild(viewport);
+
+      document.body.appendChild(minimap);
+
+      let scale = 0.1;
+      const PAD = 6;
+      const update = () => {{
+        const mapW = minimap.clientWidth - PAD * 2;
+        const mapH = minimap.clientHeight - PAD * 2;
+        const docW = Math.max(article.scrollWidth, article.clientWidth, 1);
+        const docH = Math.max(document.documentElement.scrollHeight, 1);
+        scale = Math.min(mapW / docW, mapH / docH);
+        if (!isFinite(scale) || scale <= 0) scale = 0.1;
+        content.style.transform = `scale(${{scale}})`;
+        content.style.width = docW + 'px';
+        content.style.height = docH + 'px';
+
+        const viewH = window.innerHeight;
+        viewport.style.top = (PAD + window.scrollY * scale) + 'px';
+        viewport.style.height = Math.max(8, viewH * scale) + 'px';
+      }};
+
+      update();
+      window.addEventListener('scroll', update, {{ passive: true }});
+      window.addEventListener('resize', update);
+
+      let dragging = false;
+      const scrollFromY = (clientY) => {{
+        const rect = minimap.getBoundingClientRect();
+        const y = clientY - rect.top - PAD;
+        const targetY = y / scale - window.innerHeight / 2;
+        const maxY = document.documentElement.scrollHeight - window.innerHeight;
+        window.scrollTo({{ top: Math.max(0, Math.min(maxY, targetY)), behavior: 'auto' }});
+      }};
+      minimap.addEventListener('mousedown', (e) => {{
+        dragging = true;
+        scrollFromY(e.clientY);
+        e.preventDefault();
+      }});
+      window.addEventListener('mousemove', (e) => {{ if (dragging) scrollFromY(e.clientY); }});
+      window.addEventListener('mouseup', () => {{ dragging = false; }});
+
+      document.addEventListener('keydown', (e) => {{
+        const tag = (document.activeElement && document.activeElement.tagName) || '';
+        if (e.key === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey
+            && tag !== 'INPUT' && tag !== 'TEXTAREA') {{
+          minimap.classList.toggle('mdv-hidden');
+          if (!minimap.classList.contains('mdv-hidden')) update();
+        }}
+      }});
+
+      const docTaller = document.documentElement.scrollHeight > window.innerHeight + 100;
+      if (!docTaller) minimap.classList.add('mdv-hidden');
+    }};
+    setTimeout(__mdvSetupMinimap, 500);
   }});
 </script>
 </body>
@@ -235,5 +355,12 @@ mod tests {
     fn code_block_goes_through_highlight_extension() {
         let html = render_page("```rust\nfn main(){}\n```\n", "t").expect("render");
         assert!(html.contains("mdv-code") || html.contains("language-rust"));
+    }
+
+    #[test]
+    fn includes_minimap_scaffold() {
+        let html = render_page("# Hi\n\nsome text\n", "t").expect("render");
+        assert!(html.contains("#mdv-minimap"), "expected minimap CSS");
+        assert!(html.contains("__mdvSetupMinimap"), "expected minimap JS");
     }
 }
