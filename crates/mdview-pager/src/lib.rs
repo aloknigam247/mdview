@@ -31,6 +31,7 @@ use ratatui::widgets::{Paragraph, Widget};
 use ratatui::Terminal;
 
 pub use _stubs::{StyleSpec, TermChunk, TermChunks, Theme};
+use mdview_config::ConfigError;
 use search::{Match, SearchIndex};
 
 #[derive(Debug, thiserror::Error)]
@@ -54,7 +55,15 @@ pub enum Action {
     SearchPrev,
     SearchStart,
     ToggleFollow,
+    ToggleTheme,
     Top,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ThemeSlot {
+    #[default]
+    Dark,
+    Light,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -90,6 +99,9 @@ pub struct Pager {
     matches: Vec<Match>,
     match_cursor: Option<usize>,
     filename: String,
+    errors: Vec<ConfigError>,
+    banner_dismissed: bool,
+    theme_slot: ThemeSlot,
 }
 
 impl Pager {
@@ -107,7 +119,38 @@ impl Pager {
             matches: Vec::new(),
             match_cursor: None,
             filename,
+            errors: Vec::new(),
+            banner_dismissed: false,
+            theme_slot: ThemeSlot::Dark,
         }
+    }
+
+    pub fn theme_slot(&self) -> ThemeSlot {
+        self.theme_slot
+    }
+
+    pub fn toggle_theme(&mut self) {
+        self.theme_slot = match self.theme_slot {
+            ThemeSlot::Dark => ThemeSlot::Light,
+            ThemeSlot::Light => ThemeSlot::Dark,
+        };
+    }
+
+    pub fn set_config_errors(&mut self, errors: Vec<ConfigError>) {
+        self.banner_dismissed = errors.is_empty();
+        self.errors = errors;
+    }
+
+    pub fn config_errors(&self) -> &[ConfigError] {
+        &self.errors
+    }
+
+    pub fn banner_visible(&self) -> bool {
+        !self.banner_dismissed && !self.errors.is_empty()
+    }
+
+    pub fn dismiss_banner(&mut self) {
+        self.banner_dismissed = true;
     }
 
     /// Replace the current scrollback and rebuild the search index.
@@ -162,7 +205,11 @@ impl Pager {
 
     pub fn toggle_follow(&mut self) {
         self.follow = !self.follow;
-        self.mode = if self.follow { Mode::Follow } else { Mode::Normal };
+        self.mode = if self.follow {
+            Mode::Follow
+        } else {
+            Mode::Normal
+        };
         if self.follow {
             self.scroll_to_bottom();
         }
@@ -184,6 +231,7 @@ impl Pager {
                 self.query.clear();
             }
             Action::ToggleFollow => self.toggle_follow(),
+            Action::ToggleTheme => self.toggle_theme(),
             Action::Top => self.scroll_to_top(),
         }
         false
@@ -191,11 +239,19 @@ impl Pager {
 
     fn commit_search(&mut self) {
         self.matches = self.index.search(&self.query);
-        self.match_cursor = if self.matches.is_empty() { None } else { Some(0) };
+        self.match_cursor = if self.matches.is_empty() {
+            None
+        } else {
+            Some(0)
+        };
         if let Some(m) = self.matches.first() {
             self.scroll_to_match(m.line);
         }
-        self.mode = if self.follow { Mode::Follow } else { Mode::Normal };
+        self.mode = if self.follow {
+            Mode::Follow
+        } else {
+            Mode::Normal
+        };
     }
 
     fn next_match(&mut self, dir: i32) {
@@ -220,6 +276,7 @@ impl Pager {
 /// [`TryRecvError::Disconnected`] or the user quits.
 pub fn run(rx: Receiver<TermChunks>, theme: &Theme) -> Result<(), PagerError> {
     let keymap = keymap::Keymap::load(None)?;
+    let load = mdview_config::Config::load_full();
     let mut stdout = io::stdout();
     enable_raw_mode()?;
     execute!(stdout, EnterAlternateScreen)?;
@@ -227,6 +284,7 @@ pub fn run(rx: Receiver<TermChunks>, theme: &Theme) -> Result<(), PagerError> {
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
     let mut pager = Pager::new(String::from("—"));
+    pager.set_config_errors(load.errors);
     let result = event_loop(&mut terminal, &mut pager, &keymap, &rx, theme);
 
     disable_raw_mode()?;
@@ -255,13 +313,23 @@ fn event_loop<B: ratatui::backend::Backend + io::Write>(
 
         terminal.draw(|f| {
             let area = f.area();
-            pager.set_viewport(area.height.saturating_sub(1) as usize);
+            let banner_visible = pager.banner_visible();
+            let banner_h: u16 = if banner_visible { 1 } else { 0 };
+            let body_h = area.height.saturating_sub(1 + banner_h);
+            pager.set_viewport(body_h as usize);
             let layout = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .constraints([
+                    Constraint::Length(banner_h),
+                    Constraint::Min(1),
+                    Constraint::Length(1),
+                ])
                 .split(area);
-            f.render_widget(AnsiView { pager, theme }, layout[0]);
-            f.render_widget(StatusBar { pager }, layout[1]);
+            if banner_visible {
+                f.render_widget(ErrorBanner { pager }, layout[0]);
+            }
+            f.render_widget(AnsiView { pager, theme }, layout[1]);
+            f.render_widget(StatusBar { pager }, layout[2]);
             if pager.help {
                 render_help(f, area);
             }
@@ -306,11 +374,19 @@ fn draw_sixels<B: ratatui::backend::Backend + io::Write>(
 }
 
 fn handle_key(pager: &mut Pager, keymap: &keymap::Keymap, key: KeyEvent) -> bool {
+    if pager.banner_visible() && pager.mode != Mode::Search && key.code == KeyCode::Esc {
+        pager.dismiss_banner();
+        return false;
+    }
     if pager.mode == Mode::Search {
         match key.code {
             KeyCode::Esc => {
                 pager.query.clear();
-                pager.mode = if pager.follow { Mode::Follow } else { Mode::Normal };
+                pager.mode = if pager.follow {
+                    Mode::Follow
+                } else {
+                    Mode::Normal
+                };
             }
             KeyCode::Enter => pager.commit_search(),
             KeyCode::Backspace => {
@@ -377,6 +453,31 @@ impl<'a> Widget for AnsiView<'a> {
             .map(|l| Line::from(l.clone()))
             .collect();
         Paragraph::new(lines).render(area, buf);
+    }
+}
+
+struct ErrorBanner<'a> {
+    pager: &'a Pager,
+}
+
+impl<'a> Widget for ErrorBanner<'a> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let errors = self.pager.config_errors();
+        let first = errors.first().map(|e| e.to_string()).unwrap_or_default();
+        let body = if errors.len() > 1 {
+            format!(
+                " ! config: {} errors \u{2014} {}  (Esc to dismiss)",
+                errors.len(),
+                first
+            )
+        } else {
+            format!(" ! config: {}  (Esc to dismiss)", first)
+        };
+        let style = Style::default()
+            .fg(Color::Black)
+            .bg(Color::Yellow)
+            .add_modifier(Modifier::BOLD);
+        Paragraph::new(Span::styled(body, style)).render(area, buf);
     }
 }
 
@@ -544,5 +645,63 @@ mod tests {
     fn strip_ansi_handles_osc() {
         let s = "\x1b]0;title\x07text";
         assert_eq!(search::strip_ansi(s), "text");
+    }
+
+    #[test]
+    fn toggle_theme_flips_slot() {
+        let mut pager = Pager::new("a.md".into());
+        assert_eq!(pager.theme_slot(), ThemeSlot::Dark);
+        let quit = pager.apply(Action::ToggleTheme);
+        assert!(!quit);
+        assert_eq!(pager.theme_slot(), ThemeSlot::Light);
+        pager.apply(Action::ToggleTheme);
+        assert_eq!(pager.theme_slot(), ThemeSlot::Dark);
+    }
+
+    #[test]
+    fn keymap_parses_toggle_theme() {
+        let sample = r#"
+[bindings]
+"t" = "toggle_theme"
+"#;
+        let km = keymap::Keymap::from_toml_str(sample).unwrap();
+        assert_eq!(km.lookup("t"), Some(Action::ToggleTheme));
+    }
+
+    #[test]
+    fn banner_invisible_when_no_errors() {
+        let mut pager = Pager::new("a.md".into());
+        pager.set_config_errors(Vec::new());
+        assert!(!pager.banner_visible());
+    }
+
+    #[test]
+    fn banner_visible_when_errors_present_and_dismisses() {
+        use mdview_config::Config;
+        let errors = Config::from_toml_str_full("[keymap]\nquit = \"Ctrr+Q\"\n").errors;
+        assert!(!errors.is_empty());
+        let mut pager = Pager::new("a.md".into());
+        pager.set_config_errors(errors);
+        assert!(pager.banner_visible());
+        pager.dismiss_banner();
+        assert!(!pager.banner_visible());
+    }
+
+    #[test]
+    fn banner_draws_into_buffer() {
+        use mdview_config::Config;
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        let errors = Config::from_toml_str_full("[keymap]\nquit = \"Ctrr+Q\"\n").errors;
+        let mut pager = Pager::new("a.md".into());
+        pager.set_config_errors(errors);
+        let area = Rect::new(0, 0, 200, 1);
+        let mut buf = Buffer::empty(area);
+        ErrorBanner { pager: &pager }.render(area, &mut buf);
+        let row: String = (0..area.width)
+            .map(|x| buf[(x, 0)].symbol().chars().next().unwrap_or(' '))
+            .collect();
+        assert!(row.contains("config"), "row: {row:?}");
+        assert!(row.contains("Esc"), "row: {row:?}");
     }
 }

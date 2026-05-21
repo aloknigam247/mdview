@@ -8,6 +8,7 @@ license = "MIT"
 [dependencies]
 crossterm = "0.28"
 dirs = "5"
+mdview-config = { path = "../mdview-config" }
 ratatui = { version = "0.28", default-features = false, features = ["crossterm"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"

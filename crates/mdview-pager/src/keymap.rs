@@ -96,6 +96,7 @@ impl Action {
             "search_prev" => Some(Action::SearchPrev),
             "search_start" => Some(Action::SearchStart),
             "toggle_follow" => Some(Action::ToggleFollow),
+            "toggle_theme" => Some(Action::ToggleTheme),
             "top" => Some(Action::Top),
             _ => None,
         }

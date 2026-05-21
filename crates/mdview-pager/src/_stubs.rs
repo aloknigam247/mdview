@@ -39,10 +39,7 @@ pub enum TermChunk {
     /// Already-rendered text containing ANSI escape sequences.
     Ansi(String),
     /// Raw sixel payload to be written verbatim to stdout.
-    Sixel {
-        payload: String,
-        rows: u16,
-    },
+    Sixel { payload: String, rows: u16 },
 }
 
 #[derive(Debug, Clone, Default)]
