@@ -9,6 +9,12 @@ pub fn get() -> &'static Theme {
         build(Palette {
             name: "solarized",
             accent: "#268bd2",
+            accent_blue: "#268bd2",
+            accent_green: "#859900",
+            accent_mauve: "#6c71c4",
+            accent_peach: "#cb4b16",
+            accent_teal: "#2aa198",
+            accent_yellow: "#b58900",
             bg: "#fdf6e3",
             border_subtle: "#eee8d5",
             code_bg: "#eee8d5",

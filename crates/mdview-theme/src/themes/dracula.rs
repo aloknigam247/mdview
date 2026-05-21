@@ -9,6 +9,12 @@ pub fn get() -> &'static Theme {
         build(Palette {
             name: "dracula",
             accent: "#bd93f9",
+            accent_blue: "#8be9fd",
+            accent_green: "#50fa7b",
+            accent_mauve: "#bd93f9",
+            accent_peach: "#ffb86c",
+            accent_teal: "#8be9fd",
+            accent_yellow: "#f1fa8c",
             bg: "#282a36",
             border_subtle: "#44475a",
             code_bg: "#21222c",

@@ -4,6 +4,12 @@ use std::collections::BTreeMap;
 pub(crate) struct Palette {
     pub name: &'static str,
     pub accent: &'static str,
+    pub accent_blue: &'static str,
+    pub accent_green: &'static str,
+    pub accent_mauve: &'static str,
+    pub accent_peach: &'static str,
+    pub accent_teal: &'static str,
+    pub accent_yellow: &'static str,
     pub bg: &'static str,
     pub border_subtle: &'static str,
     pub code_bg: &'static str,
@@ -19,10 +25,23 @@ pub(crate) struct Palette {
 pub(crate) fn build(p: Palette) -> Theme {
     let mut colors: BTreeMap<String, String> = BTreeMap::new();
     colors.insert("accent".into(), p.accent.into());
+    colors.insert("accent.blue".into(), p.accent_blue.into());
+    colors.insert("accent.green".into(), p.accent_green.into());
+    colors.insert("accent.mauve".into(), p.accent_mauve.into());
+    colors.insert("accent.peach".into(), p.accent_peach.into());
+    colors.insert("accent.teal".into(), p.accent_teal.into());
+    colors.insert("accent.yellow".into(), p.accent_yellow.into());
     colors.insert("bg".into(), p.bg.into());
     colors.insert("border.subtle".into(), p.border_subtle.into());
     colors.insert("code.bg".into(), p.code_bg.into());
     colors.insert("fg".into(), p.fg.into());
+    colors.insert("frontmatter.card.bg".into(), p.code_bg.into());
+    colors.insert("frontmatter.card.border".into(), p.border_subtle.into());
+    colors.insert("frontmatter.heading.fg".into(), p.heading[0].into());
+    colors.insert("frontmatter.muted.fg".into(), p.muted.into());
+    colors.insert("frontmatter.subtitle.fg".into(), p.quote_fg.into());
+    colors.insert("frontmatter.tag.bg".into(), p.accent_mauve.into());
+    colors.insert("frontmatter.tag.fg".into(), p.accent_mauve.into());
     colors.insert("link".into(), p.link.into());
     colors.insert("muted".into(), p.muted.into());
     colors.insert("table.border".into(), p.table_border.into());

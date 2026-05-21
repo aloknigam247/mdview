@@ -31,7 +31,7 @@ fn all_presets_have_required_keys() {
         "table.header",
     ];
     let themes = builtin_themes();
-    assert_eq!(themes.len(), 4);
+    assert_eq!(themes.len(), 6);
     for t in themes {
         for k in expected_colors {
             assert!(t.colors.contains_key(k), "{} missing color {k}", t.name);

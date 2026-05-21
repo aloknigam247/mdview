@@ -9,6 +9,12 @@ pub fn get() -> &'static Theme {
         build(Palette {
             name: "dark",
             accent: "#60a5fa",
+            accent_blue: "#60a5fa",
+            accent_green: "#34d399",
+            accent_mauve: "#a78bfa",
+            accent_peach: "#fb923c",
+            accent_teal: "#22d3ee",
+            accent_yellow: "#fbbf24",
             bg: "#0b1020",
             border_subtle: "#1f2a44",
             code_bg: "#111827",
