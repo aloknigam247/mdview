@@ -140,12 +140,92 @@ both on `stderr` (one line per error, prefixed `mdview-config-error:`) and
   (plus a count when there's more than one); press `Esc` to dismiss.
 - **Nvim** (`--nvim-socket`): the Lua plugin's `on_stderr` callback strips the
   prefix and calls `vim.notify(..., vim.log.levels.WARN)`.
-- **GUI** (Tauri webview): TODO — a small follow-up will read
-  `LoadResult.errors` in `apps/mdview/src/render.rs` and render a dismissible
-  toast at the top of the page.
+- **GUI** (wry webview): a dismissible amber banner pinned to the top of the
+  page; shows the first error (plus a count when there's more than one) with a
+  "Show all" expander; close button or `Esc` dismisses.
 
 Each error names the culprit (key like `keymap[quit]`, the raw offending value,
 or `config.toml line L:C` when TOML span info is available), states what's
 wrong, and lists what was expected. Programmatic access is via
 `Config::load_full() -> LoadResult { config, errors }`; the existing
 `Config::load() -> Config` shim is preserved for backwards compatibility.
+
+## Architecture reality (read before editing the app)
+
+The aspirational lines higher up describe a Tauri shell and a separate
+`apps/mdview/webview/` esbuild bundle. The **actual code** does not match:
+
+- **Shell**: plain `wry` + `tao` (not Tauri). `apps/mdview/src/pipeline.rs::run_gui_event_loop`
+  builds the `tao::Window` + `wry::WebView` directly. There are no Tauri
+  commands; host ↔ webview communication goes through `with_ipc_handler` +
+  `EventLoopBuilder::<MdvUserEvent>::with_user_event` + a tao `EventLoopProxy`.
+- **Webview UI**: a single huge inline `<style>` + `<script>` block inside a
+  Rust `format!` raw-string template in `apps/mdview/src/render.rs::wrap_page`.
+  `apps/mdview/webview/` exists but its build script fails silently (you'll see
+  `warning: mdview@0.1.0: webview build failed; using placeholder bundle` on
+  every build — that's normal). Treat `render.rs` as the source of truth for
+  CSS and JS in the GUI surface.
+- **Most "webview" features live in `render.rs`** as embedded JS/CSS — TOC
+  builder, codemap minimap, right-click menu, zoom, bionic, theme toggle,
+  context menu, keymap dispatcher, config-error banner. Do not assume a `dist/`
+  bundle is loaded.
+- The `mdview-render-html::base_stylesheet()` function uses `.mdv-doc`
+  selectors; the app emits `<article class="mdv">`. The two CSS surfaces are
+  not unified — copy needed rules into `render.rs` rather than importing
+  `base_stylesheet()` wholesale.
+
+## Working with parallel agents (worktree workflow)
+
+When firing background agents that touch the same hot file (especially
+`apps/mdview/src/render.rs` or `apps/mdview/src/pipeline.rs`), use
+`isolation: "worktree"` so each agent operates on its own branch. After each
+agent completes, **verify its work landed in main** before treating it as done.
+
+Lessons from the field:
+
+- Auto-merge from worktree back to the main worktree's working tree is **leaky
+  on hot files**: when multiple worktree agents touch the same file, later
+  merges silently drop earlier work. Verify by grepping for sentinel
+  identifiers (`load_icon`, `pre_render_html`, `setupToc`, etc.) — see
+  `scripts/verify-features.ps1`.
+- An agent that uses a full-file `Write` (or `Set-Content` / `WriteAllText`
+  fallback) can erase any change between its initial read and its write.
+  **Prefer targeted `Edit` calls** in agent prompts; only allow `Write` when
+  the agent has just read the full file and preserves everything it isn't
+  changing.
+- Agent self-reports occasionally describe what was intended, not what
+  survived. Grep before declaring victory.
+- Stale `worktree-agent-*` branches accumulate. Use
+  `scripts/clean-worktrees.ps1` to clean up after a session.
+
+## Platform-specific notes
+
+### wry custom URI scheme (Windows)
+
+The `with_custom_protocol("<scheme>", ...)` handler on Windows WebView2
+responds to URLs of the form `http://<scheme>.localhost/<path>`, **not**
+`<scheme>://localhost/<path>`. On Linux/macOS the bare scheme works. Use a
+`cfg`-gated constant:
+
+```rust
+#[cfg(windows)]
+const MDVIEW_PROTOCOL_BASE: &str = "http://mdview.localhost/";
+#[cfg(not(windows))]
+const MDVIEW_PROTOCOL_BASE: &str = "mdview://localhost/";
+```
+
+For images, pre-walk the AST and rewrite `NodeValue::Image(link).url` to an
+absolute path under this base before letting `comrak::format_html` serialize.
+
+### Windows titlebar via DWM
+
+To recolor the native titlebar, call `DwmSetWindowAttribute` with
+`DWMWA_CAPTION_COLOR`, `DWMWA_TEXT_COLOR`, `DWMWA_BORDER_COLOR`, and
+`DWMWA_USE_IMMERSIVE_DARK_MODE`. The Windows `COLORREF` is `0x00BBGGRR` — byte-
+swap from the usual `0x00RRGGBB` hex. The FFI block needs `#[allow(unsafe_code)]`
+because the crate has `#![deny(unsafe_code)]` at the root.
+
+### `std::fs::canonicalize` on Windows
+
+Returns `\\?\` UNC paths. Strip the prefix before URL-encoding or
+embedding in any user-facing string.
