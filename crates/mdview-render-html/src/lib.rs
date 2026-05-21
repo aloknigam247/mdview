@@ -2,14 +2,22 @@
 
 pub mod _stubs;
 pub mod htmlesc;
+pub mod image;
 
 pub use _stubs::{
     mdview_theme as theme_mod, Asset, AstNode, Html, HtmlRenderer, Radii, Registry, RenderCtx,
     StyleSpec, Theme, Typography,
 };
 
-use comrak::nodes::NodeValue;
+use comrak::nodes::{NodeLink, NodeValue};
 use comrak::{format_html, parse_document, Arena, ComrakOptions};
+
+use crate::image::{
+    collect_alt_text, local_to_mdview_url, render_image_html, render_placeholder_html,
+    resolve_image_url, ImgResolution,
+};
+
+const MDV_MISSING_SENTINEL: &str = "mdv-missing://";
 
 const LIVE_RELOAD_SCRIPT: &str = r#"<script>
 (function () {
@@ -54,6 +62,58 @@ pub fn render_markdown(src: &str, ctx: &RenderCtx, registry: &Registry) -> Html 
     render(root, ctx, registry)
 }
 
+fn rewrite_image_urls<'a>(node: &'a AstNode<'a>, ctx: &RenderCtx) {
+    let new_link = if let NodeValue::Image(link) = &node.data.borrow().value {
+        Some(resolve_image_link(link, ctx, node))
+    } else {
+        None
+    };
+    if let Some(updated) = new_link {
+        if let NodeValue::Image(link) = &mut node.data.borrow_mut().value {
+            *link = updated;
+        }
+    }
+    for child in node.children() {
+        rewrite_image_urls(child, ctx);
+    }
+}
+
+fn resolve_image_link<'a>(link: &NodeLink, ctx: &RenderCtx, node: &'a AstNode<'a>) -> NodeLink {
+    let title = link.title.clone();
+    match resolve_image_url(&link.url, ctx.source_dir.as_deref()) {
+        ImgResolution::Remote(u) | ImgResolution::DataUri(u) => NodeLink { url: u, title },
+        ImgResolution::Local(abs) => {
+            if !abs.exists() {
+                tracing::warn!(path = %abs.display(), "mdview: image not found");
+                let alt = collect_alt_text(node);
+                let fallback = abs
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                missing_link(&alt, &fallback)
+            } else {
+                NodeLink {
+                    url: local_to_mdview_url(&abs),
+                    title,
+                }
+            }
+        }
+        ImgResolution::UnresolvableRelative => {
+            let alt = collect_alt_text(node);
+            missing_link(&alt, &link.url)
+        }
+    }
+}
+
+fn missing_link(alt: &str, fallback: &str) -> NodeLink {
+    let label = if !alt.is_empty() { alt } else { fallback };
+    NodeLink {
+        url: format!("{MDV_MISSING_SENTINEL}{label}"),
+        title: String::new(),
+    }
+}
+
 pub fn markdown_options() -> ComrakOptions<'static> {
     let mut o = ComrakOptions::default();
     o.extension.table = true;
@@ -71,16 +131,97 @@ fn render_body<'a>(
     registry: &Registry,
     opts: &ComrakOptions<'_>,
 ) -> String {
+    rewrite_image_urls(root, ctx);
     let mut out = String::from("<article class=\"mdv-doc\">");
     for child in root.children() {
         if let Some(override_html) = override_for(child, ctx, registry) {
             out.push_str(&override_html);
+        } else if let Some(fig) = standalone_image_figure(child) {
+            out.push_str(&fig);
         } else {
-            out.push_str(&comrak_serialize(child, opts));
+            let raw = comrak_serialize(child, opts);
+            out.push_str(&swap_missing_sentinels(&raw));
         }
     }
     out.push_str("</article>");
     out
+}
+
+fn standalone_image_figure<'a>(node: &'a AstNode<'a>) -> Option<String> {
+    if !matches!(node.data.borrow().value, NodeValue::Paragraph) {
+        return None;
+    }
+    let mut img_link: Option<NodeLink> = None;
+    let mut alt = String::new();
+    let mut other_inline = false;
+    for child in node.children() {
+        match &child.data.borrow().value {
+            NodeValue::Image(link) => {
+                if img_link.is_some() {
+                    other_inline = true;
+                    break;
+                }
+                img_link = Some(link.clone());
+                alt = collect_alt_text(child);
+            }
+            NodeValue::Text(t) if t.trim().is_empty() => {}
+            NodeValue::SoftBreak | NodeValue::LineBreak => {}
+            _ => {
+                other_inline = true;
+                break;
+            }
+        }
+    }
+    if other_inline {
+        return None;
+    }
+    let link = img_link?;
+    if link.url.starts_with(MDV_MISSING_SENTINEL) {
+        let label = link.url.trim_start_matches(MDV_MISSING_SENTINEL);
+        return Some(render_placeholder_html(label, None));
+    }
+    Some(render_image_html(&link.url, &alt, &link.title))
+}
+
+fn swap_missing_sentinels(html: &str) -> String {
+    if !html.contains(MDV_MISSING_SENTINEL) {
+        return html.to_string();
+    }
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+    while let Some(idx) = rest.find("<img ") {
+        out.push_str(&rest[..idx]);
+        let after = &rest[idx..];
+        let end = match after.find('>') {
+            Some(e) => e + 1,
+            None => {
+                out.push_str(after);
+                rest = "";
+                break;
+            }
+        };
+        let tag = &after[..end];
+        if tag.contains(&format!("src=\"{MDV_MISSING_SENTINEL}")) {
+            let label = extract_sentinel_label(tag);
+            out.push_str(&render_placeholder_html(&label, None));
+        } else {
+            out.push_str(tag);
+        }
+        rest = &after[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn extract_sentinel_label(tag: &str) -> String {
+    let needle = format!("src=\"{MDV_MISSING_SENTINEL}");
+    if let Some(start) = tag.find(&needle) {
+        let after = &tag[start + needle.len()..];
+        if let Some(quote) = after.find('"') {
+            return after[..quote].to_string();
+        }
+    }
+    String::from("image")
 }
 
 fn override_for<'a>(node: &'a AstNode<'a>, ctx: &RenderCtx, registry: &Registry) -> Option<String> {
@@ -142,7 +283,7 @@ pub fn node_kind<'a>(node: &'a AstNode<'a>) -> &'static str {
     }
 }
 
-fn base_stylesheet() -> &'static str {
+pub fn base_stylesheet() -> &'static str {
     r#"
 html,body{margin:0;padding:0;background:var(--mdv-bg);color:var(--mdv-fg);}
 body.mdv{font-family:var(--mdv-font-body);line-height:1.7;font-size:16px;padding:2.5rem 1.25rem;}
@@ -164,8 +305,11 @@ body.mdv{font-family:var(--mdv-font-body);line-height:1.7;font-size:16px;padding
 .mdv-doc th,.mdv-doc td{padding:0.6rem 0.8rem;text-align:left;border-bottom:1px solid var(--mdv-border);}
 .mdv-doc tr:last-child td{border-bottom:none;}
 .mdv-doc th{background:color-mix(in srgb,var(--mdv-accent) 8%,transparent);font-weight:600;}
-.mdv-doc img{max-width:100%;border-radius:var(--mdv-radius-md);}
+.mdv-doc figcaption{color:var(--mdv-muted);font-size:0.9em;text-align:center;margin-top:0.25rem;}
+.mdv-doc figure{margin:1rem 0;}
 .mdv-doc hr{border:none;border-top:1px solid var(--mdv-border);margin:2rem 0;}
+.mdv-doc img{max-width:100%;height:auto;border-radius:var(--mdv-radius-md);}
+.mdv-img-missing{color:var(--mdv-muted);font-style:italic;}
 .mdv-doc .mdv-card{background:var(--mdv-bg);border:1px solid var(--mdv-border);border-radius:var(--mdv-radius-md);padding:1rem 1.25rem;box-shadow:0 1px 2px rgba(16,24,40,0.04);}
 "#
 }

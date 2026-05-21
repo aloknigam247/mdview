@@ -124,6 +124,7 @@ impl Registry {
 pub struct RenderCtx {
     pub theme: Theme,
     pub live_reload: bool,
+    pub source_dir: Option<std::path::PathBuf>,
     pub title: String,
 }
 
@@ -132,6 +133,7 @@ impl Default for RenderCtx {
         Self {
             theme: Theme::default(),
             live_reload: false,
+            source_dir: None,
             title: "mdview".to_string(),
         }
     }

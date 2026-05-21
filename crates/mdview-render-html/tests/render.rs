@@ -98,6 +98,63 @@ fn renders_image() {
 }
 
 #[test]
+fn renders_titled_image_as_figure() {
+    let html = render_markdown(
+        "![alt](https://example.com/a.png \"Cover image\")\n",
+        &ctx(),
+        &Registry::new(),
+    );
+    assert!(html.contains("<figure>"), "missing figure: {html}");
+    assert!(html.contains("<img src=\"https://example.com/a.png\""));
+    assert!(html.contains("alt=\"alt\""));
+    assert!(html.contains("loading=\"lazy\""));
+    assert!(html.contains("<figcaption>Cover image</figcaption>"));
+}
+
+#[test]
+fn renders_missing_local_image_as_placeholder() {
+    let tmp = std::env::temp_dir().join("mdview-img-tests");
+    std::fs::create_dir_all(&tmp).unwrap();
+    let c = RenderCtx {
+        source_dir: Some(tmp),
+        ..RenderCtx::default()
+    };
+    let html = render_markdown("![missing](./does/not/exist.png)\n", &c, &Registry::new());
+    assert!(
+        html.contains("mdv-img-missing"),
+        "missing placeholder not found: {html}"
+    );
+    assert!(html.contains("[image: missing]"));
+}
+
+#[test]
+fn renders_relative_without_source_dir_as_placeholder() {
+    let html = render_markdown("![diagram](nope.png)\n", &ctx(), &Registry::new());
+    assert!(
+        html.contains("mdv-img-missing"),
+        "placeholder missing: {html}"
+    );
+}
+
+#[test]
+fn renders_local_existing_image_via_mdview_scheme() {
+    let tmp = std::env::temp_dir().join("mdview-img-tests");
+    std::fs::create_dir_all(&tmp).unwrap();
+    let img = tmp.join("hero.png");
+    std::fs::write(&img, b"fakepng").unwrap();
+    let c = RenderCtx {
+        source_dir: Some(tmp),
+        ..RenderCtx::default()
+    };
+    let html = render_markdown("![hero](hero.png \"Cover image\")\n", &c, &Registry::new());
+    assert!(
+        html.contains("mdview://localhost/"),
+        "mdview scheme missing: {html}"
+    );
+    assert!(html.contains("<figcaption>Cover image</figcaption>"));
+}
+
+#[test]
 fn injects_live_reload_script_when_enabled() {
     let c = RenderCtx {
         live_reload: true,
