@@ -346,7 +346,26 @@ Scatter with two series:
 
 ---
 
-## 12. Footnotes
+## 12. Images
+
+Local image (resolved relative to the source file's directory, served over the
+custom `mdview://` protocol):
+
+![Project hero screenshot](../docs/screenshots/hero.png "Project hero screenshot")
+
+Inline image with a title — the title becomes a `<figcaption>` when the image
+is the sole content of its paragraph:
+
+![mdview tables screenshot](../docs/screenshots/tables.png "Rounded tables")
+
+A broken local reference renders as an inline placeholder (no crash, no broken
+icon):
+
+![missing — should show a placeholder](./this-file-does-not-exist.png)
+
+---
+
+## 13. Footnotes
 
 Footnotes[^1] render inline[^deep] with backlinks[^also].
 
@@ -356,7 +375,7 @@ Footnotes[^1] render inline[^deep] with backlinks[^also].
 
 ---
 
-## 13. Wide content — horizontal expansion
+## 14. Wide content — horizontal expansion
 
 mdview does **not** enforce a fixed page width. If any element is wider than
 the viewport, the page itself scrolls horizontally; narrow prose stays
@@ -395,7 +414,7 @@ should keep their content legible — the page grows sideways when needed.
 
 ---
 
-## 14. Emoji & Unicode
+## 15. Emoji & Unicode
 
 Text can include emoji 🎉 ✨ 🦀 and unicode box drawing: `╭─╮ │ ╰─╯`.
 
@@ -404,7 +423,7 @@ by design; HTML renderer uses CSS `border-radius`.
 
 ---
 
-## 15. What's NOT rendered as an extension
+## 16. What's NOT rendered as an extension
 
 - Raw HTML in markdown (`<details>`, `<summary>`, `<img>`) is passed through
   by comrak but not specially themed by mdview.
@@ -414,7 +433,7 @@ by design; HTML renderer uses CSS `border-radius`.
 
 ---
 
-## 16. Where to go next
+## 17. Where to go next
 
 - The **same file** above renders in three places: Tauri/wry window,
   terminal pager (ANSI + sixel), and inside Neovim via the Lua plugin.
