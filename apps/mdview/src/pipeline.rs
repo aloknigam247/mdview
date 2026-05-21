@@ -14,6 +14,20 @@ use crate::cli::Cli;
 #[cfg(feature = "stubs")]
 use crate::_stubs as backend;
 
+fn format_window_title(file: Option<&std::path::Path>) -> String {
+    match file {
+        Some(p) => {
+            let name = p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or("untitled");
+            format!("{name} - mdview")
+        }
+        None => "mdview".into(),
+    }
+}
+
 pub fn run_terminal(cli: &Cli) -> Result<()> {
     let file = cli
         .file
@@ -30,7 +44,8 @@ pub fn run_terminal(cli: &Cli) -> Result<()> {
 fn render_once(file: &Path, cli: &Cli) -> Result<()> {
     let src =
         std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
-    let ansi = crate::render_terminal::render_ansi(&src)?;
+    let source_dir = file.parent();
+    let ansi = crate::render_terminal::render_ansi_with_source(&src, source_dir)?;
 
     if cli.no_pager {
         use std::io::Write;
@@ -78,14 +93,26 @@ pub async fn run_tauri_child(cli: &Cli) -> Result<()> {
         .file
         .as_ref()
         .context("tauri mode requires a FILE argument")?;
-    let src = std::fs::read_to_string(file)
-        .with_context(|| format!("reading {}", file.display()))?;
+    let src =
+        std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
     let title = file
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("mdview")
         .to_string();
-    let html = crate::render::render_page(&src, &title)?;
+    let loaded = mdview_config::Config::load_full();
+    let config = loaded.config;
+    let source_dir = file.parent();
+    let html = crate::render::render_page_full(
+        &src,
+        &title,
+        &config.theme,
+        &config.keymap,
+        source_dir,
+        &loaded.errors,
+        &config.toc,
+        &config.codemap,
+    )?;
     let srv = crate::server::serve_html(html).await?;
     let port = srv.port;
     eprintln!("mdview: serving on http://127.0.0.1:{port}");
@@ -96,7 +123,8 @@ pub async fn run_tauri_child(cli: &Cli) -> Result<()> {
     {
         // wry runs the event loop on the current thread and blocks until the
         // window is closed. Keep `srv` alive for the whole session.
-        run_gui_event_loop(&url)?;
+        let win_title = format_window_title(cli.file.as_deref());
+        run_gui_event_loop(&url, &config, &win_title)?;
     }
 
     #[cfg(not(feature = "gui"))]
@@ -129,34 +157,342 @@ fn open_in_browser(url: &str) {
 }
 
 #[cfg(feature = "gui")]
-fn run_gui_event_loop(url: &str) -> Result<()> {
+#[derive(Debug, Clone)]
+pub enum MdvUserEvent {
+    OpenLink(String),
+    Quit,
+    Reload,
+    ThemeChanged(String),
+}
+
+#[cfg(feature = "gui")]
+fn load_icon() -> Option<tao::window::Icon> {
+    const ICON_PNG: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/icon-256.png"));
+    let img = image::load_from_memory(ICON_PNG).ok()?;
+    let rgba = img.to_rgba8();
+    let (w, h) = rgba.dimensions();
+    tao::window::Icon::from_rgba(rgba.into_raw(), w, h).ok()
+}
+
+#[cfg(feature = "gui")]
+fn run_gui_event_loop(url: &str, config: &mdview_config::Config, title: &str) -> Result<()> {
     use tao::dpi::LogicalSize;
     use tao::event::{Event, WindowEvent};
-    use tao::event_loop::{ControlFlow, EventLoop};
+    use tao::event_loop::{ControlFlow, EventLoopBuilder};
     use tao::window::WindowBuilder;
     use wry::WebViewBuilder;
 
-    let event_loop = EventLoop::new();
-    let window = WindowBuilder::new()
-        .with_title("mdview")
+    let event_loop = EventLoopBuilder::<MdvUserEvent>::with_user_event().build();
+    let mut builder = WindowBuilder::new()
+        .with_title(title)
         .with_inner_size(LogicalSize::new(1200.0, 800.0))
-        .with_min_inner_size(LogicalSize::new(600.0, 400.0))
+        .with_min_inner_size(LogicalSize::new(600.0, 400.0));
+    if let Some(icon) = load_icon() {
+        builder = builder.with_window_icon(Some(icon));
+    }
+    let window = builder
         .build(&event_loop)
         .map_err(|e| anyhow::anyhow!("window build: {e}"))?;
 
-    let _webview = WebViewBuilder::new()
+    let initial_theme_name = match config.theme.mode {
+        mdview_config::ThemeMode::Light => config.theme.light.clone(),
+        _ => config.theme.dark.clone(),
+    };
+    #[cfg(windows)]
+    {
+        let theme = mdview_theme::presets::find(&initial_theme_name)
+            .or_else(|| mdview_theme::presets::find("catppuccin-mocha"))
+            .or_else(|| mdview_theme::presets::builtin_themes().into_iter().next());
+        if let Some(theme) = theme {
+            apply_dwm_theme(&window, theme);
+        }
+    }
+    let _ = initial_theme_name;
+
+    let proxy = event_loop.create_proxy();
+    let light_name = config.theme.light.clone();
+    let dark_name = config.theme.dark.clone();
+    let webview = WebViewBuilder::new()
         .with_url(url)
+        .with_custom_protocol("mdview".into(), |_id, req| {
+            let path_part = req.uri().path().trim_start_matches('/');
+            let decoded = urlencoding::decode(path_part)
+                .map(|s| s.into_owned())
+                .unwrap_or_else(|_| path_part.to_string());
+            let path = std::path::PathBuf::from(decoded);
+            match std::fs::read(&path) {
+                Ok(bytes) => wry::http::Response::builder()
+                    .status(200)
+                    .header(wry::http::header::CONTENT_TYPE, mime_for(&path))
+                    .body(std::borrow::Cow::Owned(bytes))
+                    .unwrap_or_else(|_| empty_404()),
+                Err(_) => empty_404(),
+            }
+        })
+        .with_ipc_handler(move |req| {
+            let body = req.body().as_str();
+            let evt = match body {
+                "theme-light" => Some(MdvUserEvent::ThemeChanged(light_name.clone())),
+                "theme-dark" => Some(MdvUserEvent::ThemeChanged(dark_name.clone())),
+                "quit" => Some(MdvUserEvent::Quit),
+                "reload" => Some(MdvUserEvent::Reload),
+                _ => body
+                    .strip_prefix("open-link ")
+                    .map(|u| MdvUserEvent::OpenLink(u.to_string())),
+            };
+            if let Some(evt) = evt {
+                if let Err(e) = proxy.send_event(evt) {
+                    tracing::debug!("send_event failed: {e}");
+                }
+            }
+        })
         .build(&window)
         .map_err(|e| anyhow::anyhow!("webview build: {e}"))?;
 
     event_loop.run(move |event, _target, control_flow| {
         *control_flow = ControlFlow::Wait;
-        if let Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } = event
-        {
-            *control_flow = ControlFlow::Exit;
+        match event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                *control_flow = ControlFlow::Exit;
+            }
+            Event::UserEvent(MdvUserEvent::OpenLink(url)) => {
+                open_url_in_browser(&url);
+            }
+            Event::UserEvent(MdvUserEvent::Quit) => {
+                *control_flow = ControlFlow::Exit;
+            }
+            Event::UserEvent(MdvUserEvent::Reload) => {
+                if let Err(e) = webview.reload() {
+                    tracing::debug!("webview reload failed: {e}");
+                }
+            }
+            Event::UserEvent(MdvUserEvent::ThemeChanged(name)) => {
+                #[cfg(windows)]
+                {
+                    if let Some(theme) = mdview_theme::presets::find(&name) {
+                        apply_dwm_theme(&window, theme);
+                    } else {
+                        tracing::warn!("theme {name:?} not found for DWM update");
+                    }
+                }
+                #[cfg(not(windows))]
+                {
+                    let _ = name;
+                }
+            }
+            _ => {}
         }
     });
+}
+
+#[cfg(feature = "gui")]
+fn open_url_in_browser(url: &str) {
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "", url])
+            .spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(url).spawn();
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+    }
+}
+
+#[cfg(feature = "gui")]
+fn empty_404() -> wry::http::Response<std::borrow::Cow<'static, [u8]>> {
+    wry::http::Response::builder()
+        .status(404)
+        .body(std::borrow::Cow::Borrowed(&[][..]))
+        .expect("static 404 response is well-formed")
+}
+
+#[cfg(feature = "gui")]
+fn mime_for(path: &std::path::Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("bmp") => "image/bmp",
+        Some("gif") => "image/gif",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("png") => "image/png",
+        Some("svg") => "image/svg+xml",
+        Some("webp") => "image/webp",
+        _ => "application/octet-stream",
+    }
+}
+
+// DwmSetWindowAttribute is an FFI call; safe usage is constrained to passing a
+// pointer to a value whose size matches `cbAttribute`, which we control here.
+#[cfg(all(windows, feature = "gui"))]
+#[allow(unsafe_code)]
+fn apply_dwm_theme(window: &tao::window::Window, theme: &mdview_theme::Theme) {
+    use tao::platform::windows::WindowExtWindows;
+    use windows::Win32::Foundation::{COLORREF, HWND};
+    use windows::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR,
+        DWMWA_USE_IMMERSIVE_DARK_MODE,
+    };
+
+    let Some(bg_hex) = theme.colors.get("bg") else {
+        tracing::debug!("apply_dwm_theme: theme missing 'bg' color");
+        return;
+    };
+    let Some(fg_hex) = theme.colors.get("fg") else {
+        tracing::debug!("apply_dwm_theme: theme missing 'fg' color");
+        return;
+    };
+    let Some(bg_ref) = parse_hex_to_colorref(bg_hex) else {
+        tracing::debug!("apply_dwm_theme: failed to parse bg {bg_hex}");
+        return;
+    };
+    let Some(fg_ref) = parse_hex_to_colorref(fg_hex) else {
+        tracing::debug!("apply_dwm_theme: failed to parse fg {fg_hex}");
+        return;
+    };
+
+    let hwnd = HWND(window.hwnd() as *mut _);
+    let bg = COLORREF(bg_ref);
+    let fg = COLORREF(fg_ref);
+    let is_dark: u32 = if is_dark_hex(bg_hex) { 1 } else { 0 };
+
+    unsafe {
+        if let Err(e) = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_CAPTION_COLOR,
+            &bg as *const _ as *const _,
+            std::mem::size_of::<COLORREF>() as u32,
+        ) {
+            tracing::debug!("DWMWA_CAPTION_COLOR failed: {e:?}");
+        }
+        if let Err(e) = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_TEXT_COLOR,
+            &fg as *const _ as *const _,
+            std::mem::size_of::<COLORREF>() as u32,
+        ) {
+            tracing::debug!("DWMWA_TEXT_COLOR failed: {e:?}");
+        }
+        if let Err(e) = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_BORDER_COLOR,
+            &bg as *const _ as *const _,
+            std::mem::size_of::<COLORREF>() as u32,
+        ) {
+            tracing::debug!("DWMWA_BORDER_COLOR failed: {e:?}");
+        }
+        if let Err(e) = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_USE_IMMERSIVE_DARK_MODE,
+            &is_dark as *const _ as *const _,
+            std::mem::size_of::<u32>() as u32,
+        ) {
+            tracing::debug!("DWMWA_USE_IMMERSIVE_DARK_MODE failed: {e:?}");
+        }
+    }
+}
+
+// Windows COLORREF packs RGB as 0x00BBGGRR (little-endian byte order: R,G,B,0),
+// NOT the usual 0x00RRGGBB. Swap byte positions when converting from a #RRGGBB hex.
+fn parse_hex_to_colorref(hex: &str) -> Option<u32> {
+    let s = hex.strip_prefix('#').unwrap_or(hex);
+    if s.len() != 6 {
+        return None;
+    }
+    let r = u32::from_str_radix(&s[0..2], 16).ok()?;
+    let g = u32::from_str_radix(&s[2..4], 16).ok()?;
+    let b = u32::from_str_radix(&s[4..6], 16).ok()?;
+    Some((b << 16) | (g << 8) | r)
+}
+
+fn is_dark_hex(hex: &str) -> bool {
+    let s = hex.strip_prefix('#').unwrap_or(hex);
+    if s.len() != 6 {
+        return true;
+    }
+    let r = u32::from_str_radix(&s[0..2], 16).unwrap_or(0) as f32;
+    let g = u32::from_str_radix(&s[2..4], 16).unwrap_or(0) as f32;
+    let b = u32::from_str_radix(&s[4..6], 16).unwrap_or(0) as f32;
+    let luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+    luminance < 128.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{format_window_title, is_dark_hex, parse_hex_to_colorref};
+    use std::path::Path;
+
+    #[test]
+    fn title_none_is_bare_mdview() {
+        assert_eq!(format_window_title(None), "mdview");
+    }
+
+    #[test]
+    fn title_simple_name() {
+        assert_eq!(
+            format_window_title(Some(Path::new("README.md"))),
+            "README.md - mdview"
+        );
+    }
+
+    #[test]
+    fn title_full_path_uses_basename() {
+        assert_eq!(
+            format_window_title(Some(Path::new("D:/code/mdview/README.md"))),
+            "README.md - mdview"
+        );
+    }
+
+    #[test]
+    fn title_root_path_is_untitled() {
+        assert_eq!(
+            format_window_title(Some(Path::new("/"))),
+            "untitled - mdview"
+        );
+    }
+
+    #[test]
+    fn title_empty_path_is_untitled() {
+        assert_eq!(
+            format_window_title(Some(Path::new(""))),
+            "untitled - mdview"
+        );
+    }
+
+    #[test]
+    fn colorref_byte_order_is_bgr() {
+        // #FF8040 → R=0xFF, G=0x80, B=0x40 → COLORREF = 0x004080FF
+        assert_eq!(parse_hex_to_colorref("#FF8040"), Some(0x0040_80FF));
+    }
+
+    #[test]
+    fn colorref_accepts_no_hash() {
+        assert_eq!(parse_hex_to_colorref("1e1e2e"), Some(0x002E_1E1E));
+    }
+
+    #[test]
+    fn colorref_rejects_bad_input() {
+        assert_eq!(parse_hex_to_colorref("#zzz"), None);
+        assert_eq!(parse_hex_to_colorref("#12345"), None);
+    }
+
+    #[test]
+    fn mocha_bg_is_dark() {
+        assert!(is_dark_hex("#1e1e2e"));
+    }
+
+    #[test]
+    fn latte_bg_is_light() {
+        assert!(!is_dark_hex("#eff1f5"));
+    }
 }

@@ -1,10 +1,155 @@
 use anyhow::Result;
+use comrak::nodes::{AstNode, NodeValue};
 use comrak::{format_html, Arena};
+use mdview_config::{
+    Action, CodemapConfig, ConfigError, KeyBinding, Keymap, ThemeConfig, ThemeMode, TocConfig,
+};
+#[allow(unused_imports)]
+use mdview_config::TocPosition;
 use mdview_core::{parse, Registry, RenderCtx, Theme};
+use std::path::{Path, PathBuf};
 
 use crate::builtins::builtin_extensions;
 
+#[derive(Default, Debug, Clone, Copy)]
+struct Features {
+    drawio: bool,
+    math: bool,
+    mermaid: bool,
+    plotly: bool,
+}
+
+impl Features {
+    fn detect<'a>(root: &'a AstNode<'a>) -> Self {
+        let mut f = Features::default();
+        for node in root.descendants() {
+            match &node.data.borrow().value {
+                NodeValue::Math(_) => f.math = true,
+                NodeValue::CodeBlock(cb) => {
+                    let head = cb.info.split_whitespace().next().unwrap_or("");
+                    let lang = head.split(':').next().unwrap_or("");
+                    if lang.eq_ignore_ascii_case("mermaid") {
+                        f.mermaid = true;
+                    } else if lang.eq_ignore_ascii_case("drawio") {
+                        f.drawio = true;
+                    } else if lang.eq_ignore_ascii_case("plotly") {
+                        f.plotly = true;
+                    } else if lang.eq_ignore_ascii_case("math") {
+                        f.math = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        f
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResolvedMode {
+    Dark,
+    Light,
+}
+
+impl ResolvedMode {
+    fn class(self) -> &'static str {
+        match self {
+            ResolvedMode::Dark => "theme-dark",
+            ResolvedMode::Light => "theme-light",
+        }
+    }
+}
+
+fn resolve_mode(mode: ThemeMode) -> ResolvedMode {
+    match mode {
+        ThemeMode::Auto | ThemeMode::Dark => ResolvedMode::Dark,
+        ThemeMode::Light => ResolvedMode::Light,
+    }
+}
+
+fn lookup_theme_or_fallback(name: &str, fallback: &str) -> mdview_theme::Theme {
+    if let Some(t) = mdview_theme::find(name) {
+        return t.clone();
+    }
+    tracing::warn!("mdview-render: theme {name:?} not found; falling back to {fallback:?}");
+    mdview_theme::find(fallback)
+        .cloned()
+        .or_else(|| mdview_theme::builtin_themes().into_iter().next().cloned())
+        .unwrap_or_default()
+}
+
+fn emit_root_inner(theme: &mdview_theme::Theme) -> String {
+    let css = mdview_theme::emit_css(theme);
+    let start = match css.find(":root {") {
+        Some(i) => i + ":root {".len(),
+        None => return String::new(),
+    };
+    let rest = &css[start..];
+    let end = match rest.find('}') {
+        Some(i) => i,
+        None => return String::new(),
+    };
+    rest[..end].trim().to_string()
+}
+
+fn emit_theme_blocks(config: &ThemeConfig) -> String {
+    let light = lookup_theme_or_fallback(&config.light, "catppuccin-latte");
+    let dark = lookup_theme_or_fallback(&config.dark, "catppuccin-mocha");
+    let light_inner = emit_root_inner(&light);
+    let dark_inner = emit_root_inner(&dark);
+    format!(
+        ":root.theme-light {{\n{light_inner}\n}}\n:root.theme-dark {{\n{dark_inner}\n}}\n:root{{--bg:var(--mdv-bg);--fg:var(--mdv-fg);--accent:var(--mdv-accent);--muted:var(--mdv-muted);--code-bg:var(--mdv-code-bg);--border:var(--mdv-border-subtle);--link:var(--mdv-link);}}\n"
+    )
+}
+
+#[allow(dead_code)]
 pub fn render_page(src: &str, title: &str) -> Result<String> {
+    render_page_with_theme(src, title, &ThemeConfig::default())
+}
+
+#[allow(dead_code)]
+pub fn render_page_with_theme(src: &str, title: &str, theme_cfg: &ThemeConfig) -> Result<String> {
+    render_page_with_config(src, title, theme_cfg, &Keymap::defaults())
+}
+
+pub fn render_page_with_config(
+    src: &str,
+    title: &str,
+    theme_cfg: &ThemeConfig,
+    keymap: &Keymap,
+) -> Result<String> {
+    render_page_with_config_and_source(src, title, theme_cfg, keymap, None)
+}
+
+pub fn render_page_with_config_and_source(
+    src: &str,
+    title: &str,
+    theme_cfg: &ThemeConfig,
+    keymap: &Keymap,
+    source_dir: Option<&Path>,
+) -> Result<String> {
+    render_page_full(
+        src,
+        title,
+        theme_cfg,
+        keymap,
+        source_dir,
+        &[],
+        &TocConfig::default(),
+        &CodemapConfig::default(),
+    )
+}
+
+pub fn render_page_full(
+    src: &str,
+    title: &str,
+    theme_cfg: &ThemeConfig,
+    keymap: &Keymap,
+    source_dir: Option<&Path>,
+    config_errors: &[ConfigError],
+    toc: &TocConfig,
+    codemap: &CodemapConfig,
+) -> Result<String> {
     let mut registry = Registry::new();
     for ext in builtin_extensions() {
         registry.register(ext);
@@ -16,9 +161,11 @@ pub fn render_page(src: &str, title: &str) -> Result<String> {
     let arena = Arena::new();
     let ast = parse(&arena, &src_owned, &registry);
     registry.apply_transforms(ast);
+    rewrite_image_urls(ast, source_dir);
 
     let theme = Theme::default();
-    let ctx = RenderCtx::new(&theme);
+    let mut ctx = RenderCtx::new(&theme);
+    ctx.source_dir = source_dir.map(|p| p.to_path_buf());
 
     let mut opts = comrak::ComrakOptions::default();
     opts.extension.strikethrough = true;
@@ -35,6 +182,11 @@ pub fn render_page(src: &str, title: &str) -> Result<String> {
     registry.apply_parser_opts(&mut opts);
 
     let mut body = String::new();
+    for ext in registry.html_renderers() {
+        if let Some(html) = ext.pre_render_html(&ctx) {
+            body.push_str(&html.0);
+        }
+    }
     for child in ast.children() {
         let mut matched = false;
         for ext in registry.html_renderers() {
@@ -51,27 +203,171 @@ pub fn render_page(src: &str, title: &str) -> Result<String> {
         }
     }
 
-    Ok(wrap_page(&body, title))
+    let features = Features::detect(ast);
+    Ok(wrap_page(
+        &body,
+        title,
+        theme_cfg,
+        keymap,
+        config_errors,
+        features,
+        toc,
+        codemap,
+    ))
 }
 
-fn wrap_page(body: &str, title: &str) -> String {
+fn rewrite_image_urls<'a>(root: &'a AstNode<'a>, source_dir: Option<&Path>) {
+    for node in root.descendants() {
+        let mut data = node.data.borrow_mut();
+        if let NodeValue::Image(link) = &mut data.value {
+            if let Some(u) = resolve_to_mdview_url(&link.url, source_dir) {
+                link.url = u;
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+const MDVIEW_PROTOCOL_BASE: &str = "http://mdview.localhost/";
+#[cfg(not(windows))]
+const MDVIEW_PROTOCOL_BASE: &str = "mdview://localhost/";
+
+fn resolve_to_mdview_url(url: &str, source_dir: Option<&Path>) -> Option<String> {
+    if url.starts_with("http://")
+        || url.starts_with("https://")
+        || url.starts_with("data:")
+        || url.starts_with("mdview://")
+        || url.starts_with(MDVIEW_PROTOCOL_BASE)
+    {
+        return None;
+    }
+    let raw = PathBuf::from(url);
+    let abs: PathBuf = if raw.is_absolute() {
+        raw
+    } else if let Some(dir) = source_dir {
+        dir.join(raw)
+    } else {
+        return None;
+    };
+    let abs = std::fs::canonicalize(&abs).unwrap_or(abs);
+    let s = abs.to_string_lossy();
+    let stripped = s.strip_prefix(r"\\?\").unwrap_or(&s);
+    Some(format!(
+        "{MDVIEW_PROTOCOL_BASE}{}",
+        urlencoding::encode(stripped)
+    ))
+}
+
+fn binding_to_json(b: &KeyBinding) -> String {
+    use mdview_config::keymap::Key;
+    let (key_kind, key_value) = match b.key {
+        Key::Char(c) => ("char", c.to_ascii_lowercase().to_string()),
+        Key::Backspace => ("named", "Backspace".into()),
+        Key::Delete => ("named", "Delete".into()),
+        Key::Down => ("named", "ArrowDown".into()),
+        Key::End => ("named", "End".into()),
+        Key::Enter => ("named", "Enter".into()),
+        Key::Esc => ("named", "Escape".into()),
+        Key::F(n) => ("named", format!("F{n}")),
+        Key::Home => ("named", "Home".into()),
+        Key::Left => ("named", "ArrowLeft".into()),
+        Key::PageDown => ("named", "PageDown".into()),
+        Key::PageUp => ("named", "PageUp".into()),
+        Key::Right => ("named", "ArrowRight".into()),
+        Key::Space => ("named", " ".into()),
+        Key::Tab => ("named", "Tab".into()),
+        Key::Up => ("named", "ArrowUp".into()),
+    };
+    let esc = key_value.replace('\\', "\\\\").replace('"', "\\\"");
+    format!(
+        "{{\"ctrl\":{},\"shift\":{},\"alt\":{},\"super\":{},\"kind\":\"{}\",\"key\":\"{}\"}}",
+        b.ctrl, b.shift, b.alt, b.super_, key_kind, esc
+    )
+}
+
+fn keymap_json(keymap: &Keymap) -> String {
+    let mut entries: Vec<String> = Vec::new();
+    if let Some(b) = keymap.get(Action::Quit) {
+        entries.push(format!("\"quit\":{}", binding_to_json(b)));
+    }
+    if let Some(b) = keymap.get(Action::ToggleBionic) {
+        entries.push(format!("\"toggle-bionic\":{}", binding_to_json(b)));
+    }
+    if let Some(b) = keymap.get(Action::ToggleCodemap) {
+        entries.push(format!("\"toggle-codemap\":{}", binding_to_json(b)));
+    }
+    if let Some(b) = keymap.get(Action::ToggleTheme) {
+        entries.push(format!("\"toggle-theme\":{}", binding_to_json(b)));
+    }
+    if let Some(b) = keymap.get(Action::ToggleToc) {
+        entries.push(format!("\"toggle-toc\":{}", binding_to_json(b)));
+    }
+    format!("{{{}}}", entries.join(","))
+}
+
+fn build_head_extras(features: Features) -> String {
+    let mut s = String::new();
+    if features.math {
+        s.push_str("<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css\">\n");
+    }
+    s
+}
+
+fn build_lib_scripts(features: Features) -> String {
+    let mut s = String::new();
+    if features.math {
+        s.push_str("<script defer src=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js\"></script>\n");
+        s.push_str("<script defer src=\"https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js\"></script>\n");
+    }
+    if features.mermaid {
+        s.push_str("<script defer src=\"https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js\"></script>\n");
+    }
+    if features.plotly {
+        s.push_str("<script defer src=\"https://cdn.plot.ly/plotly-2.35.2.min.js\"></script>\n");
+    }
+    if features.drawio {
+        s.push_str("<script defer src=\"https://viewer.diagrams.net/js/viewer-static.min.js\"></script>\n");
+    }
+    s
+}
+
+fn wrap_page(
+    body: &str,
+    title: &str,
+    theme_cfg: &ThemeConfig,
+    keymap: &Keymap,
+    config_errors: &[ConfigError],
+    features: Features,
+    toc: &TocConfig,
+    codemap: &CodemapConfig,
+) -> String {
     let title_esc = html_escape(title);
+    let theme_css = emit_theme_blocks(theme_cfg);
+    let mode_class = resolve_mode(theme_cfg.mode).class();
+    let keymap_js = keymap_json(keymap);
+    let banner_html = render_config_banner(config_errors);
+    let body_style = if config_errors.is_empty() {
+        String::new()
+    } else {
+        " style=\"padding-top: 48px\"".to_string()
+    };
+    let head_extras = build_head_extras(features);
+    let lib_scripts = build_lib_scripts(features);
+    let toc_pos = toc.position.as_kebab();
+    let toc_depth = toc.depth;
+    let codemap_enabled = if codemap.enabled { "true" } else { "false" };
+    let toc_pos_class = format!("mdv-toc--{toc_pos}");
+    let toc_aside = format!(
+        "<aside id=\"mdv-toc\" class=\"mdv-toc {toc_pos_class} mdv-toc--hidden\" aria-hidden=\"true\"><header><span>Contents</span><button id=\"mdv-toc-close\" type=\"button\" aria-label=\"Close\">\u{00D7}</button></header><nav id=\"mdv-toc-nav\"></nav></aside>"
+    );
     format!(
         r##"<!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="{mode_class}">
 <head>
 <meta charset="utf-8">
 <title>{title_esc}</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-<style>
-  :root {{
-    --fg: #111827; --bg: #ffffff; --muted: #6b7280; --accent: #6c7cff;
-    --code-bg: #f6f8fa; --border: #e5e7eb; --link: #2563eb;
-  }}
-  @media (prefers-color-scheme: dark) {{
-    :root {{ --fg: #e5e7eb; --bg: #0d1117; --muted: #9ca3af; --accent: #8b9eff;
-             --code-bg: #161b22; --border: #30363d; --link: #8ab4f8; }}
-  }}
+{head_extras}<style>
+{theme_css}
   html {{ scroll-behavior: smooth; }}
   html, body {{ background: var(--bg); color: var(--fg); }}
   body {{ font-family: "Inter", "Inter Variable", ui-sans-serif, system-ui, -apple-system,
@@ -79,6 +375,7 @@ fn wrap_page(body: &str, title: &str) -> String {
           margin: 32px; padding: 0; line-height: 1.7;
           min-width: min-content;
           -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }}
+  body {{ font-size: calc(16px * var(--mdv-zoom, 1)); }}
   * {{ scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--accent) 55%, transparent) transparent; }}
   *::-webkit-scrollbar {{ width: 10px; height: 10px; }}
   *::-webkit-scrollbar-track {{ background: transparent; }}
@@ -122,6 +419,44 @@ fn wrap_page(body: &str, title: &str) -> String {
   article.mdv hr {{ border: 0; height: 1px; background: var(--border); margin: 2em 0; }}
   article.mdv img {{ max-width: 100%; border-radius: 8px; }}
   article.mdv ul, article.mdv ol {{ padding-inline-start: 24px; }}
+  article.mdv li.task-list-item,
+  article.mdv li:has(> input[type="checkbox"]) {{
+    list-style: none;
+    margin-left: -1.5em;
+  }}
+  article.mdv li.task-list-item > input[type="checkbox"],
+  article.mdv li > input[type="checkbox"] {{
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1.05em;
+    height: 1.05em;
+    margin-right: 0.5em;
+    border: 1.5px solid var(--muted);
+    border-radius: 5px;
+    background: transparent;
+    vertical-align: -2px;
+    cursor: default;
+    position: relative;
+    transition: background 120ms ease, border-color 120ms ease;
+    display: inline-block;
+  }}
+  article.mdv li.task-list-item > input[type="checkbox"]:checked,
+  article.mdv li > input[type="checkbox"]:checked {{
+    background: var(--accent);
+    border-color: var(--accent);
+  }}
+  article.mdv li.task-list-item > input[type="checkbox"]:checked::after,
+  article.mdv li > input[type="checkbox"]:checked::after {{
+    content: "";
+    position: absolute;
+    left: 0.28em;
+    top: 0.04em;
+    width: 0.30em;
+    height: 0.55em;
+    border-right: 2px solid var(--bg);
+    border-bottom: 2px solid var(--bg);
+    transform: rotate(45deg);
+  }}
   article.mdv .mermaid, article.mdv .plotly-chart, article.mdv .drawio-viewer {{ margin: 24px 0; }}
   /* Cap diagram containers to viewport width so they don't balloon with the
      expanded page width from long content elsewhere on the page. */
@@ -138,13 +473,51 @@ fn wrap_page(body: &str, title: &str) -> String {
   article.mdv .mdv-math, article.mdv [data-math-style="inline"] {{ display: inline-block; }}
   article.mdv pre.mdv-code {{ padding: 0; }}
   article.mdv pre.mdv-code code {{ display: block; padding: 16px; }}
+  .mdv-toc {{
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.10);
+    backdrop-filter: blur(6px);
+    z-index: 1001;
+    font-size: 0.94em;
+    color: var(--fg);
+  }}
+  .mdv-toc--hidden {{ display: none; }}
+  .mdv-toc header {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }}
+  .mdv-toc header span {{ font-weight: 600; }}
+  .mdv-toc header button {{ background: transparent; border: 0; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1; }}
+  .mdv-toc header button:hover {{ color: var(--fg); }}
+  .mdv-toc nav ul {{ list-style: none; padding-left: 0; margin: 0; }}
+  .mdv-toc nav ul ul {{ padding-left: 16px; }}
+  .mdv-toc nav li {{ margin: 4px 0; }}
+  .mdv-toc nav a {{ display: block; color: var(--fg); text-decoration: none; padding: 2px 6px; border-radius: 4px; border-left: 3px solid transparent; }}
+  .mdv-toc nav a:hover {{ background: color-mix(in srgb, var(--accent) 12%, transparent); }}
+  .mdv-toc__active {{ border-left-color: var(--accent) !important; font-weight: 600; background: color-mix(in srgb, var(--accent) 8%, transparent); }}
+  .mdv-toc--floating-right {{ position: fixed; top: 80px; right: 60px; width: 280px; max-height: calc(100vh - 120px); overflow-y: auto; }}
+  .mdv-toc--floating-left  {{ position: fixed; top: 80px; left: 60px;  width: 280px; max-height: calc(100vh - 120px); overflow-y: auto; }}
+  .mdv-toc--fixed-right    {{ float: right; width: 240px; margin: 0 0 1em 1em; }}
+  .mdv-toc--fixed-left     {{ float: left;  width: 240px; margin: 0 1em 1em 0; }}
+  .mdv-toc--inline         {{ margin: 1em 0; }}
+  .mdv-toc--floating-center {{
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 360px;
+    max-width: 90vw;
+    max-height: 70vh;
+    overflow-y: auto;
+    z-index: 1002;
+  }}
   #mdv-minimap {{ position: fixed; top: 16px; right: 16px; width: 140px; bottom: 16px;
                   background: color-mix(in srgb, var(--bg) 92%, transparent);
                   border: 1px solid var(--border); border-radius: 12px;
                   overflow: hidden; z-index: 1000;
                   box-shadow: 0 4px 18px rgba(0,0,0,.10);
                   cursor: ns-resize; transition: opacity .15s ease;
-                  backdrop-filter: blur(6px); }}
+                  backdrop-filter: blur(6px);
+                  user-select: none; touch-action: none; }}
   #mdv-minimap.mdv-hidden {{ opacity: 0; pointer-events: none; }}
   #mdv-minimap-content {{ transform-origin: top left; pointer-events: none;
                           user-select: none; position: absolute; top: 6px; left: 6px; }}
@@ -153,16 +526,70 @@ fn wrap_page(body: &str, title: &str) -> String {
                            border: 1px solid var(--accent);
                            background: color-mix(in srgb, var(--accent) 18%, transparent);
                            border-radius: 4px; pointer-events: none; }}
+  html.mdv-codemap-dragging, html.mdv-codemap-dragging * {{ scroll-behavior: auto !important; }}
+  html.mdv-codemap-dragging #mdv-minimap-viewport {{ transition: none !important; }}
   @media (max-width: 760px) {{ #mdv-minimap {{ display: none; }} }}
+  #mdv-context-menu {{ position: fixed; z-index: 10000;
+                       background: var(--mdv-card-bg, var(--mdv-bg));
+                       border: 1px solid var(--mdv-border-subtle, var(--border));
+                       border-radius: 8px; padding: 6px 0;
+                       box-shadow: 0 4px 18px rgba(0,0,0,.18);
+                       min-width: 220px; font-size: 0.9em; display: none;
+                       user-select: none; }}
+  #mdv-context-menu.mdv-cm--open {{ display: block; }}
+  #mdv-context-menu .mdv-cm__item {{ display: flex; align-items: center; gap: 0.6em;
+                                     padding: 6px 14px; cursor: pointer;
+                                     color: var(--mdv-fg, var(--fg)); }}
+  #mdv-context-menu .mdv-cm__item:hover {{ background: color-mix(in srgb,
+                                           var(--mdv-accent, var(--accent)) 18%, transparent); }}
+  #mdv-context-menu .mdv-cm__item.mdv-cm__item--disabled {{ color: var(--mdv-muted, var(--muted));
+                                                            cursor: not-allowed; opacity: 0.6; }}
+  #mdv-context-menu .mdv-cm__item.mdv-cm__item--disabled:hover {{ background: transparent; }}
+  #mdv-context-menu .mdv-cm__indicator {{ width: 1em; display: inline-block; text-align: center; }}
+  #mdv-context-menu .mdv-cm__indicator--active {{ color: var(--mdv-accent-mauve, var(--mdv-accent, var(--accent))); }}
+  #mdv-context-menu .mdv-cm__shortcut {{ margin-left: auto; color: var(--mdv-muted, var(--muted));
+                                          font-size: 0.85em; padding-left: 1.5em; }}
+  #mdv-context-menu .mdv-cm__divider {{ height: 1px; background: var(--mdv-border-subtle, var(--border));
+                                         margin: 4px 0; }}
+  .mdv-bionic {{ font-weight: 700; }}
+  #mdv-config-banner {{
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+    background: color-mix(in srgb, var(--mdv-accent-yellow, #f9e2af) 92%, transparent);
+    color: #1e1e2e;
+    border-bottom: 1px solid var(--mdv-accent-yellow, #f9e2af);
+    padding: 8px 16px;
+    font-size: 13px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  }}
+  #mdv-config-banner .mdv-config-banner__icon {{ font-size: 16px; flex-shrink: 0; }}
+  #mdv-config-banner .mdv-config-banner__text {{ flex: 1; min-width: 0; }}
+  #mdv-config-banner .mdv-config-banner__more,
+  #mdv-config-banner .mdv-config-banner__close {{
+    background: transparent; border: 1px solid rgba(0,0,0,0.18);
+    color: #1e1e2e; padding: 3px 8px; border-radius: 4px;
+    font-size: 12px; cursor: pointer;
+  }}
+  #mdv-config-banner .mdv-config-banner__more:hover,
+  #mdv-config-banner .mdv-config-banner__close:hover {{ background: rgba(0,0,0,0.06); }}
+  #mdv-config-banner .mdv-config-banner__list {{
+    list-style: none; margin: 0; padding: 8px 0 0;
+    font-family: var(--mdv-font-mono, ui-monospace, monospace);
+    font-size: 12px;
+    width: 100%;
+    border-top: 1px solid rgba(0,0,0,0.1); margin-top: 6px;
+  }}
+  #mdv-config-banner.mdv-config-banner--expanded {{ flex-wrap: wrap; }}
+  #mdv-config-banner.mdv-config-banner--hidden {{ display: none; }}
+  body:has(#mdv-config-banner:not(.mdv-config-banner--hidden)) {{
+    padding-top: 48px;
+  }}
 </style>
 </head>
-<body>
+<body{body_style}>
+{banner_html}{toc_aside}<div id="mdv-context-menu" role="menu" aria-hidden="true"></div>
 <article class="mdv">{body}</article>
-<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-<script src="https://viewer.diagrams.net/js/viewer-static.min.js"></script>
+{lib_scripts}
 <script>
   window.addEventListener('DOMContentLoaded', () => {{
     // Math rendering: covers comrak's inline/block spans AND the math extension's
@@ -271,31 +698,62 @@ fn wrap_page(body: &str, title: &str) -> String {
       }};
 
       update();
-      window.addEventListener('scroll', update, {{ passive: true }});
+      window.addEventListener('scroll', () => {{ if (!isDragging) update(); }}, {{ passive: true }});
       window.addEventListener('resize', update);
 
-      let dragging = false;
-      const scrollFromY = (clientY) => {{
+      let isDragging = false;
+      let pendingY = 0;
+      let rafId = 0;
+      const scroller = document.scrollingElement || document.documentElement;
+      const applyDragScroll = () => {{
         const rect = minimap.getBoundingClientRect();
-        const y = clientY - rect.top - PAD;
+        const y = pendingY - rect.top - PAD;
         const targetY = y / scale - window.innerHeight / 2;
-        const maxY = document.documentElement.scrollHeight - window.innerHeight;
-        window.scrollTo({{ top: Math.max(0, Math.min(maxY, targetY)), behavior: 'auto' }});
+        const maxY = scroller.scrollHeight - window.innerHeight;
+        const top = Math.max(0, Math.min(maxY, targetY));
+        scroller.scrollTop = top;
+        viewport.style.top = (PAD + top * scale) + 'px';
       }};
-      minimap.addEventListener('mousedown', (e) => {{
-        dragging = true;
-        scrollFromY(e.clientY);
+      const dragFrame = () => {{
+        if (!isDragging) return;
+        applyDragScroll();
+        rafId = requestAnimationFrame(dragFrame);
+      }};
+      minimap.addEventListener('pointerdown', (e) => {{
+        if (e.button !== 0) return;
+        isDragging = true;
+        pendingY = e.clientY;
+        document.documentElement.classList.add('mdv-codemap-dragging');
+        try {{ minimap.setPointerCapture(e.pointerId); }} catch (_) {{}}
         e.preventDefault();
+        applyDragScroll();
+        rafId = requestAnimationFrame(dragFrame);
       }});
-      window.addEventListener('mousemove', (e) => {{ if (dragging) scrollFromY(e.clientY); }});
-      window.addEventListener('mouseup', () => {{ dragging = false; }});
+      minimap.addEventListener('pointermove', (e) => {{
+        if (!isDragging) return;
+        pendingY = e.clientY;
+      }});
+      const endDrag = (e) => {{
+        if (!isDragging) return;
+        isDragging = false;
+        if (rafId) {{ cancelAnimationFrame(rafId); rafId = 0; }}
+        document.documentElement.classList.remove('mdv-codemap-dragging');
+        try {{ minimap.releasePointerCapture(e.pointerId); }} catch (_) {{}}
+      }};
+      minimap.addEventListener('pointerup', endDrag);
+      minimap.addEventListener('pointercancel', endDrag);
+
+      window.__mdvToggleCodemap = () => {{
+        minimap.classList.toggle('mdv-hidden');
+        if (!minimap.classList.contains('mdv-hidden')) update();
+      }};
+      window.__mdvCodemapVisible = () => !minimap.classList.contains('mdv-hidden');
 
       document.addEventListener('keydown', (e) => {{
         const tag = (document.activeElement && document.activeElement.tagName) || '';
         if (e.key === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey
             && tag !== 'INPUT' && tag !== 'TEXTAREA') {{
-          minimap.classList.toggle('mdv-hidden');
-          if (!minimap.classList.contains('mdv-hidden')) update();
+          window.__mdvToggleCodemap();
         }}
       }});
 
@@ -305,9 +763,455 @@ fn wrap_page(body: &str, title: &str) -> String {
     setTimeout(__mdvSetupMinimap, 500);
   }});
 </script>
+<script id="mdv-keymap" type="application/json">{keymap_js}</script>
+<script>
+  (() => {{
+    const raw = document.getElementById('mdv-keymap');
+    let bindings = {{}};
+    try {{ bindings = JSON.parse((raw && raw.textContent) || '{{}}'); }} catch (e) {{ console.warn('mdv-keymap parse:', e); }}
+    const matchBinding = (b, e) => {{
+      if (!b) return false;
+      if (b.ctrl !== !!e.ctrlKey) return false;
+      if (b.alt !== !!e.altKey) return false;
+      if (b.super !== !!e.metaKey) return false;
+      if (b.shift !== !!e.shiftKey) {{
+        const isUpper = b.kind === 'char' && b.key >= 'a' && b.key <= 'z' && !b.shift;
+        if (!isUpper) return false;
+      }}
+      if (b.kind === 'char') {{
+        return (e.key || '').toLowerCase() === b.key;
+      }}
+      return e.key === b.key;
+    }};
+    window.__mdvToggleTheme = () => {{
+      const html = document.documentElement;
+      const isDark = html.classList.contains('theme-dark');
+      html.classList.remove('theme-light', 'theme-dark');
+      const newMode = isDark ? 'light' : 'dark';
+      html.classList.add('theme-' + newMode);
+      if (window.ipc && typeof window.ipc.postMessage === 'function') {{
+        try {{ window.ipc.postMessage('theme-' + newMode); }} catch (err) {{ console.warn('ipc:', err); }}
+      }}
+    }};
+    window.__mdv_config = Object.assign(window.__mdv_config || {{}}, {{
+      keymap: bindings,
+      toc: {{ position: "{toc_pos}", depth: {toc_depth} }},
+      codemap: {{ enabled: {codemap_enabled} }}
+    }});
+    document.addEventListener('keydown', (e) => {{
+      const tag = (document.activeElement && document.activeElement.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (matchBinding(bindings['quit'], e)) {{
+        e.preventDefault();
+        if (window.ipc && typeof window.ipc.postMessage === 'function') {{
+          try {{ window.ipc.postMessage('quit'); }} catch (err) {{ console.warn('ipc:', err); }}
+        }}
+      }}
+      if (matchBinding(bindings['toggle-theme'], e)) {{
+        e.preventDefault();
+        window.__mdvToggleTheme();
+      }}
+      if (matchBinding(bindings['toggle-bionic'], e) && typeof window.__mdvToggleBionic === 'function') {{
+        e.preventDefault();
+        window.__mdvToggleBionic();
+      }}
+      if (matchBinding(bindings['toggle-codemap'], e) && typeof window.__mdvToggleCodemap === 'function') {{
+        e.preventDefault();
+        window.__mdvToggleCodemap();
+      }}
+      if (matchBinding(bindings['toggle-toc'], e) && typeof window.__mdvToggleToc === 'function') {{
+        e.preventDefault();
+        window.__mdvToggleToc();
+      }}
+    }});
+  }})();
+</script>
+<script>
+  (function setupZoom() {{
+    const html = document.documentElement;
+    let zoom = 1.0;
+    const MIN = 0.5, MAX = 3.0, STEP = 0.1;
+    window.addEventListener('wheel', (e) => {{
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      zoom = Math.max(MIN, Math.min(MAX, zoom + (e.deltaY < 0 ? STEP : -STEP)));
+      html.style.setProperty('--mdv-zoom', zoom.toFixed(1));
+    }}, {{ passive: false }});
+  }})();
+</script>
+<script>
+  (function setupBionic() {{
+    let enabled = false;
+    const SKIP_SELECTORS = 'code, pre, script, style, h1, h2, h3, h4, h5, h6, #mdv-minimap, #mdv-toc, .mdview-frontmatter, [data-math-style], .katex';
+
+    function shouldSkip(el) {{
+      while (el && el.nodeType === 1) {{
+        if (el.matches && el.matches(SKIP_SELECTORS)) return true;
+        el = el.parentElement;
+      }}
+      return false;
+    }}
+
+    function bionicWord(word) {{
+      if (word.length <= 3) {{
+        return '<b class="mdv-bionic">' + word[0] + '</b>' + word.slice(1);
+      }}
+      const half = Math.ceil(word.length / 2);
+      return '<b class="mdv-bionic">' + word.slice(0, half) + '</b>' + word.slice(half);
+    }}
+
+    function transformTextNode(textNode) {{
+      const parent = textNode.parentElement;
+      if (!parent || shouldSkip(parent)) return;
+      const text = textNode.nodeValue;
+      if (!/[A-Za-z]/.test(text)) return;
+      const html = text.replace(/[A-Za-z]+/g, function (w) {{ return bionicWord(w); }});
+      const span = document.createElement('span');
+      span.dataset.mdvBionic = '1';
+      span.innerHTML = html;
+      parent.replaceChild(span, textNode);
+    }}
+
+    function applyBionic() {{
+      const walker = document.createTreeWalker(
+        document.body, NodeFilter.SHOW_TEXT,
+        {{ acceptNode: function (n) {{ return n.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT; }} }}
+      );
+      const nodes = [];
+      let n; while ((n = walker.nextNode())) nodes.push(n);
+      nodes.forEach(transformTextNode);
+    }}
+
+    function removeBionic() {{
+      document.querySelectorAll('span[data-mdv-bionic="1"]').forEach(function (span) {{
+        const txt = document.createTextNode(span.textContent);
+        span.parentNode.replaceChild(txt, span);
+      }});
+    }}
+
+    window.__mdvToggleBionic = function () {{
+      enabled = !enabled;
+      if (enabled) applyBionic();
+      else removeBionic();
+    }};
+  }})();
+</script>
+<script>
+  (function setupToc() {{
+    const aside = document.getElementById('mdv-toc');
+    if (!aside) return;
+    const nav = document.getElementById('mdv-toc-nav');
+    const closeBtn = document.getElementById('mdv-toc-close');
+    const article = document.querySelector('article.mdv');
+    if (!article || !nav) {{ aside.remove(); return; }}
+
+    const cfg = (window.__mdv_config && window.__mdv_config.toc) || {{ position: "floating-right", depth: 3 }};
+    const maxDepth = Math.max(1, Math.min(6, cfg.depth || 3));
+
+    function slugify(text) {{
+      return text.toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .trim()
+        .replace(/\s+/g, '-');
+    }}
+
+    const headings = Array.from(article.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+      .filter(h => parseInt(h.tagName[1], 10) <= maxDepth);
+
+    if (headings.length < 2) {{ aside.remove(); return; }}
+
+    const slugCounts = {{}};
+    headings.forEach(h => {{
+      if (!h.id) {{
+        let base = slugify(h.textContent || '');
+        if (!base) base = 'section';
+        const count = slugCounts[base] || 0;
+        h.id = count === 0 ? base : `${{base}}-${{count}}`;
+        slugCounts[base] = count + 1;
+      }}
+    }});
+
+    const root = document.createElement('ul');
+    let stack = [{{ level: 0, ul: root }}];
+    headings.forEach(h => {{
+      const lvl = parseInt(h.tagName[1], 10);
+      while (stack.length > 1 && stack[stack.length - 1].level >= lvl) stack.pop();
+      let parent = stack[stack.length - 1].ul;
+      while (stack[stack.length - 1].level < lvl - 1) {{
+        const innerUl = document.createElement('ul');
+        const lastLi = parent.lastElementChild;
+        if (lastLi) lastLi.appendChild(innerUl); else parent.appendChild(innerUl);
+        stack.push({{ level: stack[stack.length - 1].level + 1, ul: innerUl }});
+        parent = innerUl;
+      }}
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = '#' + h.id;
+      a.dataset.slug = h.id;
+      a.textContent = h.textContent || '';
+      a.addEventListener('click', (e) => {{
+        e.preventDefault();
+        const target = document.getElementById(h.id);
+        if (target) target.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+        history.replaceState(null, '', '#' + h.id);
+      }});
+      li.appendChild(a);
+      parent.appendChild(li);
+      if (stack[stack.length - 1].level < lvl) {{
+        stack.push({{ level: lvl, ul: parent }});
+      }}
+    }});
+    nav.appendChild(root);
+
+    const linkBySlug = {{}};
+    nav.querySelectorAll('a[data-slug]').forEach(a => {{ linkBySlug[a.dataset.slug] = a; }});
+    let activeLink = null;
+    const observer = new IntersectionObserver((entries) => {{
+      entries.forEach(entry => {{
+        const link = linkBySlug[entry.target.id];
+        if (!link) return;
+        if (entry.isIntersecting) {{
+          if (activeLink) activeLink.classList.remove('mdv-toc__active');
+          link.classList.add('mdv-toc__active');
+          activeLink = link;
+        }}
+      }});
+    }}, {{ rootMargin: '-10% 0px -80% 0px' }});
+    headings.forEach(h => observer.observe(h));
+
+    window.__mdvToggleToc = function () {{
+      const wasHidden = aside.classList.contains('mdv-toc--hidden');
+      aside.classList.toggle('mdv-toc--hidden');
+      aside.setAttribute('aria-hidden', wasHidden ? 'false' : 'true');
+    }};
+
+    if (closeBtn) closeBtn.addEventListener('click', () => {{ window.__mdvToggleToc(); }});
+    document.addEventListener('keydown', (e) => {{
+      if (e.key === 'Escape' && !aside.classList.contains('mdv-toc--hidden')) {{
+        window.__mdvToggleToc();
+      }}
+    }});
+  }})();
+</script>
+<script>
+  (function setupContextMenu() {{
+    const menu = document.getElementById('mdv-context-menu');
+    if (!menu) return;
+    let ctxTarget = null;
+
+    function tocVisible() {{
+      const el = document.querySelector('#mdv-toc');
+      if (!el) return false;
+      return !el.classList.contains('mdv-toc--hidden')
+          && !el.classList.contains('mdv-hidden')
+          && getComputedStyle(el).display !== 'none';
+    }}
+    function codemapVisible() {{
+      if (typeof window.__mdvCodemapVisible === 'function') return window.__mdvCodemapVisible();
+      const el = document.querySelector('#mdv-minimap');
+      return !!el && !el.classList.contains('mdv-hidden') && getComputedStyle(el).display !== 'none';
+    }}
+    function themeIsDark() {{ return document.documentElement.classList.contains('theme-dark'); }}
+    function bionicActive() {{
+      return !!document.querySelector('span[data-mdv-bionic="1"]');
+    }}
+
+    function formatBinding(b) {{
+      if (!b) return '';
+      const parts = [];
+      if (b.ctrl)  parts.push('Ctrl');
+      if (b.alt)   parts.push('Alt');
+      if (b.shift) parts.push('Shift');
+      if (b.super) parts.push('Super');
+      let k = b.key || '';
+      if (b.kind === 'char') k = k.length === 1 ? k.toUpperCase() : k;
+      if (k === ' ') k = 'Space';
+      parts.push(k);
+      return parts.join('+');
+    }}
+    function shortcutFor(action) {{
+      const cfg = (window.__mdv_config && window.__mdv_config.keymap) || {{}};
+      const b = cfg[action];
+      if (!b) return '';
+      if (typeof b === 'string') return b;
+      return formatBinding(b);
+    }}
+
+    function buildItems() {{
+      const sel = window.getSelection();
+      const hasSel = !!(sel && !sel.isCollapsed && sel.toString().length > 0);
+      const onLink  = ctxTarget && ctxTarget.closest && ctxTarget.closest('a[href]');
+      const onImage = ctxTarget && ctxTarget.closest && ctxTarget.closest('img');
+      const items = [];
+      items.push({{
+        label: 'Copy', shortcut: 'Ctrl+C', disabled: !hasSel,
+        on: () => {{ try {{ navigator.clipboard.writeText(sel.toString()); }} catch (_) {{}} }},
+      }});
+      if (onLink)  items.push({{ label: 'Copy link address',  on: () => navigator.clipboard.writeText(onLink.href) }});
+      if (onImage) items.push({{ label: 'Copy image address', on: () => navigator.clipboard.writeText(onImage.src) }});
+      if (onLink)  items.push({{ label: 'Open link in browser',
+                                  on: () => window.ipc && window.ipc.postMessage('open-link ' + onLink.href) }});
+      items.push({{ divider: true }});
+      items.push({{
+        label: tocVisible() ? 'Hide TOC' : 'Show TOC',
+        shortcut: shortcutFor('toggle-toc'),
+        indicator: tocVisible() ? '●' : '○',
+        on: () => window.__mdvToggleToc && window.__mdvToggleToc(),
+      }});
+      items.push({{
+        label: codemapVisible() ? 'Hide Codemap' : 'Show Codemap',
+        shortcut: shortcutFor('toggle-codemap'),
+        indicator: codemapVisible() ? '●' : '○',
+        on: () => window.__mdvToggleCodemap && window.__mdvToggleCodemap(),
+      }});
+      items.push({{
+        label: 'Switch to ' + (themeIsDark() ? 'Light' : 'Dark') + ' theme',
+        shortcut: shortcutFor('toggle-theme'),
+        on: () => window.__mdvToggleTheme && window.__mdvToggleTheme(),
+      }});
+      items.push({{
+        label: bionicActive() ? 'Disable Bionic Reading' : 'Enable Bionic Reading',
+        shortcut: shortcutFor('toggle-bionic'),
+        indicator: bionicActive() ? '●' : '○',
+        on: () => window.__mdvToggleBionic && window.__mdvToggleBionic(),
+      }});
+      items.push({{ divider: true }});
+      items.push({{ label: 'Reload', on: () => window.ipc && window.ipc.postMessage('reload') }});
+      items.push({{ label: 'Quit', shortcut: shortcutFor('quit'),
+                    on: () => window.ipc && window.ipc.postMessage('quit') }});
+      return items;
+    }}
+
+    function renderMenu(items) {{
+      menu.innerHTML = '';
+      for (const it of items) {{
+        if (it.divider) {{
+          const d = document.createElement('div');
+          d.className = 'mdv-cm__divider';
+          menu.appendChild(d);
+          continue;
+        }}
+        const el = document.createElement('div');
+        el.className = 'mdv-cm__item' + (it.disabled ? ' mdv-cm__item--disabled' : '');
+        el.setAttribute('role', 'menuitem');
+        const ind = document.createElement('span');
+        ind.className = 'mdv-cm__indicator' + (it.indicator === '●' ? ' mdv-cm__indicator--active' : '');
+        ind.textContent = it.indicator || '';
+        const label = document.createElement('span');
+        label.className = 'mdv-cm__label';
+        label.textContent = it.label;
+        el.appendChild(ind); el.appendChild(label);
+        if (it.shortcut) {{
+          const sc = document.createElement('span');
+          sc.className = 'mdv-cm__shortcut';
+          sc.textContent = it.shortcut;
+          el.appendChild(sc);
+        }}
+        if (!it.disabled) {{
+          el.addEventListener('click', () => {{ closeMenu(); try {{ it.on(); }} catch (_) {{}} }});
+        }}
+        menu.appendChild(el);
+      }}
+    }}
+
+    function openMenu(x, y) {{
+      renderMenu(buildItems());
+      menu.classList.add('mdv-cm--open');
+      menu.setAttribute('aria-hidden', 'false');
+      menu.style.left = '0px'; menu.style.top = '0px';
+      const r = menu.getBoundingClientRect();
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const left = Math.max(4, Math.min(x, vw - r.width - 8));
+      const top  = Math.max(4, Math.min(y, vh - r.height - 8));
+      menu.style.left = left + 'px';
+      menu.style.top  = top + 'px';
+    }}
+    function closeMenu() {{
+      menu.classList.remove('mdv-cm--open');
+      menu.setAttribute('aria-hidden', 'true');
+    }}
+
+    document.addEventListener('contextmenu', (e) => {{
+      e.preventDefault();
+      ctxTarget = e.target;
+      openMenu(e.clientX, e.clientY);
+    }});
+    document.addEventListener('mousedown', (e) => {{ if (!menu.contains(e.target)) closeMenu(); }});
+    document.addEventListener('keydown', (e) => {{ if (e.key === 'Escape') closeMenu(); }});
+    window.addEventListener('blur', closeMenu);
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('scroll', closeMenu, {{ passive: true }});
+  }})();
+</script>
+<script>
+  (function setupConfigBanner() {{
+    const banner = document.getElementById('mdv-config-banner');
+    if (!banner) return;
+    const more = banner.querySelector('.mdv-config-banner__more');
+    const close = banner.querySelector('.mdv-config-banner__close');
+    const list = banner.querySelector('.mdv-config-banner__list');
+    if (more && list) {{
+      more.addEventListener('click', () => {{
+        const showing = !list.hasAttribute('hidden');
+        if (showing) {{
+          list.setAttribute('hidden', '');
+          banner.classList.remove('mdv-config-banner--expanded');
+          more.textContent = 'Show all';
+        }} else {{
+          list.removeAttribute('hidden');
+          banner.classList.add('mdv-config-banner--expanded');
+          more.textContent = 'Hide all';
+        }}
+      }});
+    }}
+    function dismiss() {{ banner.classList.add('mdv-config-banner--hidden'); }}
+    if (close) close.addEventListener('click', dismiss);
+    document.addEventListener('keydown', (e) => {{
+      if (e.key === 'Escape' && !banner.classList.contains('mdv-config-banner--hidden')) {{
+        dismiss();
+      }}
+    }});
+  }})();
+</script>
 </body>
 </html>
 "##
+    )
+}
+
+fn render_config_banner(errors: &[ConfigError]) -> String {
+    if errors.is_empty() {
+        return String::new();
+    }
+    let count = errors.len();
+    let first = html_escape(&errors[0].to_string());
+    let summary = if count == 1 {
+        format!("config: 1 error — {first}")
+    } else {
+        format!("config: {count} errors — {first}")
+    };
+    let more_button = if count > 1 {
+        "<button class=\"mdv-config-banner__more\" type=\"button\">Show all</button>"
+    } else {
+        ""
+    };
+    let list_html = if count > 1 {
+        let items: String = errors
+            .iter()
+            .map(|e| format!("<li>{}</li>", html_escape(&e.to_string())))
+            .collect();
+        format!("<ul class=\"mdv-config-banner__list\" hidden>{items}</ul>")
+    } else {
+        String::new()
+    };
+    format!(
+        "<div id=\"mdv-config-banner\" role=\"alert\">\
+<span class=\"mdv-config-banner__icon\" aria-hidden=\"true\">\u{26A0}</span>\
+<span class=\"mdv-config-banner__text\">{summary}</span>\
+{more_button}\
+<button class=\"mdv-config-banner__close\" type=\"button\" aria-label=\"Dismiss\">\u{00D7}</button>\
+{list_html}\
+</div>"
     )
 }
 
@@ -346,8 +1250,7 @@ mod tests {
 
     #[test]
     fn mermaid_fenced_becomes_mermaid_div() {
-        let html =
-            render_page("```mermaid\ngraph TD; A-->B;\n```\n", "t").expect("render");
+        let html = render_page("```mermaid\ngraph TD; A-->B;\n```\n", "t").expect("render");
         assert!(html.contains("class=\"mermaid\""), "html: {html}");
     }
 
@@ -362,5 +1265,254 @@ mod tests {
         let html = render_page("# Hi\n\nsome text\n", "t").expect("render");
         assert!(html.contains("#mdv-minimap"), "expected minimap CSS");
         assert!(html.contains("__mdvSetupMinimap"), "expected minimap JS");
+    }
+
+    #[test]
+    fn emits_theme_root_variables() {
+        let html = render_page("# Hi\n", "t").expect("render");
+        assert!(
+            html.contains("--mdv-bg:"),
+            "expected --mdv-bg from theme css"
+        );
+        assert!(
+            html.contains("--mdv-fg:"),
+            "expected --mdv-fg from theme css"
+        );
+        assert!(
+            html.contains("--mdv-accent-mauve:"),
+            "expected --mdv-accent-mauve from accent palette"
+        );
+        assert!(
+            html.contains("--bg:var(--mdv-bg)"),
+            "expected legacy --bg bridging var"
+        );
+    }
+
+    #[test]
+    fn emits_both_light_and_dark_theme_blocks() {
+        let html = render_page("# Hi\n", "t").expect("render");
+        assert!(
+            html.contains(":root.theme-light {"),
+            "expected :root.theme-light block"
+        );
+        assert!(
+            html.contains(":root.theme-dark {"),
+            "expected :root.theme-dark block"
+        );
+        assert!(
+            html.contains("<html lang=\"en\" class=\"theme-dark\">"),
+            "expected initial <html class=\"theme-dark\">"
+        );
+    }
+
+    #[test]
+    fn light_mode_sets_initial_html_class() {
+        use mdview_config::ThemeMode;
+        let cfg = ThemeConfig {
+            mode: ThemeMode::Light,
+            ..ThemeConfig::default()
+        };
+        let html = render_page_with_theme("# Hi\n", "t", &cfg).expect("render");
+        assert!(
+            html.contains("<html lang=\"en\" class=\"theme-light\">"),
+            "expected initial <html class=\"theme-light\">"
+        );
+    }
+
+    #[test]
+    fn omits_config_banner_when_no_errors() {
+        let html = render_page("# Hi\n", "t").expect("render");
+        assert!(
+            !html.contains("id=\"mdv-config-banner\""),
+            "banner should be absent when there are no errors"
+        );
+    }
+
+    #[test]
+    fn renders_config_banner_with_errors() {
+        let errors = vec![
+            ConfigError::keymap(
+                "quit",
+                Some("Ctrr+Q".to_string()),
+                "unknown modifier \"Ctrr\"; expected one of Ctrl, Shift, Alt, Super",
+            ),
+            ConfigError::keymap(
+                "togle-theme",
+                Some("Ctrl+T".to_string()),
+                "unknown action \"togle-theme\"",
+            ),
+            ConfigError::toc("depth", Some("9".to_string()), "out of range; expected 1..=6"),
+        ];
+        let html = render_page_full(
+            "# Hi\n",
+            "t",
+            &ThemeConfig::default(),
+            &Keymap::defaults(),
+            None,
+            &errors,
+            &TocConfig::default(),
+            &CodemapConfig::default(),
+        )
+        .expect("render");
+        assert!(html.contains("id=\"mdv-config-banner\""));
+        assert!(html.contains("config: 3 errors"));
+        assert!(html.contains("mdv-config-banner__list"));
+        assert!(html.contains("Show all"));
+        // HTML-escaped quote markers should be present.
+        assert!(html.contains("&quot;"));
+    }
+
+    #[test]
+    fn single_error_omits_show_all_button() {
+        let errors = vec![ConfigError::toc(
+            "depth",
+            Some("9".to_string()),
+            "out of range; expected 1..=6",
+        )];
+        let html = render_page_full(
+            "# Hi\n",
+            "t",
+            &ThemeConfig::default(),
+            &Keymap::defaults(),
+            None,
+            &errors,
+            &TocConfig::default(),
+            &CodemapConfig::default(),
+        )
+        .expect("render");
+        assert!(html.contains("id=\"mdv-config-banner\""));
+        assert!(html.contains("config: 1 error"));
+        assert!(!html.contains("class=\"mdv-config-banner__more\""));
+        assert!(!html.contains("class=\"mdv-config-banner__list\""));
+    }
+
+    #[test]
+    fn head_omits_math_when_no_math_in_doc() {
+        let html = render_page("# hi", "t").expect("render");
+        assert!(!html.contains("katex.min.css"), "html: {html}");
+        assert!(!html.contains("katex.min.js"));
+    }
+
+    #[test]
+    fn head_includes_math_when_inline_math_present() {
+        let html = render_page("hello $x$ world\n", "t").expect("render");
+        assert!(html.contains("katex.min.css"), "html: {html}");
+        assert!(html.contains("katex.min.js"));
+    }
+
+    #[test]
+    fn head_includes_math_when_display_math_present() {
+        let html = render_page("$$x^2$$\n", "t").expect("render");
+        assert!(html.contains("katex.min.css"), "html: {html}");
+    }
+
+    #[test]
+    fn head_includes_mermaid_when_block_present() {
+        let html =
+            render_page("```mermaid\nflowchart LR\nA-->B\n```\n", "t").expect("render");
+        assert!(html.contains("mermaid.min.js"), "html: {html}");
+    }
+
+    #[test]
+    fn head_includes_plotly() {
+        let html =
+            render_page("```plotly\n{\"data\":[]}\n```\n", "t").expect("render");
+        assert!(html.contains("plotly-2.35.2.min.js"), "html: {html}");
+    }
+
+    #[test]
+    fn head_includes_drawio() {
+        let html = render_page("```drawio\n<mxfile/>\n```\n", "t").expect("render");
+        assert!(html.contains("viewer.diagrams.net"), "html: {html}");
+    }
+
+    #[test]
+    fn head_includes_only_needed() {
+        let html = render_page("$x$\n", "t").expect("render");
+        assert!(html.contains("katex.min.js"));
+        assert!(!html.contains("mermaid.min.js"), "mermaid should be absent");
+        assert!(
+            !html.contains("plotly-2.35.2.min.js"),
+            "plotly should be absent"
+        );
+        assert!(
+            !html.contains("viewer.diagrams.net"),
+            "drawio should be absent"
+        );
+    }
+
+    #[test]
+    fn showcase_fixture_includes_all_libs() {
+        let src = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../fixtures/showcase.md"),
+        )
+        .expect("read showcase.md");
+        let html = render_page(&src, "showcase").expect("render");
+        assert!(html.contains("katex.min.css"), "katex css missing");
+        assert!(html.contains("katex.min.js"), "katex js missing");
+        assert!(html.contains("mermaid.min.js"), "mermaid missing");
+        assert!(html.contains("plotly-2.35.2.min.js"), "plotly missing");
+        assert!(html.contains("viewer.diagrams.net"), "drawio missing");
+    }
+
+    #[test]
+    fn rewrites_relative_image_urls_to_mdview_protocol() {
+        let dir = std::env::temp_dir();
+        let html = render_page_with_config_and_source(
+            "![alt](./test.png)\n",
+            "t",
+            &ThemeConfig::default(),
+            &Keymap::defaults(),
+            Some(dir.as_path()),
+        )
+        .expect("render");
+        assert!(
+            html.contains("mdview://localhost/"),
+            "expected rewritten image url, got: {html}"
+        );
+    }
+
+    #[test]
+    fn style_block_includes_toc_and_checkbox_rules() {
+        let html = render_page("# Hi\n", "t").expect("render");
+        assert!(
+            html.contains(".mdv-toc--hidden"),
+            "expected .mdv-toc--hidden rule in <style>"
+        );
+        assert!(
+            html.contains(".mdv-toc--floating-right"),
+            "expected .mdv-toc--floating-right rule in <style>"
+        );
+        assert!(
+            html.contains("task-list-item > input"),
+            "expected rounded checkbox rule targeting task-list-item > input"
+        );
+    }
+
+    #[test]
+    fn emits_toc_aside_and_toggle_js() {
+        let html = render_page("# Hi\n\n## Section\n\n## Other\n", "t").expect("render");
+        assert!(
+            html.contains("id=\"mdv-toc\""),
+            "expected TOC aside element with id=mdv-toc"
+        );
+        assert!(
+            html.contains("window.__mdvToggleToc"),
+            "expected window.__mdvToggleToc to be defined"
+        );
+        assert!(
+            html.contains("mdv-toc--floating-right"),
+            "expected default floating-right position class"
+        );
+    }
+
+    #[test]
+    fn embeds_keymap_data_island() {
+        let html = render_page("# Hi\n", "t").expect("render");
+        assert!(
+            html.contains("id=\"mdv-keymap\""),
+            "expected mdv-keymap data island"
+        );
     }
 }
