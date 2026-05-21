@@ -1,0 +1,72 @@
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135mtitle: GFM fixture tags: [gfm, markdown][0m
+
+[38;2;243;139;168m▌ [0m[1;38;2;243;139;168mGFM showcase[0m
+
+Paragraph with [1mbold[0m, [3mitalic[0m, [3mboth[0m, [38;2;108;112;134mstrikethrough[0m, [38;2;249;226;175;48;2;49;50;68m inline code [0m, a [4;38;2;116;199;236mlink (https://example.com)[0m, and a
+literal autolink [4;38;2;116;199;236mhttps://example.org (https://example.org)[0m.
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135mLists[0m
+
+Unordered:
+
+[38;2;108;112;134m• [0mapples
+[38;2;108;112;134m• [0mbananas
+
+  [38;2;108;112;134m• [0mnested item
+  [38;2;108;112;134m• [0manother nested
+[38;2;108;112;134m• [0mcherries
+
+Ordered:
+
+[38;2;108;112;134m1. [0mfirst
+[38;2;108;112;134m2. [0msecond
+[38;2;108;112;134m3. [0mthird
+
+Task list:
+
+☑ write spec
+☐ ship it
+☐ celebrate
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135mTables[0m
+
+[38;2;108;112;134m╭───────────────┬────────┬───────────────────────────────────────────╮[0m
+[1;38;2;137;180;250m│ Feature       │ Status │ Notes                                     │[0m
+[38;2;108;112;134m├───────────────┼────────┼───────────────────────────────────────────┤[0m
+│ Headings      │ OK     │ h1 – h6                                   │
+│ Tables        │ OK     │ aligned columns                           │
+│ Strikethrough │ OK     │ obsolete                                  │
+│ Autolink      │ OK     │ https://example.com (https://example.com) │
+[38;2;108;112;134m╰───────────────┴────────┴───────────────────────────────────────────╯[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135mBlockquote[0m
+
+[3;38;2;108;112;134m▎ [0m╭ rounded quote ╮
+[3;38;2;108;112;134m▎ [0mA quote that spans multiple lines and contains [1mbold[0m and a [4;38;2;116;199;236mlink (https://example.com)[0m.
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135mThematic break[0m
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135mFootnotes[0m
+
+Here is a reference[38;2;108;112;134m[^note][0m and another[38;2;108;112;134m[^again][0m.
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135mHard/soft breaks[0m
+
+Line one.
+Line two after a hard break.
+
+Line three and a soft break.
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135mHTML inline (tagfilter on)[0m
+
+[38;2;108;112;134m<p>Allowed paragraph.</p>
+<script>alert("filtered")</script>
+[0m
+[38;2;108;112;134m[^note]: [0mA footnote body.
+
+[38;2;108;112;134m[^again]: [0mA second footnote body with [38;2;249;226;175;48;2;49;50;68m code [0m.
+

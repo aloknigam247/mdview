@@ -1,0 +1,33 @@
+[38;2;243;139;168m▌ [0m[1;38;2;243;139;168mMath[0m
+
+Inline dollar math: $E = mc^2$ and $\alpha + \beta = \gamma$.
+
+Inline with complex expressions: $\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$.
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135mDisplay math (double dollar)[0m
+
+$$ \int_{-\infty}^{\infty} e^{-x^2}, dx = \sqrt{\pi} $$
+
+[38;2;243;139;168m▌ [0m[1;38;2;243;139;168m$$ \begin{pmatrix} a & b \ c & d \end{pmatrix} \begin{pmatrix} x \ y \end{pmatrix}[0m
+
+\begin{pmatrix} ax + by \ cx + dy \end{pmatrix} $$
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135mCode-fence math[0m
+
+[38;2;108;112;134m╭───[ math ]─────────────────────────╮[0m
+[38;2;108;112;134m│ \lim_{x \to 0} \frac{\sin x}{x} = 1 │[0m
+[38;2;108;112;134m╰─────────────────────────────────────╯[0m
+
+[38;2;108;112;134m╭───[ math ]────────────────────────────────────────────────────────────╮[0m
+[38;2;108;112;134m│ f(x) = \frac{1}{\sigma\sqrt{2\pi}} \, e^{-\frac{(x-\mu)^2}{2\sigma^2}} │[0m
+[38;2;108;112;134m╰────────────────────────────────────────────────────────────────────────╯[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135mMixed text + math[0m
+
+The Pythagorean identity $\sin^2\theta + \cos^2\theta = 1$ is central to trigonometry. The softmax
+function is
+
+$$ \sigma(z)[3mi = \frac{e^{z_i}}{\sum[0m{j=1}^{K} e^{z_j}} $$
+
+which is used in classification models.
+

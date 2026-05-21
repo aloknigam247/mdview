@@ -19,7 +19,11 @@ pub fn code_frame(lang: Option<&str>, body: &str, theme: &Theme) -> TermChunks {
     let mut chunks = TermChunks::new();
 
     let lines: Vec<&str> = body.split('\n').collect();
-    let max_content = lines.iter().map(|l| UnicodeWidthStr::width(*l)).max().unwrap_or(0);
+    let max_content = lines
+        .iter()
+        .map(|l| UnicodeWidthStr::width(*l))
+        .max()
+        .unwrap_or(0);
     let label = lang.map(|l| format!("[ {} ]", l)).unwrap_or_default();
     let label_w = UnicodeWidthStr::width(label.as_str());
     let inner_w = max_content.max(label_w + 4).max(10);
@@ -146,13 +150,13 @@ pub fn table(headers: &[String], rows: &[Vec<String>], theme: &Theme) -> TermChu
 
     for row in rows {
         let mut line = String::from(V);
-        for i in 0..col_count {
+        for (i, w) in widths.iter().enumerate().take(col_count) {
             let empty = String::new();
             let cell = row.get(i).unwrap_or(&empty);
             let cell_w = visible_width(cell);
             line.push(' ');
             line.push_str(cell);
-            let pad = widths[i].saturating_sub(cell_w);
+            let pad = w.saturating_sub(cell_w);
             for _ in 0..pad {
                 line.push(' ');
             }

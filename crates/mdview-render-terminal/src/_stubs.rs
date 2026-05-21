@@ -13,11 +13,17 @@ pub struct TermChunk {
 
 impl TermChunk {
     pub fn plain(text: impl Into<String>) -> Self {
-        Self { text: text.into(), style: None }
+        Self {
+            text: text.into(),
+            style: None,
+        }
     }
 
     pub fn styled(text: impl Into<String>, style: StyleSpec) -> Self {
-        Self { text: text.into(), style: Some(style) }
+        Self {
+            text: text.into(),
+            style: Some(style),
+        }
     }
 }
 
@@ -86,13 +92,22 @@ pub struct StyleSpec {
 
 impl StyleSpec {
     pub fn fg(color: &str) -> Self {
-        Self { fg: Some(color.to_string()), ..Default::default() }
+        Self {
+            fg: Some(color.to_string()),
+            ..Default::default()
+        }
     }
     pub fn bold() -> Self {
-        Self { bold: true, ..Default::default() }
+        Self {
+            bold: true,
+            ..Default::default()
+        }
     }
     pub fn italic() -> Self {
-        Self { italic: true, ..Default::default() }
+        Self {
+            italic: true,
+            ..Default::default()
+        }
     }
     pub fn with_bold(mut self) -> Self {
         self.bold = true;
@@ -149,7 +164,11 @@ impl Theme {
         styles.insert("muted", StyleSpec::fg("#6c7086"));
         styles.insert("table.header", StyleSpec::fg("#89b4fa").with_bold());
 
-        Self { name: "default-dark", colors, styles }
+        Self {
+            name: "default-dark",
+            colors,
+            styles,
+        }
     }
 
     pub fn color(&self, key: &str) -> Option<&str> {
@@ -177,13 +196,19 @@ pub struct TerminalCaps {
 
 impl Default for TerminalCaps {
     fn default() -> Self {
-        Self { width: 100, height: 40, truecolor: true, sixel: false }
+        Self {
+            width: 100,
+            height: 40,
+            truecolor: true,
+            sixel: false,
+        }
     }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct RenderCtx {
     pub theme: Theme,
+    pub source_dir: Option<std::path::PathBuf>,
     pub terminal_caps: TerminalCaps,
 }
 

@@ -1,17 +1,27 @@
-use mdview_render_terminal::{render_str, Registry, RenderCtx, TerminalCaps, Theme};
 use mdview_render_terminal::r#box::{code_frame, table};
+use mdview_render_terminal::{render_str, Registry, RenderCtx, TerminalCaps, Theme};
 
 fn ctx() -> RenderCtx {
     RenderCtx {
         theme: Theme::default_dark(),
-        terminal_caps: TerminalCaps { width: 60, height: 40, truecolor: true, sixel: false },
+        source_dir: None,
+        terminal_caps: TerminalCaps {
+            width: 60,
+            height: 40,
+            truecolor: true,
+            sixel: false,
+        },
     }
 }
 
 #[test]
 fn heading_contains_accent_bar() {
     let out = render_str("# Hello World", &ctx(), &Registry::new());
-    assert!(out.contains('▌'), "heading should begin with ▌ bar, got: {:?}", out);
+    assert!(
+        out.contains('▌'),
+        "heading should begin with ▌ bar, got: {:?}",
+        out
+    );
     assert!(out.contains("Hello World"), "content missing");
     assert!(out.contains("\x1b[1"), "bold SGR missing");
 }
@@ -53,21 +63,98 @@ fn thematic_break_has_dashes() {
 #[test]
 fn link_renders_url_in_parens() {
     let out = render_str("[mdview](https://example.com)", &ctx(), &Registry::new());
-    assert!(out.contains("mdview (https://example.com)"), "link format: {:?}", out);
-    assert!(out.contains("\x1b[") && out.contains("4"), "underline SGR missing");
+    assert!(
+        out.contains("mdview (https://example.com)"),
+        "link format: {:?}",
+        out
+    );
+    assert!(
+        out.contains("\x1b[") && out.contains("4"),
+        "underline SGR missing"
+    );
 }
 
 #[test]
 fn image_alt_placeholder() {
     let out = render_str("![diagram](x.png)", &ctx(), &Registry::new());
-    assert!(out.contains("[image"), "image placeholder missing: {:?}", out);
+    assert!(
+        out.contains("[image"),
+        "image placeholder missing: {:?}",
+        out
+    );
+}
+
+#[test]
+fn image_without_sixel_support_emits_placeholder() {
+    let tmp = std::env::temp_dir().join("mdview-term-img-tests");
+    std::fs::create_dir_all(&tmp).unwrap();
+    let img = tmp.join("y.png");
+    std::fs::write(&img, b"fakepng").unwrap();
+    let c = RenderCtx {
+        theme: Theme::default_dark(),
+        source_dir: Some(tmp),
+        terminal_caps: TerminalCaps {
+            width: 60,
+            height: 40,
+            truecolor: true,
+            sixel: false,
+        },
+    };
+    let out = render_str("![diagram](y.png)", &c, &Registry::new());
+    assert!(
+        out.contains("[image: diagram]"),
+        "placeholder missing: {:?}",
+        out
+    );
+    assert!(
+        !out.contains("\x1bPq"),
+        "sixel emitted unexpectedly: {:?}",
+        out
+    );
+}
+
+#[test]
+fn image_with_sixel_support_emits_sixel_bytes() {
+    use mdview_render_terminal::image::encode_local_to_sixel;
+    let tmp = std::env::temp_dir().join("mdview-term-img-tests");
+    std::fs::create_dir_all(&tmp).unwrap();
+    let img = tmp.join("z.png");
+    let mut buf = image::RgbaImage::new(8, 8);
+    for px in buf.pixels_mut() {
+        *px = image::Rgba([10, 200, 30, 255]);
+    }
+    let dyn_img = image::DynamicImage::ImageRgba8(buf);
+    let mut out_bytes = std::io::Cursor::new(Vec::new());
+    dyn_img
+        .write_to(&mut out_bytes, image::ImageFormat::Png)
+        .unwrap();
+    std::fs::write(&img, out_bytes.into_inner()).unwrap();
+
+    let sixel = encode_local_to_sixel(&img, true).expect("sixel encode");
+    assert!(sixel.starts_with("\x1bP"), "missing DCS introducer");
+    assert!(sixel.contains('q'), "missing q in DCS prelude");
+    assert!(sixel.ends_with("\x1b\\"), "missing ST terminator");
+}
+
+#[test]
+fn image_oversize_is_skipped() {
+    use mdview_render_terminal::image::encode_local_to_sixel;
+    let tmp = std::env::temp_dir().join("mdview-term-img-tests");
+    std::fs::create_dir_all(&tmp).unwrap();
+    let huge = tmp.join("huge.png");
+    let big = vec![0u8; 11 * 1024 * 1024];
+    std::fs::write(&huge, &big).unwrap();
+    assert!(encode_local_to_sixel(&huge, true).is_none());
 }
 
 #[test]
 fn inline_code_background() {
     let out = render_str("use `foo` here", &ctx(), &Registry::new());
     assert!(out.contains("foo"));
-    assert!(out.contains("\x1b[") && out.contains("48"), "bg SGR missing");
+    assert!(
+        out.contains("\x1b[") && out.contains("48"),
+        "bg SGR missing"
+    );
 }
 
 #[test]
@@ -103,7 +190,11 @@ fn wrap_respects_width() {
     let lines = wrap_ansi(text, 20);
     assert!(lines.len() > 1, "should wrap into multiple lines");
     for line in &lines {
-        assert!(visible_width(line) <= 20, "line {:?} exceeds width 20", line);
+        assert!(
+            visible_width(line) <= 20,
+            "line {:?} exceeds width 20",
+            line
+        );
     }
 }
 
@@ -119,8 +210,8 @@ fn wrap_preserves_ansi_escapes() {
 
 #[test]
 fn registry_override_replaces_default() {
-    use mdview_render_terminal::{Registry, TermChunks, TerminalRenderer};
     use comrak::nodes::{AstNode, NodeValue};
+    use mdview_render_terminal::{Registry, TermChunks, TerminalRenderer};
 
     struct AllCaps;
     impl TerminalRenderer for AllCaps {

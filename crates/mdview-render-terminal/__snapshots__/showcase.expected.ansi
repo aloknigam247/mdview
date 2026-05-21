@@ -1,0 +1,433 @@
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135mtitle: mdview — syntax & extensions showcase tags: [showcase, gfm, extensions][0m
+
+[38;2;243;139;168m▌ [0m[1;38;2;243;139;168mmdview — syntax & extensions showcase[0m
+
+Everything mdview can render, in a single file. Open with:
+
+[38;2;108;112;134m╭────────────────────────────╮[0m
+[38;2;108;112;134m│ mdview fixtures/showcase.md │[0m
+[38;2;108;112;134m╰─────────────────────────────╯[0m
+
+[3;38;2;108;112;134m▎ [0mSections marked [1m[ext: NAME][0m are rendered by a specific mdview extension. Everything else is stock
+[3;38;2;108;112;134m▎ [0mGitHub-Flavored Markdown (GFM).
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m1. Headings[0m
+
+[38;2;243;139;168m▌ [0m[1;38;2;243;139;168mH1 — largest[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135mH2[0m
+
+[38;2;249;226;175m▌ [0m[1;38;2;249;226;175mH3[0m
+
+[38;2;166;227;161m▌ [0m[1;38;2;166;227;161mH4[0m
+
+[38;2;137;180;250m▌ [0m[1;38;2;137;180;250mH5[0m
+
+[38;2;203;166;247m▌ [0m[1;38;2;203;166;247mH6 — smallest[0m
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m2. Inline styles[0m
+
+Plain text with [1mbold[0m, [3mitalic[0m, [3mbold italic[0m, [38;2;108;112;134mstrikethrough[0m, [38;2;249;226;175;48;2;49;50;68m inline code [0m, and a [4;38;2;116;199;236mlink to example.com
+(https://example.com)[0m.
+
+Autolinks are detected: [4;38;2;116;199;236mhttps://example.org (https://example.org)[0m and [4;38;2;116;199;236muser@example.com
+(mailto:user@example.com)[0m.
+
+Keyboard-style inline [38;2;249;226;175;48;2;49;50;68m Ctrl [0m+[38;2;249;226;175;48;2;49;50;68m C [0m, or a subscript via HTML: H[38;2;108;112;134m<sub>[0m2[38;2;108;112;134m</sub>[0mO, superscript: E =
+mc[38;2;108;112;134m<sup>[0m2[38;2;108;112;134m</sup>[0m.
+
+A hard line break (two trailing spaces) separates this...
+...from this (same paragraph).
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m3. Lists[0m
+
+[38;2;249;226;175m▌ [0m[1;38;2;249;226;175mUnordered, with nesting[0m
+
+[38;2;108;112;134m• [0mfirst
+
+  [38;2;108;112;134m• [0mnested A
+
+    [38;2;108;112;134m• [0mdeeply nested
+  [38;2;108;112;134m• [0mnested B
+[38;2;108;112;134m• [0msecond
+[38;2;108;112;134m• [0mthird
+
+[38;2;249;226;175m▌ [0m[1;38;2;249;226;175mOrdered[0m
+
+[38;2;108;112;134m1. [0mone
+[38;2;108;112;134m2. [0mtwo
+[38;2;108;112;134m3. [0mthree
+
+  [38;2;108;112;134m1. [0mthree-a
+  [38;2;108;112;134m2. [0mthree-b
+
+[38;2;249;226;175m▌ [0m[1;38;2;249;226;175mTask list[0m
+
+☑ parse markdown
+☑ dispatch to extensions
+☐ profile hot paths
+☐ ship v1
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m4. Tables[0m
+
+[38;2;108;112;134m╭──────────────┬─────────────────────────────┬────────╮[0m
+[1;38;2;137;180;250m│ Extension    │ Role                        │ Status │[0m
+[38;2;108;112;134m├──────────────┼─────────────────────────────┼────────┤[0m
+│ mdview-core  │ parser + trait + registry   │ ✅     │
+│ mdview-ext-* │ compile-in extensions (5)   │ ✅     │
+│ mdview-theme │ presets + nvim sync + cache │ WIP    │
+│ mdview-pager │ ratatui TUI pager           │ WIP    │
+[38;2;108;112;134m╰──────────────┴─────────────────────────────┴────────╯[0m
+
+Alignment: [38;2;249;226;175;48;2;49;50;68m left [0m, [38;2;249;226;175;48;2;49;50;68m :center: [0m, [38;2;249;226;175;48;2;49;50;68m right: [0m
+
+[38;2;108;112;134m╭──────┬────────┬───────╮[0m
+[1;38;2;137;180;250m│ left │ center │ right │[0m
+[38;2;108;112;134m├──────┼────────┼───────┤[0m
+│ a    │ b      │ c     │
+│ aa   │ bb     │ cc    │
+[38;2;108;112;134m╰──────┴────────┴───────╯[0m
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m5. Blockquotes[0m
+
+[3;38;2;108;112;134m▎ [0mA simple blockquote with a left accent bar.
+[3;38;2;108;112;134m▎ [0mIt can contain [1mbold[0m, [38;2;249;226;175;48;2;49;50;68m code [0m, a [4;38;2;116;199;236mlink (https://example.com)[0m, and span multiple paragraphs.
+
+[3;38;2;108;112;134m▎ [0mNested quotes:
+[3;38;2;108;112;134m▎ [0m[3;38;2;108;112;134m▎ [0mInner quote.
+[3;38;2;108;112;134m▎ [0m[3;38;2;108;112;134m▎ [0m[3;38;2;108;112;134m▎ [0mDeeper.
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m6. Horizontal rule[0m
+
+Everything above the rule…
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+…everything below.
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m7. Code blocks — [ext: highlight (syntect)][0m
+
+Server-side syntax highlighting into inline-styled [38;2;249;226;175;48;2;49;50;68m <span> [0ms. The [38;2;249;226;175;48;2;49;50;68m Highlight [0m extension runs on
+every fenced block with a language tag that syntect knows.
+
+[38;2;249;226;175m▌ [0m[1;38;2;249;226;175mRust[0m
+
+[38;2;108;112;134m╭───[ rust ]───────────────────────────────────────────────────╮[0m
+[38;2;108;112;134m│ use anyhow::Result;                                           │[0m
+[38;2;108;112;134m│                                                               │[0m
+[38;2;108;112;134m│ fn main() -> Result<()> {                                     │[0m
+[38;2;108;112;134m│     let tree = mdview_core::parse(&arena, "# hi", &registry); │[0m
+[38;2;108;112;134m│     println!("{}", render(tree));                             │[0m
+[38;2;108;112;134m│     Ok(())                                                    │[0m
+[38;2;108;112;134m│ }                                                             │[0m
+[38;2;108;112;134m╰───────────────────────────────────────────────────────────────╯[0m
+
+[38;2;249;226;175m▌ [0m[1;38;2;249;226;175mPython[0m
+
+[38;2;108;112;134m╭───[ python ]───────────╮[0m
+[38;2;108;112;134m│ def fib(n: int) -> int: │[0m
+[38;2;108;112;134m│     a, b = 0, 1         │[0m
+[38;2;108;112;134m│     for _ in range(n):  │[0m
+[38;2;108;112;134m│         a, b = b, a + b │[0m
+[38;2;108;112;134m│     return a            │[0m
+[38;2;108;112;134m╰─────────────────────────╯[0m
+
+[38;2;249;226;175m▌ [0m[1;38;2;249;226;175mJSON[0m
+
+[38;2;108;112;134m╭───[ json ]───────────────────────────────────────────────────────────╮[0m
+[38;2;108;112;134m│ {                                                                     │[0m
+[38;2;108;112;134m│   "name": "mdview",                                                   │[0m
+[38;2;108;112;134m│   "extensions": ["drawio", "mermaid", "plotly", "math", "highlight"], │[0m
+[38;2;108;112;134m│   "theme": "auto"                                                     │[0m
+[38;2;108;112;134m│ }                                                                     │[0m
+[38;2;108;112;134m╰───────────────────────────────────────────────────────────────────────╯[0m
+
+[38;2;249;226;175m▌ [0m[1;38;2;249;226;175mBash[0m
+
+[38;2;108;112;134m╭───[ bash ]─────────────────────────────────────────────╮[0m
+[38;2;108;112;134m│ cargo build --workspace --release                       │[0m
+[38;2;108;112;134m│ ./target/release/mdview --terminal fixtures/showcase.md │[0m
+[38;2;108;112;134m╰─────────────────────────────────────────────────────────╯[0m
+
+[38;2;249;226;175m▌ [0m[1;38;2;249;226;175mPlain (no language)[0m
+
+[38;2;108;112;134m╭────────────────────────────────────────────────────────────╮[0m
+[38;2;108;112;134m│ no language given — rendered as plaintext, no highlighting. │[0m
+[38;2;108;112;134m╰─────────────────────────────────────────────────────────────╯[0m
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m8. Math — [ext: math (latex2mathml + KaTeX)][0m
+
+Inline: $e^{i\pi} + 1 = 0$, and the golden ratio $\varphi = \frac{1 + \sqrt{5}}{2}$.
+
+Display:
+
+$$ \int_{-\infty}^{\infty} e^{-x^2}, dx = \sqrt{\pi} $$
+
+$$ \sum_{k=0}^{n} \binom{n}{k} x^k y^{n-k} = (x + y)^n $$
+
+Matrix via [38;2;249;226;175;48;2;49;50;68m pmatrix [0m (wrapped in a fenced [38;2;249;226;175;48;2;49;50;68m math [0m block — comrak's dollar-math parser is
+line-oriented and splits on the [38;2;249;226;175;48;2;49;50;68m \\ [0m row separator):
+
+[38;2;108;112;134m╭───[ math ]──────────────────────────────────────╮[0m
+[38;2;108;112;134m│ \begin{pmatrix} a & b \\ c & d \end{pmatrix}     │[0m
+[38;2;108;112;134m│ \begin{pmatrix} x \\ y \end{pmatrix}             │[0m
+[38;2;108;112;134m│ =                                                │[0m
+[38;2;108;112;134m│ \begin{pmatrix} ax + by \\ cx + dy \end{pmatrix} │[0m
+[38;2;108;112;134m╰──────────────────────────────────────────────────╯[0m
+
+Fenced [38;2;249;226;175;48;2;49;50;68m math [0m block (treated as display math):
+
+[38;2;108;112;134m╭───[ math ]───────────────────────────────────────────────────────────────────────────────────────────╮[0m
+[38;2;108;112;134m│ \mathcal{L} = -\frac{1}{4} F_{\mu\nu} F^{\mu\nu} + i\bar{\psi}\gamma^\mu D_\mu \psi - m\bar{\psi}\psi │[0m
+[38;2;108;112;134m╰───────────────────────────────────────────────────────────────────────────────────────────────────────╯[0m
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m9. Mermaid — [ext: mermaid][0m
+
+Flowchart (client-rendered by [38;2;249;226;175;48;2;49;50;68m mermaid.js [0m):
+
+[38;2;108;112;134m╭───[ mermaid ]───────────────────╮[0m
+[38;2;108;112;134m│ flowchart LR                     │[0m
+[38;2;108;112;134m│     A[Source .md] --> B{Parse}   │[0m
+[38;2;108;112;134m│     B -- GFM --> C[MDAST]        │[0m
+[38;2;108;112;134m│     C --> D[Registry.dispatch]   │[0m
+[38;2;108;112;134m│     D --> E1[render_html]        │[0m
+[38;2;108;112;134m│     D --> E2[render_terminal]    │[0m
+[38;2;108;112;134m│     E1 --> F1[(Browser / Tauri)] │[0m
+[38;2;108;112;134m│     E2 --> F2[(ANSI + sixel)]    │[0m
+[38;2;108;112;134m╰──────────────────────────────────╯[0m
+
+Sequence diagram:
+
+[38;2;108;112;134m╭───[ mermaid ]────────────────────────╮[0m
+[38;2;108;112;134m│ sequenceDiagram                       │[0m
+[38;2;108;112;134m│     participant CLI                   │[0m
+[38;2;108;112;134m│     participant Core                  │[0m
+[38;2;108;112;134m│     participant Ext as Extension      │[0m
+[38;2;108;112;134m│     participant View                  │[0m
+[38;2;108;112;134m│     CLI->>Core: parse(src)            │[0m
+[38;2;108;112;134m│     Core->>Ext: pre_parse / transform │[0m
+[38;2;108;112;134m│     Ext-->>Core: mutated AST          │[0m
+[38;2;108;112;134m│     CLI->>Ext: render_html(node, ctx) │[0m
+[38;2;108;112;134m│     Ext-->>CLI: HTML                  │[0m
+[38;2;108;112;134m│     CLI->>View: serve HTML            │[0m
+[38;2;108;112;134m│     View-->>CLI: ready                │[0m
+[38;2;108;112;134m╰───────────────────────────────────────╯[0m
+
+Class diagram:
+
+[38;2;108;112;134m╭───[ mermaid ]───────────────────────────────────────╮[0m
+[38;2;108;112;134m│ classDiagram                                         │[0m
+[38;2;108;112;134m│     class MdViewExtension {                          │[0m
+[38;2;108;112;134m│       +name() &'static str                           │[0m
+[38;2;108;112;134m│       +register_parser(opts)                         │[0m
+[38;2;108;112;134m│       +pre_parse(src)                                │[0m
+[38;2;108;112;134m│       +transform(ast)                                │[0m
+[38;2;108;112;134m│       +render_html(node, ctx) Option~Html~           │[0m
+[38;2;108;112;134m│       +render_terminal(node, ctx) Option~TermChunks~ │[0m
+[38;2;108;112;134m│       +client_assets() &[Asset]                      │[0m
+[38;2;108;112;134m│     }                                                │[0m
+[38;2;108;112;134m│     MdViewExtension <|.. Highlight                   │[0m
+[38;2;108;112;134m│     MdViewExtension <|.. Math                        │[0m
+[38;2;108;112;134m│     MdViewExtension <|.. Mermaid                     │[0m
+[38;2;108;112;134m│     MdViewExtension <|.. Drawio                      │[0m
+[38;2;108;112;134m│     MdViewExtension <|.. Plotly                      │[0m
+[38;2;108;112;134m╰──────────────────────────────────────────────────────╯[0m
+
+State diagram:
+
+[38;2;108;112;134m╭───[ mermaid ]──────────────────────────────────╮[0m
+[38;2;108;112;134m│ stateDiagram-v2                                 │[0m
+[38;2;108;112;134m│     [*] --> Idle                                │[0m
+[38;2;108;112;134m│     Idle --> Parsing: file opened               │[0m
+[38;2;108;112;134m│     Parsing --> Rendering: AST ready            │[0m
+[38;2;108;112;134m│     Rendering --> Displayed: html ready         │[0m
+[38;2;108;112;134m│     Displayed --> Parsing: file changed (watch) │[0m
+[38;2;108;112;134m│     Displayed --> [*]: close                    │[0m
+[38;2;108;112;134m╰─────────────────────────────────────────────────╯[0m
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m10. Draw.io — [ext: drawio][0m
+
+Embedded draw.io / diagrams.net XML (client-rendered by the official viewer).
+
+[38;2;108;112;134m╭───[ drawio ]────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮[0m
+[38;2;108;112;134m│ <mxfile host="app.diagrams.net">                                                                                                                                             │[0m
+[38;2;108;112;134m│   <diagram name="Pipeline" id="p1">                                                                                                                                          │[0m
+[38;2;108;112;134m│     <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" page="1" pageScale="1" pageWidth="850" pageHeight="1100">                                                         │[0m
+[38;2;108;112;134m│       <root>                                                                                                                                                                 │[0m
+[38;2;108;112;134m│         <mxCell id="0" />                                                                                                                                                    │[0m
+[38;2;108;112;134m│         <mxCell id="1" parent="0" />                                                                                                                                         │[0m
+[38;2;108;112;134m│         <mxCell id="2" value="Source" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">                                 │[0m
+[38;2;108;112;134m│           <mxGeometry x="40" y="40" width="120" height="50" as="geometry" />                                                                                                 │[0m
+[38;2;108;112;134m│         </mxCell>                                                                                                                                                            │[0m
+[38;2;108;112;134m│         <mxCell id="3" value="Parser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">                                 │[0m
+[38;2;108;112;134m│           <mxGeometry x="220" y="40" width="120" height="50" as="geometry" />                                                                                                │[0m
+[38;2;108;112;134m│         </mxCell>                                                                                                                                                            │[0m
+[38;2;108;112;134m│         <mxCell id="4" value="Renderer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">                               │[0m
+[38;2;108;112;134m│           <mxGeometry x="400" y="40" width="120" height="50" as="geometry" />                                                                                                │[0m
+[38;2;108;112;134m│         </mxCell>                                                                                                                                                            │[0m
+[38;2;108;112;134m│         <mxCell id="5" value="Output" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">                                 │[0m
+[38;2;108;112;134m│           <mxGeometry x="580" y="40" width="120" height="50" as="geometry" />                                                                                                │[0m
+[38;2;108;112;134m│         </mxCell>                                                                                                                                                            │[0m
+[38;2;108;112;134m│         <mxCell id="10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="2" target="3"><mxGeometry relative="1" as="geometry" /></mxCell> │[0m
+[38;2;108;112;134m│         <mxCell id="11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="3" target="4"><mxGeometry relative="1" as="geometry" /></mxCell> │[0m
+[38;2;108;112;134m│         <mxCell id="12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="4" target="5"><mxGeometry relative="1" as="geometry" /></mxCell> │[0m
+[38;2;108;112;134m│       </root>                                                                                                                                                                │[0m
+[38;2;108;112;134m│     </mxGraphModel>                                                                                                                                                          │[0m
+[38;2;108;112;134m│   </diagram>                                                                                                                                                                 │[0m
+[38;2;108;112;134m│ </mxfile>                                                                                                                                                                    │[0m
+[38;2;108;112;134m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[0m
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m11. Plotly — [ext: plotly][0m
+
+Bar chart:
+
+[38;2;108;112;134m╭───[ plotly ]──────────────────────────────────────────────────────────────────────────────╮[0m
+[38;2;108;112;134m│ {                                                                                          │[0m
+[38;2;108;112;134m│   "data": [                                                                                │[0m
+[38;2;108;112;134m│     {"type": "bar", "x": ["parse", "transform", "render"], "y": [12, 4, 31], "name": "ms"} │[0m
+[38;2;108;112;134m│   ],                                                                                       │[0m
+[38;2;108;112;134m│   "layout": {                                                                              │[0m
+[38;2;108;112;134m│     "title": "mdview pipeline cost (ms)",                                                  │[0m
+[38;2;108;112;134m│     "margin": {"t": 40, "r": 10, "b": 40, "l": 40}                                         │[0m
+[38;2;108;112;134m│   }                                                                                        │[0m
+[38;2;108;112;134m│ }                                                                                          │[0m
+[38;2;108;112;134m╰────────────────────────────────────────────────────────────────────────────────────────────╯[0m
+
+Line chart:
+
+[38;2;108;112;134m╭───[ plotly ]────────────────────────────────────────────────────────────────╮[0m
+[38;2;108;112;134m│ {                                                                            │[0m
+[38;2;108;112;134m│   "data": [                                                                  │[0m
+[38;2;108;112;134m│     {"type": "scatter", "mode": "lines+markers", "x": [0,1,2,3,4,5,6,7,8,9], │[0m
+[38;2;108;112;134m│      "y": [0,1,3,6,10,15,21,28,36,45], "name": "triangular"}                 │[0m
+[38;2;108;112;134m│   ],                                                                         │[0m
+[38;2;108;112;134m│   "layout": {                                                                │[0m
+[38;2;108;112;134m│     "title": "Triangular numbers",                                           │[0m
+[38;2;108;112;134m│     "margin": {"t": 40, "r": 10, "b": 40, "l": 40}                           │[0m
+[38;2;108;112;134m│   }                                                                          │[0m
+[38;2;108;112;134m│ }                                                                            │[0m
+[38;2;108;112;134m╰──────────────────────────────────────────────────────────────────────────────╯[0m
+
+Scatter with two series:
+
+[38;2;108;112;134m╭───[ plotly ]──────────────────────────────────────────────────────────────────────────────────────────╮[0m
+[38;2;108;112;134m│ {                                                                                                      │[0m
+[38;2;108;112;134m│   "data": [                                                                                            │[0m
+[38;2;108;112;134m│     {"type": "scatter", "mode": "markers", "x": [1,2,3,4,5], "y": [2.1,3.4,5.1,7.2,9.0], "name": "A"}, │[0m
+[38;2;108;112;134m│     {"type": "scatter", "mode": "markers", "x": [1,2,3,4,5], "y": [1.2,2.0,3.1,4.0,5.1], "name": "B"}  │[0m
+[38;2;108;112;134m│   ],                                                                                                   │[0m
+[38;2;108;112;134m│   "layout": {                                                                                          │[0m
+[38;2;108;112;134m│     "title": "Two series",                                                                             │[0m
+[38;2;108;112;134m│     "margin": {"t": 40, "r": 10, "b": 40, "l": 40}                                                     │[0m
+[38;2;108;112;134m│   }                                                                                                    │[0m
+[38;2;108;112;134m│ }                                                                                                      │[0m
+[38;2;108;112;134m╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯[0m
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m12. Footnotes[0m
+
+Footnotes[38;2;108;112;134m[^1][0m render inline[38;2;108;112;134m[^deep][0m with backlinks[38;2;108;112;134m[^also][0m.
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m13. Wide content — horizontal expansion[0m
+
+mdview does [1mnot[0m enforce a fixed page width. If any element is wider than the viewport, the page
+itself scrolls horizontally; narrow prose stays comfortably readable in front of it.
+
+[38;2;249;226;175m▌ [0m[1;38;2;249;226;175mA very long unbroken line[0m
+
+[38;2;108;112;134m╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮[0m
+[38;2;108;112;134m│ this-is-a-deliberately-very-long-single-line-with-no-spaces-whatsoever-so-that-the-renderer-must-either-wrap-it-or-extend-the-page-horizontally-and-we-want-the-page-to-extend-not-wrap-so-that-code-diffs-and-log-lines-and-compiler-errors-and-path-names-like-C:\Users\you\some\really\deeply\nested\workspace\crates\mdview-something\src\submodule\helpers.rs:1234:5-and-backtraces-and-command-lines-render-faithfully-without-line-breaks-introduced-by-soft-wrapping │[0m
+[38;2;108;112;134m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[0m
+
+[38;2;249;226;175m▌ [0m[1;38;2;249;226;175mA wide code block[0m
+
+[38;2;108;112;134m╭───[ rust ]─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮[0m
+[38;2;108;112;134m│ // Long function signature typical of async web handlers, with many typed params.                                                                                                                                                                                                                                                                   │[0m
+[38;2;108;112;134m│ pub async fn handle_extension_dispatch_for_html_with_registry_and_context<'a, 'ctx, R: mdview_core::Registry>(node: &'a comrak::nodes::AstNode<'a>, ctx: &'ctx mdview_core::RenderCtx<'ctx>, registry: &'a R, logger: &mut impl std::io::Write, metrics: &mut mdview_app::metrics::ExtensionMetrics) -> anyhow::Result<Option<mdview_core::Html>> { │[0m
+[38;2;108;112;134m│     let started = std::time::Instant::now();                                                                                                                                                                                                                                                                                                        │[0m
+[38;2;108;112;134m│     for ext in registry.html_renderers() { if let Some(out) = ext.render_html(node, ctx) { metrics.record(ext.name(), started.elapsed()); return Ok(Some(out)); } }                                                                                                                                                                                 │[0m
+[38;2;108;112;134m│     Ok(None)                                                                                                                                                                                                                                                                                                                                        │[0m
+[38;2;108;112;134m│ }                                                                                                                                                                                                                                                                                                                                                   │[0m
+[38;2;108;112;134m╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[0m
+
+[38;2;249;226;175m▌ [0m[1;38;2;249;226;175mA wide table[0m
+
+[38;2;108;112;134m╭────────┬─────────┬──────────┬─────────────┬────────────┬───────┬─────────┬──────────┬────────┬───────────┬──────────┬─────────╮[0m
+[1;38;2;137;180;250m│ col 1  │ col 2   │ col 3    │ col 4       │ col 5      │ col 6 │ col 7   │ col 8    │ col 9  │ col 10    │ col 11   │ col 12  │[0m
+[38;2;108;112;134m├────────┼─────────┼──────────┼─────────────┼────────────┼───────┼─────────┼──────────┼────────┼───────────┼──────────┼─────────┤[0m
+│ first  │ second  │ third    │ fourth      │ fifth      │ sixth │ seventh │ eighth   │ ninth  │ tenth     │ eleventh │ twelfth │
+│ apples │ bananas │ cherries │ dragonfruit │ elderberry │ figs  │ grapes  │ honeydew │ iyokan │ jackfruit │ kumquat  │ lemons  │
+│ α      │ β       │ γ        │ δ           │ ε          │ ζ     │ η       │ θ        │ ι      │ κ         │ λ        │ μ       │
+[38;2;108;112;134m╰────────┴─────────┴──────────┴─────────────┴────────────┴───────┴─────────┴──────────┴────────┴───────────┴──────────┴─────────╯[0m
+
+[38;2;249;226;175m▌ [0m[1;38;2;249;226;175mA wide paragraph with inline code[0m
+
+Paths like [38;2;249;226;175;48;2;49;50;68m C:\Users\aloknigam\projects\mdview\crates\mdview-ext-highlight\src\lib.rs:42 [0m and long
+inline command invocations like [38;2;249;226;175;48;2;49;50;68m cargo run -p mdview --release -- --terminal --no-pager[0m
+[38;2;249;226;175;48;2;49;50;68mfixtures/showcase.md | grep -E '(error|warning)' | head -40 [0m should keep their content legible — the
+page grows sideways when needed.
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m14. Emoji & Unicode[0m
+
+Text can include emoji 🎉 ✨ 🦀 and unicode box drawing: [38;2;249;226;175;48;2;49;50;68m ╭─╮ │ ╰─╯ [0m.
+
+The terminal renderer uses rounded box-drawing for tables and code frames by design; HTML renderer
+uses CSS [38;2;249;226;175;48;2;49;50;68m border-radius [0m.
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m15. What's NOT rendered as an extension[0m
+
+[38;2;108;112;134m• [0mRaw HTML in markdown ([38;2;249;226;175;48;2;49;50;68m <details> [0m, [38;2;249;226;175;48;2;49;50;68m <summary> [0m, [38;2;249;226;175;48;2;49;50;68m <img> [0m) is passed through by comrak but not
+specially themed by mdview.
+[38;2;108;112;134m• [0mImage tags render as [38;2;249;226;175;48;2;49;50;68m <img> [0m — no extension-level image handling (yet).
+[38;2;108;112;134m• [0mYAML front-matter (the [38;2;249;226;175;48;2;49;50;68m --- [0m block at the top) is stripped by the parser, not rendered.
+
+[38;2;108;112;134m────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+
+[38;2;250;179;135m▌ [0m[1;38;2;250;179;135m16. Where to go next[0m
+
+[38;2;108;112;134m• [0mThe [1msame file[0m above renders in three places: Tauri/wry window, terminal pager (ANSI + sixel), and
+inside Neovim via the Lua plugin.
+[38;2;108;112;134m• [0mSee [38;2;249;226;175;48;2;49;50;68m CLAUDE.md [0m for architecture.
+[38;2;108;112;134m• [0mSee [38;2;249;226;175;48;2;49;50;68m apps/mdview/src/builtins.rs [0m for the extension registration order (diagram extensions precede [38;2;249;226;175;48;2;49;50;68m[0m
+[38;2;249;226;175;48;2;49;50;68mHighlight [0m so fenced [38;2;249;226;175;48;2;49;50;68m mermaid [0m / [38;2;249;226;175;48;2;49;50;68m drawio [0m / [38;2;249;226;175;48;2;49;50;68m plotly [0m / [38;2;249;226;175;48;2;49;50;68m math [0m blocks aren't swallowed by the
+code-highlighter).
+
+End of showcase.
+
+[38;2;108;112;134m[^1]: [0mFirst footnote — simple text.
+
+[38;2;108;112;134m[^deep]: [0mA footnote can contain [1mbold[0m, [38;2;249;226;175;48;2;49;50;68m code [0m, and a [4;38;2;116;199;236mlink (https://example.com)[0m.
+
+[38;2;108;112;134m[^also]: [0mAnd may span multiple lines if needed.
+

@@ -7,11 +7,15 @@ description = "Terminal (ANSI) renderer for mdview"
 
 [dependencies]
 comrak = "0.28"
+mdview-sixel = { path = "../mdview-sixel" }
 textwrap = "0.16"
 thiserror = "1"
+tracing = "0.1"
 unicode-width = "0.1"
 
 [dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+unicode-width = "0.1"
 
 [lib]
 path = "src/lib.rs"

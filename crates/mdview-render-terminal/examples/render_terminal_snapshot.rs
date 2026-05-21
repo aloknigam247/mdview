@@ -13,7 +13,10 @@ fn main() -> ExitCode {
     }
 
     if !fixtures_dir.exists() {
-        eprintln!("no fixtures at {}: nothing to snapshot", fixtures_dir.display());
+        eprintln!(
+            "no fixtures at {}: nothing to snapshot",
+            fixtures_dir.display()
+        );
         return ExitCode::SUCCESS;
     }
 
@@ -30,7 +33,10 @@ fn main() -> ExitCode {
 
     let mut failures: Vec<String> = Vec::new();
     for fixture in &paths {
-        let name = fixture.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
+        let name = fixture
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown");
         let src = fs::read_to_string(fixture).expect("read fixture");
         let ansi = render_str(&src, &ctx, &registry);
 

@@ -3,6 +3,8 @@
 pub mod _stubs;
 pub mod r#box;
 pub mod color;
+pub mod image;
+pub mod inline_html;
 pub mod wrap;
 
 use comrak::nodes::{AstNode, ListType, NodeValue};
@@ -118,7 +120,11 @@ fn render_node<'a>(
             out.push_plain("\n\n");
         }
         NodeValue::CodeBlock(cb) => {
-            let lang = if cb.info.is_empty() { None } else { Some(cb.info.as_str()) };
+            let lang = if cb.info.is_empty() {
+                None
+            } else {
+                Some(cb.info.as_str())
+            };
             let body = cb.literal.trim_end_matches('\n').to_string();
             let frame = r#box::code_frame(lang, &body, &ctx.theme);
             out.extend(frame);
@@ -166,14 +172,8 @@ fn render_node<'a>(
             let text = inline.plain_text();
             out.push_styled(format!("{} ({})", text, link.url), style);
         }
-        NodeValue::Image(_) => {
-            let alt = render_inline(node, ctx, registry).plain_text();
-            let label = if alt.is_empty() {
-                "[image]".to_string()
-            } else {
-                format!("[image: {}]", alt)
-            };
-            out.push_styled(label, ctx.theme.style("muted"));
+        NodeValue::Image(link) => {
+            render_image(node, link.url.as_str(), ctx, out);
         }
         NodeValue::FootnoteReference(fr) => {
             out.push_styled(format!("[^{}]", fr.name), ctx.theme.style("muted"));
@@ -193,16 +193,67 @@ fn render_node<'a>(
     }
 }
 
-fn render_inline<'a>(
-    parent: &'a AstNode<'a>,
-    ctx: &RenderCtx,
-    registry: &Registry,
-) -> TermChunks {
+fn render_inline<'a>(parent: &'a AstNode<'a>, ctx: &RenderCtx, registry: &Registry) -> TermChunks {
     let mut out = TermChunks::new();
-    for child in parent.children() {
+    let children: Vec<&'a AstNode<'a>> = parent.children().collect();
+    let mut i = 0;
+    while i < children.len() {
+        let child = children[i];
+        if let Some((tag, end)) = match_sub_sup_run(&children, i) {
+            let inner = collect_text(&children[i + 1..end]);
+            let mapped = match tag {
+                inline_html::HtmlTag::SubOpen => inline_html::unicode_sub(&inner),
+                inline_html::HtmlTag::SupOpen => inline_html::unicode_sup(&inner),
+                _ => inner,
+            };
+            out.push_plain(mapped);
+            i = end + 1;
+            continue;
+        }
         render_node(child, ctx, registry, &mut out, 0);
+        i += 1;
     }
     out
+}
+
+fn match_sub_sup_run<'a>(
+    children: &[&'a AstNode<'a>],
+    start: usize,
+) -> Option<(inline_html::HtmlTag, usize)> {
+    let open = children.get(start)?;
+    let open_tag = match &open.data.borrow().value {
+        NodeValue::HtmlInline(h) => inline_html::classify(h),
+        _ => return None,
+    };
+    let (open_kind, close_kind) = match open_tag {
+        inline_html::HtmlTag::SubOpen => (inline_html::HtmlTag::SubOpen, inline_html::HtmlTag::SubClose),
+        inline_html::HtmlTag::SupOpen => (inline_html::HtmlTag::SupOpen, inline_html::HtmlTag::SupClose),
+        _ => return None,
+    };
+    for (j, n) in children.iter().enumerate().skip(start + 1) {
+        match &n.data.borrow().value {
+            NodeValue::HtmlInline(h) => {
+                if inline_html::classify(h) == close_kind {
+                    return Some((open_kind, j));
+                }
+            }
+            NodeValue::Text(_) | NodeValue::Code(_) => continue,
+            _ => return None,
+        }
+    }
+    None
+}
+
+fn collect_text<'a>(nodes: &[&'a AstNode<'a>]) -> String {
+    let mut s = String::new();
+    for n in nodes {
+        match &n.data.borrow().value {
+            NodeValue::Text(t) => s.push_str(t),
+            NodeValue::Code(c) => s.push_str(&c.literal),
+            _ => {}
+        }
+    }
+    s
 }
 
 fn render_list_item<'a>(
@@ -267,6 +318,38 @@ fn render_table<'a>(
 
     out.extend(r#box::table(&headers, &rows, &ctx.theme));
     out.push_plain("\n");
+}
+
+fn render_image<'a>(node: &'a AstNode<'a>, url: &str, ctx: &RenderCtx, out: &mut TermChunks) {
+    let alt = image::collect_alt_text(node);
+    let muted = ctx.theme.style("muted");
+    match image::resolve(url, ctx.source_dir.as_deref()) {
+        image::ImgResolution::Remote => {
+            let label = image::placeholder_label(&alt, url, None);
+            out.push_styled(label, muted);
+        }
+        image::ImgResolution::Unresolvable => {
+            tracing::warn!(url, "mdview: image path unresolvable (no source_dir)");
+            let label = image::placeholder_label(&alt, url, None);
+            out.push_styled(label, muted);
+        }
+        image::ImgResolution::Local(path) => {
+            if !path.exists() {
+                tracing::warn!(path = %path.display(), "mdview: image not found");
+                let label = image::placeholder_label(&alt, url, Some(&path));
+                out.push_styled(label, muted);
+                return;
+            }
+            let sixel_supported = ctx.terminal_caps.sixel;
+            if let Some(sixel) = image::encode_local_to_sixel(&path, sixel_supported) {
+                out.push_plain(sixel);
+                out.push_plain("\n");
+            } else {
+                let label = image::placeholder_label(&alt, url, Some(&path));
+                out.push_styled(label, muted);
+            }
+        }
+    }
 }
 
 fn effective_width(ctx: &RenderCtx) -> usize {
