@@ -91,7 +91,9 @@ fn query_da1_sixel() -> std::io::Result<bool> {
         let _ = tx.send(buf);
     });
 
-    let buf = rx.recv_timeout(Duration::from_millis(150)).unwrap_or_default();
+    let buf = rx
+        .recv_timeout(Duration::from_millis(150))
+        .unwrap_or_default();
 
     if raw_enabled {
         let _ = crossterm::terminal::disable_raw_mode();

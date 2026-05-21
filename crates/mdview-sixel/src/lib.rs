@@ -6,11 +6,13 @@
 
 pub mod detect;
 pub mod fallback;
+pub mod raster;
 pub mod sixel;
 pub mod svg;
 
 pub use detect::{probe, TerminalCaps};
 pub use fallback::{ascii_placeholder, kitty_graphics};
+pub use raster::raster_to_png;
 pub use sixel::encode_png;
 pub use svg::svg_to_png;
 
