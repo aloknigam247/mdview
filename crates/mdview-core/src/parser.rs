@@ -73,7 +73,8 @@ mod tests {
     fn gfm_sample_parses() {
         let arena = Arena::new();
         let registry = Registry::new();
-        let src = "# Title\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n~~strike~~ and https://example.com\n";
+        let src =
+            "# Title\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n~~strike~~ and https://example.com\n";
         let root = parse(&arena, src, &registry);
         assert!(has_heading(root));
         assert!(has_table(root));

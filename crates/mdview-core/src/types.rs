@@ -127,6 +127,8 @@ impl Default for TerminalCaps {
 
 pub struct RenderCtx<'a> {
     pub asset_resolver: fn(&str) -> String,
+    pub frontmatter: Option<serde_json::Value>,
+    pub source_dir: Option<std::path::PathBuf>,
     pub terminal_caps: Option<TerminalCaps>,
     pub theme: &'a Theme,
 }
@@ -135,6 +137,8 @@ impl<'a> RenderCtx<'a> {
     pub fn new(theme: &'a Theme) -> Self {
         Self {
             asset_resolver: default_asset_resolver,
+            frontmatter: None,
+            source_dir: None,
             terminal_caps: None,
             theme,
         }
@@ -172,6 +176,7 @@ mod tests {
         let t = Theme::default();
         let ctx = RenderCtx::new(&t);
         assert!(ctx.terminal_caps.is_none());
+        assert!(ctx.source_dir.is_none());
         assert_eq!(ctx.resolve_asset("foo"), "foo");
     }
 

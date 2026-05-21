@@ -16,11 +16,15 @@ pub trait MdViewExtension: Send + Sync {
         None
     }
 
-    fn render_terminal<'a>(
-        &self,
-        _n: &'a AstNode<'a>,
-        _ctx: &RenderCtx<'_>,
-    ) -> Option<TermChunks> {
+    fn render_terminal<'a>(&self, _n: &'a AstNode<'a>, _ctx: &RenderCtx<'_>) -> Option<TermChunks> {
+        None
+    }
+
+    fn pre_render_html(&self, _ctx: &RenderCtx<'_>) -> Option<Html> {
+        None
+    }
+
+    fn pre_render_terminal(&self, _ctx: &RenderCtx<'_>) -> Option<TermChunks> {
         None
     }
 
