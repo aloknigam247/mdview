@@ -2,10 +2,16 @@ use anyhow::Result;
 use comrak::nodes::{AstNode, ListType, NodeValue, TableAlignment};
 use comrak::Arena;
 use mdview_core::{parse, Registry, RenderCtx, TermChunks, Theme};
+use std::path::Path;
 
 use crate::builtins::builtin_extensions;
 
+#[allow(dead_code)]
 pub fn render_ansi(src: &str) -> Result<String> {
+    render_ansi_with_source(src, None)
+}
+
+pub fn render_ansi_with_source(src: &str, source_dir: Option<&Path>) -> Result<String> {
     let mut registry = Registry::new();
     for ext in builtin_extensions() {
         registry.register(ext);
@@ -19,9 +25,15 @@ pub fn render_ansi(src: &str) -> Result<String> {
     registry.apply_transforms(ast);
 
     let theme = Theme::default();
-    let ctx = RenderCtx::new(&theme);
+    let mut ctx = RenderCtx::new(&theme);
+    ctx.source_dir = source_dir.map(|p| p.to_path_buf());
 
     let mut out = String::new();
+    for ext in registry.terminal_renderers() {
+        if let Some(chunks) = ext.pre_render_terminal(&ctx) {
+            write_chunks(&chunks, &mut out);
+        }
+    }
     for child in ast.children() {
         render_block(child, &ctx, &registry, &mut out, 0);
         out.push('\n');
@@ -135,7 +147,9 @@ fn render_code_block<'a>(
     out: &mut String,
 ) {
     let data = node.data.borrow();
-    let NodeValue::CodeBlock(cb) = &data.value else { return };
+    let NodeValue::CodeBlock(cb) = &data.value else {
+        return;
+    };
     let lang = cb.info.split_whitespace().next().unwrap_or("").to_string();
     let literal = cb.literal.clone();
     drop(data);
@@ -145,12 +159,7 @@ fn render_code_block<'a>(
     let body = registry
         .terminal_renderers()
         .find_map(|ext| ext.render_terminal(node, ctx))
-        .map(|chunks| {
-            chunks
-                .into_iter()
-                .map(|c| c.text)
-                .collect::<String>()
-        })
+        .map(|chunks| chunks.into_iter().map(|c| c.text).collect::<String>())
         .unwrap_or(literal);
 
     let width = 60usize;
@@ -376,9 +385,13 @@ fn render_inline<'a>(node: &'a AstNode<'a>, out: &mut String) {
             out.push_str(RESET);
         }
         NodeValue::Image(i) => {
+            let url = i.url.clone();
+            drop(data);
+            let alt = collect_text_from_children(node);
+            let display = if alt.is_empty() { url.as_str() } else { alt.as_str() };
             out.push_str(MUTED);
             out.push_str("[image: ");
-            out.push_str(&i.url);
+            out.push_str(display);
             out.push(']');
             out.push_str(RESET);
         }
@@ -400,6 +413,16 @@ fn render_inline<'a>(node: &'a AstNode<'a>, out: &mut String) {
             render_inlines(node, out);
         }
     }
+}
+
+fn collect_text_from_children<'a>(node: &'a AstNode<'a>) -> String {
+    let mut out = String::new();
+    for c in node.children() {
+        if let NodeValue::Text(t) = &c.data.borrow().value {
+            out.push_str(t);
+        }
+    }
+    out
 }
 
 fn write_chunks(chunks: &TermChunks, out: &mut String) {
@@ -471,6 +494,12 @@ mod tests {
         let out = render_ansi("- [x] done\n- [ ] todo\n").unwrap();
         assert!(out.contains("☒"));
         assert!(out.contains("☐"));
+    }
+
+    #[test]
+    fn image_renders_alt_text_placeholder() {
+        let out = render_ansi("![cover](./x.png)\n").unwrap();
+        assert!(out.contains("[image: cover]"), "got: {out}");
     }
 
     #[test]

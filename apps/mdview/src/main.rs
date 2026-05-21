@@ -52,13 +52,20 @@ fn validate_file(file: &std::path::Path) -> std::result::Result<(), i32> {
     let mut err = std::io::stderr();
     match std::fs::metadata(file) {
         Ok(md) if md.is_dir() => {
-            let _ = writeln!(err, "mdview: '{}' is a directory, not a file", file.display());
+            let _ = writeln!(
+                err,
+                "mdview: '{}' is a directory, not a file",
+                file.display()
+            );
             Err(2)
         }
         Ok(_) => Ok(()),
         Err(e) if e.kind() == ErrorKind::NotFound => {
             let _ = writeln!(err, "mdview: file not found: {}", file.display());
-            let _ = writeln!(err, "hint: check the path is correct, or pipe stdin via a shell redirect.");
+            let _ = writeln!(
+                err,
+                "hint: check the path is correct, or pipe stdin via a shell redirect."
+            );
             Err(2)
         }
         Err(e) if e.kind() == ErrorKind::PermissionDenied => {

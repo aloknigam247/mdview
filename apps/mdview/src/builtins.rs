@@ -7,6 +7,7 @@ use mdview_core::MdViewExtension;
 pub fn builtin_extensions() -> Vec<Box<dyn MdViewExtension>> {
     vec![
         Box::new(mdview_ext_drawio::Drawio),
+        Box::new(mdview_ext_frontmatter::FrontmatterExt::new()),
         Box::new(mdview_ext_mermaid::Mermaid),
         Box::new(mdview_ext_plotly::Plotly),
         Box::new(mdview_ext_math::Math),
@@ -21,9 +22,10 @@ mod tests {
     #[test]
     fn all_five_extensions_registered() {
         let exts = builtin_extensions();
-        assert_eq!(exts.len(), 5);
+        assert_eq!(exts.len(), 6);
         let names: Vec<&'static str> = exts.iter().map(|e| e.name()).collect();
         assert!(names.contains(&"drawio"));
+        assert!(names.contains(&"frontmatter"));
         assert!(names.contains(&"highlight"));
         assert!(names.contains(&"math"));
         assert!(names.contains(&"mermaid"));
