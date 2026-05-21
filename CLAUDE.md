@@ -100,3 +100,52 @@ synthesises a `Theme` at runtime and caches it by colorscheme name.
 - In-app file menu, Ctrl+O, drag-drop — `mdview FILE` is the only entry point.
 - Full HTML/CSS fidelity beyond GFM + shipped extensions.
 - Wysiwyg editing, collaborative editing.
+
+## Configuration
+
+User configuration lives at `$XDG_CONFIG_HOME/mdview/config.toml` (with
+`$HOME/.config/mdview/config.toml` as the fallback; on Windows `%USERPROFILE%`
+substitutes for `$HOME`). On first run mdview writes a fully-commented template;
+failures to read or write are non-fatal.
+
+**Bindings are opt-in — there are no built-in defaults. If an action is not
+listed in the user's config, it has no binding.**
+
+### Sections
+
+- `[toc]` — `position` (one of `floating-right`, `floating-left`, `floating-center`,
+  `fixed-right`, `fixed-left`, `inline`; default `floating-right`), `depth` (1..=6; default 3).
+- `[codemap]` — `enabled` (bool; default `true`).
+- `[theme]` — `mode` (`auto` | `light` | `dark`; default `auto`; v1 resolves
+  `auto` to `dark`), `light` (theme preset name; default `catppuccin-latte`),
+  `dark` (theme preset name; default `catppuccin-mocha`). Manual toggles via
+  the `toggle-theme` action are ephemeral (not persisted back to config).
+- `[keymap]` — opt-in bindings. Available actions:
+  - `quit` — close the mdview window / exit the pager.
+  - `toggle-bionic` — toggle bionic-reading transform (bolden first half of each word).
+  - `toggle-codemap` — show / hide the right-edge minimap.
+  - `toggle-theme` — flip between the configured light and dark themes.
+  - `toggle-toc` — show / hide the floating table of contents.
+
+**Update this list on every config change.**
+
+### Error reporting
+
+Every key/value error in `config.toml` is **non-fatal**: mdview always launches
+with sensible defaults and merely records what went wrong. Errors are surfaced
+both on `stderr` (one line per error, prefixed `mdview-config-error:`) and
+**in-app**:
+
+- **Pager** (`--terminal`): a yellow top-of-screen banner shows the first error
+  (plus a count when there's more than one); press `Esc` to dismiss.
+- **Nvim** (`--nvim-socket`): the Lua plugin's `on_stderr` callback strips the
+  prefix and calls `vim.notify(..., vim.log.levels.WARN)`.
+- **GUI** (Tauri webview): TODO — a small follow-up will read
+  `LoadResult.errors` in `apps/mdview/src/render.rs` and render a dismissible
+  toast at the top of the page.
+
+Each error names the culprit (key like `keymap[quit]`, the raw offending value,
+or `config.toml line L:C` when TOML span info is available), states what's
+wrong, and lists what was expected. Programmatic access is via
+`Config::load_full() -> LoadResult { config, errors }`; the existing
+`Config::load() -> Config` shim is preserved for backwards compatibility.
