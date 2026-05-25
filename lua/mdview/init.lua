@@ -205,6 +205,31 @@ local function connect(path, attempts_left, on_done)
   end)
 end
 
+function M.create_commands()
+  vim.api.nvim_create_user_command("MdView", function(opts)
+    M.toggle(opts.fargs[1])
+  end, { nargs = "?", complete = "file", force = true })
+
+  vim.api.nvim_create_user_command("MdViewStop", function()
+    M.stop()
+  end, { force = true })
+
+  vim.api.nvim_create_user_command("Mdview", function(opts)
+    local sub = opts.fargs[1]
+    if sub == "refresh_cache" then
+      M.refresh_cache()
+    else
+      vim.notify("Mdview: unknown subcommand '" .. tostring(sub) .. "'", vim.log.levels.ERROR)
+    end
+  end, {
+    nargs = 1,
+    complete = function()
+      return { "refresh_cache" }
+    end,
+    force = true,
+  })
+end
+
 function M.setup(opts)
   opts = opts or {}
   vim.validate({
@@ -215,6 +240,7 @@ function M.setup(opts)
     theme_from_colorscheme = { opts.theme_from_colorscheme, "boolean", true },
   })
   state.config = vim.tbl_deep_extend("force", defaults, opts)
+  M.create_commands()
 end
 
 function M.start(file)

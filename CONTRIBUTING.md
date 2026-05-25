@@ -98,12 +98,6 @@ bun test
 bun build --compile ./src/index.ts --outfile ./mdview-sidecar
 ```
 
-For the Neovim plugin (`plugins/nvim/`):
-
-```sh
-nvim --headless -u tests/init.lua -c 'lua require("mdview.tests").run()' -c 'qa!'
-```
-
 ## Pull request checklist
 
 - [ ] Conventional-commit messages.

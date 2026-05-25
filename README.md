@@ -67,26 +67,64 @@ mdview --watch README.md
 mdview --terminal --watch README.md
 ```
 
-Inside Neovim:
+### Neovim plugin
 
-```vim
-:MdView                   " start live preview
-:MdViewStop               " close the preview window
-:MdViewRebuildThemeCache  " rebuild cached theme after colorscheme changes
-```
+This repository is itself a Neovim plugin: `lua/mdview/` ships alongside the
+Rust crates and the binary. The plugin spawns `mdview --nvim-socket <path>` and
+streams the current buffer over a Unix socket (Windows named pipe) using
+length-prefixed msgpack frames, debounced ~100 ms on `TextChanged` /
+`TextChangedI`. Colorscheme changes resync the theme.
 
-Install the plugin with your package manager of choice. With
-[lazy.nvim](https://github.com/folke/lazy.nvim):
+Requirements: Neovim >= 0.10 and the `mdview` binary on `PATH`.
+
+Commands are registered when you call `require("mdview").setup({})`. With
+[lazy.nvim](https://github.com/folke/lazy.nvim), `opts` does that for you:
 
 ```lua
 {
   "aloknigam247/mdview",
   build = "cargo install --locked --path apps/mdview",
-  cmd = { "MdView", "MdViewStop", "MdViewRebuildThemeCache" },
   ft = { "markdown" },
-  opts = { debounce_ms = 100 },
+  opts = {
+    debounce_ms = 100,
+    cmd = "mdview",
+    theme_from_colorscheme = true,
+  },
 }
 ```
+
+For local development, point `dir` at your checkout:
+
+```lua
+{
+  dir = "~/code/mdview",
+  ft = "markdown",
+  opts = {},
+}
+```
+
+Without a plugin manager, call `setup` yourself (e.g. in `init.lua`):
+
+```lua
+require("mdview").setup({})
+```
+
+Commands:
+
+```vim
+:MdView [file]         " toggle the live preview for the current (or given) buffer
+:MdViewStop            " close the preview window
+:Mdview refresh_cache  " rebuild cached theme after colorscheme changes
+```
+
+Options:
+
+| key | default | description |
+|---|---|---|
+| `debounce_ms` | `100` | Delay between buffer edits and the next render. |
+| `cmd` | `"mdview"` | Path or name of the mdview binary. |
+| `socket_path` | `nil` | Custom socket/pipe path. Auto-generated if unset. |
+| `theme_from_colorscheme` | `true` | Sync the mdview theme from your nvim colorscheme. |
 
 ## Gallery
 
