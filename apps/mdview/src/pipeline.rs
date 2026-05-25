@@ -124,7 +124,14 @@ pub async fn run_tauri_child(cli: &Cli) -> Result<()> {
         // wry runs the event loop on the current thread and blocks until the
         // window is closed. Keep `srv` alive for the whole session.
         let win_title = format_window_title(cli.file.as_deref());
-        run_gui_event_loop(&url, &config, &win_title)?;
+        let reload_ctx = ReloadCtx {
+            file: file.clone(),
+            title: title.clone(),
+            config: config.clone(),
+            config_errors: loaded.errors.clone(),
+            html_store: srv.html.clone(),
+        };
+        run_gui_event_loop(&url, &config, &win_title, reload_ctx)?;
     }
 
     #[cfg(not(feature = "gui"))]
@@ -166,6 +173,15 @@ pub enum MdvUserEvent {
 }
 
 #[cfg(feature = "gui")]
+struct ReloadCtx {
+    file: std::path::PathBuf,
+    title: String,
+    config: mdview_config::Config,
+    config_errors: Vec<mdview_config::ConfigError>,
+    html_store: crate::server::HtmlStore,
+}
+
+#[cfg(feature = "gui")]
 fn load_icon() -> Option<tao::window::Icon> {
     const ICON_PNG: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/icon-256.png"));
     let img = image::load_from_memory(ICON_PNG).ok()?;
@@ -175,7 +191,12 @@ fn load_icon() -> Option<tao::window::Icon> {
 }
 
 #[cfg(feature = "gui")]
-fn run_gui_event_loop(url: &str, config: &mdview_config::Config, title: &str) -> Result<()> {
+fn run_gui_event_loop(
+    url: &str,
+    config: &mdview_config::Config,
+    title: &str,
+    reload_ctx: ReloadCtx,
+) -> Result<()> {
     use tao::dpi::LogicalSize;
     use tao::event::{Event, WindowEvent};
     use tao::event_loop::{ControlFlow, EventLoopBuilder};
@@ -265,6 +286,32 @@ fn run_gui_event_loop(url: &str, config: &mdview_config::Config, title: &str) ->
                 *control_flow = ControlFlow::Exit;
             }
             Event::UserEvent(MdvUserEvent::Reload) => {
+                match std::fs::read_to_string(&reload_ctx.file) {
+                    Ok(src) => {
+                        let source_dir = reload_ctx.file.parent();
+                        match crate::render::render_page_full(
+                            &src,
+                            &reload_ctx.title,
+                            &reload_ctx.config.theme,
+                            &reload_ctx.config.keymap,
+                            source_dir,
+                            &reload_ctx.config_errors,
+                            &reload_ctx.config.toc,
+                            &reload_ctx.config.codemap,
+                        ) {
+                            Ok(html) => {
+                                if let Ok(mut guard) = reload_ctx.html_store.write() {
+                                    *guard = std::sync::Arc::new(html);
+                                }
+                            }
+                            Err(e) => tracing::warn!("reload re-render failed: {e}"),
+                        }
+                    }
+                    Err(e) => tracing::warn!(
+                        "reload re-read failed for {}: {e}",
+                        reload_ctx.file.display()
+                    ),
+                }
                 if let Err(e) = webview.reload() {
                     tracing::debug!("webview reload failed: {e}");
                 }

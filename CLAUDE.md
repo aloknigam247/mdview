@@ -173,6 +173,13 @@ The aspirational lines higher up describe a Tauri shell and a separate
   selectors; the app emits `<article class="mdv">`. The two CSS surfaces are
   not unified — copy needed rules into `render.rs` rather than importing
   `base_stylesheet()` wholesale.
+- **Server serves a snapshot.** `apps/mdview/src/server.rs` holds the HTML in
+  `HtmlStore = Arc<RwLock<Arc<String>>>` exposed as `Server.html`. `webview.reload()`
+  alone just re-fetches the same snapshot — it does **not** pick up file or
+  config changes. Any live-update feature (file-watcher reload, manual reload,
+  hot theme swap, etc.) must re-render and swap the inner `Arc<String>` *before*
+  calling `webview.reload()`. The serve loop clones the inner `Arc` per request,
+  so swaps are lock-free for readers.
 
 ## Working with parallel agents (worktree workflow)
 
