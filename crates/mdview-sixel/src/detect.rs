@@ -4,25 +4,13 @@ use std::thread;
 use std::time::Duration;
 
 /// Rough approximation of what the host terminal can render.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct TerminalCaps {
     pub sixel: bool,
     pub kitty: bool,
     pub truecolor: bool,
     pub width: u16,
     pub height: u16,
-}
-
-impl Default for TerminalCaps {
-    fn default() -> Self {
-        Self {
-            sixel: false,
-            kitty: false,
-            truecolor: false,
-            width: 0,
-            height: 0,
-        }
-    }
 }
 
 /// Probe the current tty for sixel / kitty / truecolor support and terminal

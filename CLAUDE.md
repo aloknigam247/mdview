@@ -116,8 +116,7 @@ listed in the user's config, it has no binding.**
 - `[toc]` — `position` (one of `floating-right`, `floating-left`, `floating-center`,
   `fixed-right`, `fixed-left`, `inline`; default `floating-right`), `depth` (1..=6; default 3).
 - `[codemap]` — `enabled` (bool; default `true`).
-- `[theme]` — `mode` (`auto` | `light` | `dark`; default `auto`; v1 resolves
-  `auto` to `dark`), `light` (theme preset name; default `catppuccin-latte`),
+- `[theme]` — `mode` (`auto` | `light` | `dark`; default `auto`; follows OS at launch on Windows, otherwise dark), `light` (theme preset name; default `catppuccin-latte`),
   `dark` (theme preset name; default `catppuccin-mocha`). Manual toggles via
   the `toggle-theme` action are ephemeral (not persisted back to config).
 - `[keymap]` — opt-in bindings. Available actions:

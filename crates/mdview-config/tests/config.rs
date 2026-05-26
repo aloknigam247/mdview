@@ -352,3 +352,13 @@ fn theme_errors_collected_alongside_other_sections() {
         .iter()
         .any(|e| e.source == ConfigErrorSource::Theme));
 }
+
+#[test]
+fn theme_mode_light_resolve_is_light() {
+    assert!(ThemeMode::Light.resolve_is_light());
+}
+
+#[test]
+fn theme_mode_dark_resolve_is_light() {
+    assert!(!ThemeMode::Dark.resolve_is_light());
+}

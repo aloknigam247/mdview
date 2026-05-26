@@ -276,10 +276,7 @@ fn output_has_no_orphan_escape_sequences() {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == '\x1b' {
-            assert!(
-                i + 1 < bytes.len(),
-                "trailing ESC at end of output"
-            );
+            assert!(i + 1 < bytes.len(), "trailing ESC at end of output");
             assert_eq!(
                 bytes[i + 1],
                 '[',
@@ -333,7 +330,9 @@ fn frontmatter_card_fits_40_cols() {
 
 fn width(s: &str) -> usize {
     use unicode_width::UnicodeWidthChar;
-    s.chars().map(|c| UnicodeWidthChar::width(c).unwrap_or(0)).sum()
+    s.chars()
+        .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
+        .sum()
 }
 
 fn include_test_doc() -> &'static str {

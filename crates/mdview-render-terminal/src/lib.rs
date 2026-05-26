@@ -226,8 +226,14 @@ fn match_sub_sup_run<'a>(
         _ => return None,
     };
     let (open_kind, close_kind) = match open_tag {
-        inline_html::HtmlTag::SubOpen => (inline_html::HtmlTag::SubOpen, inline_html::HtmlTag::SubClose),
-        inline_html::HtmlTag::SupOpen => (inline_html::HtmlTag::SupOpen, inline_html::HtmlTag::SupClose),
+        inline_html::HtmlTag::SubOpen => (
+            inline_html::HtmlTag::SubOpen,
+            inline_html::HtmlTag::SubClose,
+        ),
+        inline_html::HtmlTag::SupOpen => (
+            inline_html::HtmlTag::SupOpen,
+            inline_html::HtmlTag::SupClose,
+        ),
         _ => return None,
     };
     for (j, n) in children.iter().enumerate().skip(start + 1) {

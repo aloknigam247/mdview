@@ -215,9 +215,10 @@ fn run_gui_event_loop(
         .build(&event_loop)
         .map_err(|e| anyhow::anyhow!("window build: {e}"))?;
 
-    let initial_theme_name = match config.theme.mode {
-        mdview_config::ThemeMode::Light => config.theme.light.clone(),
-        _ => config.theme.dark.clone(),
+    let initial_theme_name = if config.theme.mode.resolve_is_light() {
+        config.theme.light.clone()
+    } else {
+        config.theme.dark.clone()
     };
     #[cfg(windows)]
     {

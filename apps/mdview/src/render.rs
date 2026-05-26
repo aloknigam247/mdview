@@ -1,11 +1,11 @@
 use anyhow::Result;
 use comrak::nodes::{AstNode, NodeValue};
 use comrak::{format_html, Arena};
+#[allow(unused_imports)]
+use mdview_config::TocPosition;
 use mdview_config::{
     Action, CodemapConfig, ConfigError, KeyBinding, Keymap, ThemeConfig, ThemeMode, TocConfig,
 };
-#[allow(unused_imports)]
-use mdview_config::TocPosition;
 use mdview_core::{parse, Registry, RenderCtx, Theme};
 use std::path::{Path, PathBuf};
 
@@ -61,9 +61,10 @@ impl ResolvedMode {
 }
 
 fn resolve_mode(mode: ThemeMode) -> ResolvedMode {
-    match mode {
-        ThemeMode::Auto | ThemeMode::Dark => ResolvedMode::Dark,
-        ThemeMode::Light => ResolvedMode::Light,
+    if mode.resolve_is_light() {
+        ResolvedMode::Light
+    } else {
+        ResolvedMode::Dark
     }
 }
 
@@ -140,6 +141,7 @@ pub fn render_page_with_config_and_source(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_page_full(
     src: &str,
     title: &str,
@@ -326,11 +328,14 @@ fn build_lib_scripts(features: Features) -> String {
         s.push_str("<script defer src=\"https://cdn.plot.ly/plotly-2.35.2.min.js\"></script>\n");
     }
     if features.drawio {
-        s.push_str("<script defer src=\"https://viewer.diagrams.net/js/viewer-static.min.js\"></script>\n");
+        s.push_str(
+            "<script defer src=\"https://viewer.diagrams.net/js/viewer-static.min.js\"></script>\n",
+        );
     }
     s
 }
 
+#[allow(clippy::too_many_arguments)]
 fn wrap_page(
     body: &str,
     title: &str,
@@ -1341,7 +1346,11 @@ mod tests {
                 Some("Ctrl+T".to_string()),
                 "unknown action \"togle-theme\"",
             ),
-            ConfigError::toc("depth", Some("9".to_string()), "out of range; expected 1..=6"),
+            ConfigError::toc(
+                "depth",
+                Some("9".to_string()),
+                "out of range; expected 1..=6",
+            ),
         ];
         let html = render_page_full(
             "# Hi\n",
@@ -1408,15 +1417,13 @@ mod tests {
 
     #[test]
     fn head_includes_mermaid_when_block_present() {
-        let html =
-            render_page("```mermaid\nflowchart LR\nA-->B\n```\n", "t").expect("render");
+        let html = render_page("```mermaid\nflowchart LR\nA-->B\n```\n", "t").expect("render");
         assert!(html.contains("mermaid.min.js"), "html: {html}");
     }
 
     #[test]
     fn head_includes_plotly() {
-        let html =
-            render_page("```plotly\n{\"data\":[]}\n```\n", "t").expect("render");
+        let html = render_page("```plotly\n{\"data\":[]}\n```\n", "t").expect("render");
         assert!(html.contains("plotly-2.35.2.min.js"), "html: {html}");
     }
 
@@ -1444,8 +1451,7 @@ mod tests {
     #[test]
     fn showcase_fixture_includes_all_libs() {
         let src = std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../fixtures/showcase.md"),
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/showcase.md"),
         )
         .expect("read showcase.md");
         let html = render_page(&src, "showcase").expect("render");

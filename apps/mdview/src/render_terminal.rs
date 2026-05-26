@@ -279,7 +279,7 @@ fn render_table<'a>(node: &'a AstNode<'a>, out: &mut String) {
     out.push('\n');
     for (r, row) in rows.iter().enumerate() {
         out.push_str(MUTED);
-        out.push_str("│");
+        out.push('│');
         out.push_str(RESET);
         for (i, cell) in row.iter().enumerate() {
             let target = widths[i];
@@ -306,7 +306,7 @@ fn render_table<'a>(node: &'a AstNode<'a>, out: &mut String) {
             }
             out.push(' ');
             out.push_str(MUTED);
-            out.push_str("│");
+            out.push('│');
             out.push_str(RESET);
         }
         out.push('\n');
@@ -388,7 +388,11 @@ fn render_inline<'a>(node: &'a AstNode<'a>, out: &mut String) {
             let url = i.url.clone();
             drop(data);
             let alt = collect_text_from_children(node);
-            let display = if alt.is_empty() { url.as_str() } else { alt.as_str() };
+            let display = if alt.is_empty() {
+                url.as_str()
+            } else {
+                alt.as_str()
+            };
             out.push_str(MUTED);
             out.push_str("[image: ");
             out.push_str(display);

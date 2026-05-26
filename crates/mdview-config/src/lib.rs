@@ -12,6 +12,7 @@
 pub mod action;
 pub mod error;
 pub mod keymap;
+pub mod os_theme;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -61,6 +62,19 @@ pub enum ThemeMode {
     Auto,
     Dark,
     Light,
+}
+
+impl ThemeMode {
+    /// Resolve to a concrete light/dark choice at launch time. `Auto` queries
+    /// the OS; on detection failure or non-Windows platforms it falls back to
+    /// dark (returns `false`).
+    pub fn resolve_is_light(self) -> bool {
+        match self {
+            ThemeMode::Light => true,
+            ThemeMode::Dark => false,
+            ThemeMode::Auto => crate::os_theme::os_prefers_light().unwrap_or(false),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -522,7 +536,7 @@ pub const DEFAULT_CONFIG_TOML: &str = "# mdview configuration\n\
 # enabled = true\n\
 \n\
 [theme]\n\
-# mode:  auto (default; resolves to dark for now), light, or dark\n\
+# mode:  auto (default; follows OS), light, or dark\n\
 # light: theme preset used for the light slot. Default: catppuccin-latte.\n\
 # dark:  theme preset used for the dark slot. Default: catppuccin-mocha.\n\
 # mode  = \"auto\"\n\
