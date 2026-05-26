@@ -90,6 +90,11 @@ synthesises a `Theme` at runtime and caches it by colorscheme name.
 - **New theme** → `crates/mdview-theme/src/themes/<name>.rs`, register in
   `crates/mdview-theme/src/presets.rs`.
 - **New CLI flag** → `apps/mdview/src/cli.rs` (clap-based).
+- **New codeblock language alias** → add a match arm in
+  `canonical_lang` in `crates/mdview-ext-highlight/src/lib.rs` mapping the
+  lowercase fenced-block hint to syntect's canonical syntax name. Inspect
+  the bundled set via `SyntaxSet::find_syntax_by_name` to discover the right
+  name. Keep entries alphabetical. Add a unit test in the same file.
 - **New output surface** → new `crates/mdview-render-<name>/` consuming
   `(AstNode, RenderCtx)`; wire into `apps/mdview/src/main.rs`.
 

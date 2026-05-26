@@ -48,6 +48,11 @@ impl Highlight {
         if lang.is_empty() {
             return ss.find_syntax_plain_text();
         }
+        if let Some(name) = canonical_lang(lang) {
+            if let Some(syn) = ss.find_syntax_by_name(name) {
+                return syn;
+            }
+        }
         ss.find_syntax_by_token(lang)
             .or_else(|| ss.find_syntax_by_name(lang))
             .or_else(|| ss.find_syntax_by_extension(lang))
@@ -113,6 +118,13 @@ impl MdViewExtension for Highlight {
         }
         out.push_str("\x1b[0m");
         Some(vec![TermChunk::plain(out)])
+    }
+}
+
+fn canonical_lang(lang: &str) -> Option<&'static str> {
+    match lang.to_ascii_lowercase().as_str() {
+        "csharp" => Some("C#"),
+        _ => None,
     }
 }
 
@@ -307,4 +319,16 @@ mod tests {
     fn client_assets_empty() {
         assert!(Highlight.client_assets().is_empty());
     }
+
+    #[test]
+    fn alias_csharp_resolves() {
+        assert_eq!(Highlight::syntax_for("csharp").name, "C#");
+    }
+
+    #[test]
+    fn alias_csharp_case_insensitive() {
+        assert_eq!(Highlight::syntax_for("CSHARP").name, "C#");
+        assert_eq!(Highlight::syntax_for("csharp").name, "C#");
+    }
+
 }
