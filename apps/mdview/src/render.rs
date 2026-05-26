@@ -478,6 +478,14 @@ fn wrap_page(
   article.mdv .mdv-math, article.mdv [data-math-style="inline"] {{ display: inline-block; }}
   article.mdv pre.mdv-code {{ padding: 0; }}
   article.mdv pre.mdv-code code {{ display: block; padding: 16px; }}
+  .mdv-code .hl-line {{ display: block; }}
+  .mdv-code .hl-line--mark {{
+    background: var(--mdv-hl-line-bg, rgba(255, 213, 79, 0.12));
+    box-shadow: inset 3px 0 0 var(--mdv-accent, #ffd54f);
+    margin: 0 calc(var(--mdv-code-padding, 1em) * -1);
+    padding-left: var(--mdv-code-padding, 1em);
+    padding-right: var(--mdv-code-padding, 1em);
+  }}
   .mdv-toc {{
     background: color-mix(in srgb, var(--bg) 92%, transparent);
     border: 1px solid var(--border);

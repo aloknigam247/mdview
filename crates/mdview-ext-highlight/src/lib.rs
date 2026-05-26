@@ -4,11 +4,12 @@ mod _stubs;
 
 use comrak::nodes::{NodeCodeBlock, NodeValue};
 use once_cell::sync::Lazy;
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Theme as SyntectTheme, ThemeSet};
-use syntect::html::{ClassStyle, ClassedHTMLGenerator};
-use syntect::parsing::{SyntaxReference, SyntaxSet};
+use syntect::html::{line_tokens_to_classed_spans, ClassStyle};
+use syntect::parsing::{ParseState, ScopeStack, SyntaxReference, SyntaxSet};
 use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
 
 pub use crate::_stubs::{
@@ -59,11 +60,12 @@ impl Highlight {
             .unwrap_or_else(|| ss.find_syntax_plain_text())
     }
 
-    fn code_info(node: &AstNode) -> Option<(String, String)> {
+    fn code_info(node: &AstNode) -> Option<(String, String, BTreeSet<usize>)> {
         match &node.data.borrow().value {
             NodeValue::CodeBlock(NodeCodeBlock { info, literal, .. }) => {
                 let lang = info.split_whitespace().next().unwrap_or("").to_string();
-                Some((lang, literal.clone()))
+                let highlighted = parse_hl_lines(info);
+                Some((lang, literal.clone(), highlighted))
             }
             _ => None,
         }
@@ -76,29 +78,34 @@ impl MdViewExtension for Highlight {
     }
 
     fn render_html<'a>(&self, node: &'a AstNode<'a>, _ctx: &RenderCtx<'_>) -> Option<Html> {
-        let (lang, source) = Self::code_info(node)?;
+        let (lang, source, highlighted) = Self::code_info(node)?;
         let syntax = Self::syntax_for(&lang);
-        let mut gen =
-            ClassedHTMLGenerator::new_with_class_style(syntax, &SYNTAX_SET, ClassStyle::Spaced);
+        let mut parse_state = ParseState::new(syntax);
+        let mut scope_stack = ScopeStack::new();
         let mut inner = String::new();
-        for line in LinesWithEndings::from(&source) {
-            match gen.parse_html_for_line_which_includes_newline(line) {
-                Ok(()) => {}
-                Err(_) => {
-                    inner.push_str(&html_escape(line));
-                }
-            }
+        for (idx, line) in LinesWithEndings::from(&source).enumerate() {
+            let line_no = idx + 1;
+            let ops = parse_state
+                .parse_line(line, &SYNTAX_SET)
+                .unwrap_or_default();
+            let (html, _delta) =
+                line_tokens_to_classed_spans(line, &ops, ClassStyle::Spaced, &mut scope_stack)
+                    .unwrap_or_else(|_| (html_escape(line), 0));
+            let inline = classed_to_inline(&html);
+            let class = if highlighted.contains(&line_no) {
+                "hl-line hl-line--mark"
+            } else {
+                "hl-line"
+            };
+            let _ = write!(inner, "<span class=\"{class}\">{inline}</span>");
         }
-        inner.push_str(&gen.finalize());
-
-        let inline = classed_to_inline(&inner);
         let lang_attr = if lang.is_empty() {
             String::new()
         } else {
             format!(" data-lang=\"{}\"", html_escape(&lang))
         };
         Some(Html(format!(
-            "<pre class=\"mdv-code\"{lang_attr}><code>{inline}</code></pre>"
+            "<pre class=\"mdv-code\"{lang_attr}><code>{inner}</code></pre>"
         )))
     }
 
@@ -107,14 +114,22 @@ impl MdViewExtension for Highlight {
         node: &'a AstNode<'a>,
         ctx: &RenderCtx<'_>,
     ) -> Option<TermChunks> {
-        let (lang, source) = Self::code_info(node)?;
+        let (lang, source, highlighted) = Self::code_info(node)?;
         let syntax = Self::syntax_for(&lang);
         let theme = Self::theme_for(ctx.theme.name.as_str());
         let mut h = HighlightLines::new(syntax, theme);
         let mut out = String::new();
-        for line in LinesWithEndings::from(&source) {
+        for (idx, line) in LinesWithEndings::from(&source).enumerate() {
+            let line_no = idx + 1;
             let ranges = h.highlight_line(line, &SYNTAX_SET).ok()?;
-            out.push_str(&as_24_bit_terminal_escaped(&ranges[..], false));
+            let ansi = as_24_bit_terminal_escaped(&ranges[..], false);
+            if highlighted.contains(&line_no) {
+                out.push_str("\x1b[7m\u{258e}");
+                out.push_str(&ansi);
+                out.push_str("\x1b[27m");
+            } else {
+                out.push_str(&ansi);
+            }
         }
         out.push_str("\x1b[0m");
         Some(vec![TermChunk::plain(out)])
@@ -126,6 +141,34 @@ fn canonical_lang(lang: &str) -> Option<&'static str> {
         "csharp" => Some("C#"),
         _ => None,
     }
+}
+
+pub fn parse_hl_lines(info: &str) -> BTreeSet<usize> {
+    let mut set = BTreeSet::new();
+    let Some(after) = info.find("hl_lines=\"") else {
+        return set;
+    };
+    let rest = &info[after + "hl_lines=\"".len()..];
+    let Some(close) = rest.find('"') else {
+        return set;
+    };
+    let value = &rest[..close];
+    for token in value.split_whitespace() {
+        if let Some((a, b)) = token.split_once('-') {
+            if let (Ok(n), Ok(m)) = (a.parse::<usize>(), b.parse::<usize>()) {
+                if n >= 1 && m >= n {
+                    for i in n..=m {
+                        set.insert(i);
+                    }
+                }
+            }
+        } else if let Ok(n) = token.parse::<usize>() {
+            if n >= 1 {
+                set.insert(n);
+            }
+        }
+    }
+    set
 }
 
 fn html_escape(s: &str) -> String {
@@ -205,6 +248,48 @@ mod tests {
     use super::*;
     use comrak::{parse_document, Arena, ComrakOptions};
 
+    #[test]
+    fn parse_hl_lines_basic_range() {
+        let result = parse_hl_lines("python hl_lines=\"2 5-7\"");
+        assert_eq!(result, BTreeSet::from([2, 5, 6, 7]));
+    }
+
+    #[test]
+    fn parse_hl_lines_single_with_spaces() {
+        let result = parse_hl_lines("python hl_lines=\"  3  \"");
+        assert_eq!(result, BTreeSet::from([3]));
+    }
+
+    #[test]
+    fn parse_hl_lines_empty_value() {
+        let result = parse_hl_lines("python hl_lines=\"\"");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn parse_hl_lines_malformed_token() {
+        let result = parse_hl_lines("python hl_lines=\"abc\"");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn parse_hl_lines_invalid_range_reversed() {
+        let result = parse_hl_lines("python hl_lines=\"2-1\"");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn parse_hl_lines_no_attr() {
+        let result = parse_hl_lines("python");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn parse_hl_lines_other_attrs_ignored() {
+        let result = parse_hl_lines("python linenums=\"1\" hl_lines=\"3\" title=\"foo.py\"");
+        assert_eq!(result, BTreeSet::from([3]));
+    }
+
     fn first_code_block<'a>(root: &'a AstNode<'a>) -> Option<&'a AstNode<'a>> {
         root.children()
             .find(|child| matches!(child.data.borrow().value, NodeValue::CodeBlock(_)))
@@ -245,6 +330,21 @@ mod tests {
     #[test]
     fn name_is_highlight() {
         assert_eq!(Highlight.name(), "highlight");
+    }
+
+    #[test]
+    fn html_hl_lines_marks_correct_lines() {
+        let src = "```python hl_lines=\"2 4\"\nline1\nline2\nline3\nline4\n```\n";
+        let html = render_html_for(src, "light");
+        let marks: Vec<_> = html.match_indices("hl-line--mark").collect();
+        assert_eq!(marks.len(), 2, "expected exactly 2 marked lines: {html}");
+        let pos2 = html.find("hl-line--mark").unwrap();
+        let before2 = &html[..pos2];
+        let plain_count = before2.matches("\"hl-line\"").count();
+        assert_eq!(
+            plain_count, 1,
+            "line 1 should be plain hl-line before first mark: {html}"
+        );
     }
 
     #[test]

@@ -158,6 +158,19 @@ cargo build --workspace --release
 ./target/release/mdview --terminal fixtures/showcase.md
 ```
 
+### Highlighted lines — `hl_lines="2 5-7"`
+
+```python hl_lines="2 5-7"
+print("not highlighted")
+print("line 2 — highlighted")
+x = 1
+y = 2
+print("line 5 — highlighted")
+print("line 6 — highlighted")
+print("line 7 — highlighted")
+print("not highlighted")
+```
+
 ### Plain (no language)
 
 ```
