@@ -557,6 +557,30 @@ fn wrap_page(
   #mdv-context-menu .mdv-cm__divider {{ height: 1px; background: var(--mdv-border-subtle, var(--border));
                                          margin: 4px 0; }}
   .mdv-bionic {{ font-weight: 700; }}
+  .mdv-code {{ position: relative; }}
+  .mdv-copy {{
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--mdv-border-subtle, rgba(127, 127, 127, 0.25));
+    border-radius: 5px;
+    background: var(--mdv-code-bg, rgba(127, 127, 127, 0.08));
+    color: var(--mdv-fg, currentColor);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s ease, background 0.12s ease;
+  }}
+  .mdv-code:hover .mdv-copy,
+  .mdv-copy:focus-visible {{ opacity: 1; }}
+  .mdv-copy:hover {{ background: var(--mdv-accent-soft, rgba(127, 127, 127, 0.18)); }}
+  .mdv-copy svg {{ width: 14px; height: 14px; display: block; }}
+  .mdv-copy.mdv-copy--ok {{ color: var(--mdv-accent, #4caf50); }}
   #mdv-config-banner {{
     position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
     background: color-mix(in srgb, var(--mdv-accent-yellow, #f9e2af) 92%, transparent);
@@ -1175,6 +1199,54 @@ fn wrap_page(
       if (e.key === 'Escape' && !banner.classList.contains('mdv-config-banner--hidden')) {{
         dismiss();
       }}
+    }});
+  }})();
+</script>
+<script>
+  (function setupCopyButtons() {{
+    const clipboard = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+    const check = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    document.querySelectorAll('pre.mdv-code').forEach(pre => {{
+      if (pre.querySelector(':scope > .mdv-copy')) return;
+      const code = pre.querySelector(':scope > code');
+      if (!code) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'mdv-copy';
+      btn.setAttribute('aria-label', 'Copy code');
+      btn.innerHTML = clipboard;
+      btn.addEventListener('click', async () => {{
+        const text = code.innerText;
+        const show = (ok) => {{
+          btn.innerHTML = ok ? check : clipboard;
+          btn.classList.toggle('mdv-copy--ok', ok);
+          btn.setAttribute('aria-label', ok ? 'Copied' : 'Copy code');
+          setTimeout(() => {{
+            btn.innerHTML = clipboard;
+            btn.classList.remove('mdv-copy--ok');
+            btn.setAttribute('aria-label', 'Copy code');
+          }}, 1500);
+        }};
+        try {{
+          if (navigator.clipboard && navigator.clipboard.writeText) {{
+            await navigator.clipboard.writeText(text);
+            show(true);
+          }} else {{
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            show(ok);
+          }}
+        }} catch (_) {{
+          show(false);
+        }}
+      }});
+      pre.appendChild(btn);
     }});
   }})();
 </script>
