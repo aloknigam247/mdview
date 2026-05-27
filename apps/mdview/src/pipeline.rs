@@ -113,6 +113,7 @@ pub async fn run_tauri_child(cli: &Cli) -> Result<()> {
         &config.toc,
         &config.codemap,
     )?;
+    crate::profile::log(&format!("html_rendered ({}B)", html.len()));
     let srv = crate::server::serve_html(html).await?;
     let port = srv.port;
     eprintln!("mdview: serving on http://127.0.0.1:{port}");
@@ -214,6 +215,7 @@ fn run_gui_event_loop(
     let window = builder
         .build(&event_loop)
         .map_err(|e| anyhow::anyhow!("window build: {e}"))?;
+    crate::profile::log("window_built");
 
     let initial_theme_name = if config.theme.mode.resolve_is_light() {
         config.theme.light.clone()
@@ -253,6 +255,10 @@ fn run_gui_event_loop(
         })
         .with_ipc_handler(move |req| {
             let body = req.body().as_str();
+            if let Some(event) = body.strip_prefix("profile:") {
+                crate::profile::log(event);
+                return;
+            }
             let evt = match body {
                 "theme-light" => Some(MdvUserEvent::ThemeChanged(light_name.clone())),
                 "theme-dark" => Some(MdvUserEvent::ThemeChanged(dark_name.clone())),
@@ -270,6 +276,7 @@ fn run_gui_event_loop(
         })
         .build(&window)
         .map_err(|e| anyhow::anyhow!("webview build: {e}"))?;
+    crate::profile::log("webview_built");
 
     event_loop.run(move |event, _target, control_flow| {
         *control_flow = ControlFlow::Wait;

@@ -28,6 +28,12 @@ pub fn is_detached_child() -> bool {
     std::env::var_os(MARKER_ENV).is_some()
 }
 
+fn profile_mode() -> bool {
+    std::env::var("MDV_PROFILE")
+        .map(|v| !v.is_empty() && v != "0")
+        .unwrap_or(false)
+}
+
 #[cfg(windows)]
 pub fn daemonize() -> Result<Spawned> {
     use std::ffi::OsString;
@@ -40,6 +46,9 @@ pub fn daemonize() -> Result<Spawned> {
     };
 
     if is_detached_child() {
+        return Ok(Spawned::Child);
+    }
+    if profile_mode() {
         return Ok(Spawned::Child);
     }
 
@@ -133,6 +142,9 @@ fn push_pair(out: &mut Vec<u16>, key: &str, val: &str) {
 #[cfg(unix)]
 pub fn daemonize() -> Result<Spawned> {
     if is_detached_child() {
+        return Ok(Spawned::Child);
+    }
+    if profile_mode() {
         return Ok(Spawned::Child);
     }
 

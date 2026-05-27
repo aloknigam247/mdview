@@ -70,6 +70,7 @@ synthesises a `Theme` at runtime and caches it by colorscheme name.
 - `cd sidecar && bun build --compile ./src/index.ts --outfile ../target/release/mdview-sidecar`
 - `cd apps/mdview/webview && bun run build`                  # esbuild → dist/
 - `cd tests/e2e && bun run test:e2e`                         # Playwright
+- `$env:MDV_PROFILE=1; cargo run -p mdview -- fixtures\showcase.md` — prints launch-path timings to stderr.
 
 ## Conventions
 - Rust 2021 edition; stable toolchain; `#![deny(unsafe_code)]` unless justified.

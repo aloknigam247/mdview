@@ -11,6 +11,7 @@ mod cli;
 #[allow(unsafe_code)]
 mod daemonize;
 mod pipeline;
+mod profile;
 mod render;
 mod render_terminal;
 mod server;
@@ -22,7 +23,10 @@ mod _stubs;
 use crate::cli::{Cli, Mode};
 
 fn main() -> Result<()> {
+    profile::init();
+    profile::log("process_start");
     let args = Cli::parse();
+    profile::log("args_parsed");
 
     // No FILE and no headless mode (nvim) — print help and exit 0.
     // Running `mdview` with nothing to render is almost always a typo.

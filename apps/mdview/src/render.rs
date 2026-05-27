@@ -372,6 +372,21 @@ fn wrap_page(
 <meta charset="utf-8">
 <title>{title_esc}</title>
 <script>(function(){{try{{var s=window.sessionStorage;if(!s)return;var t=s.getItem('mdv:theme');if(t==='light'||t==='dark'){{var h=document.documentElement;h.classList.remove('theme-light','theme-dark');h.classList.add('theme-'+t);}}if(s.getItem('mdv:codemap-hidden')==='1')document.documentElement.classList.add('mdv-codemap-hidden');if(s.getItem('mdv:toc-hidden')==='1')document.documentElement.classList.add('mdv-toc-hidden');}}catch(_){{}}}})()</script>
+<script>
+(function() {{
+    try {{
+        const post = (evt) => {{
+            if (window.ipc && typeof window.ipc.postMessage === 'function') {{
+                try {{ window.ipc.postMessage('profile:' + evt); }} catch (_) {{}}
+            }}
+        }};
+        post('html_first_byte');
+        document.addEventListener('DOMContentLoaded', () => post('dom_loaded'));
+        window.addEventListener('load', () => post('window_load'));
+        window.addEventListener('load', () => requestAnimationFrame(() => post('after_paint')));
+    }} catch (_) {{}}
+}})();
+</script>
 {head_extras}<style>
 {theme_css}
   html {{ scroll-behavior: smooth; }}
