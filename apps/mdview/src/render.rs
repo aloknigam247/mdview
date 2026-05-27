@@ -205,6 +205,7 @@ pub fn render_page_full(
         }
     }
 
+    let body = add_img_lazy_attrs(body);
     let features = Features::detect(ast);
     Ok(wrap_page(
         &body,
@@ -335,6 +336,36 @@ fn build_lib_scripts(features: Features) -> String {
     s
 }
 
+fn add_img_lazy_attrs(html: String) -> String {
+    html.replace("<img ", "<img loading=\"lazy\" decoding=\"async\" ")
+}
+
+fn minify_head(html: String) -> String {
+    let Some(end) = html.find("</head>") else {
+        return html;
+    };
+    let head_end = end + "</head>".len();
+    let head = &html[..head_end];
+    let rest = &html[head_end..];
+    let mut out = String::with_capacity(html.len());
+    let mut last_blank = false;
+    for line in head.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() {
+            if !last_blank {
+                out.push('\n');
+                last_blank = true;
+            }
+            continue;
+        }
+        out.push_str(trimmed);
+        out.push('\n');
+        last_blank = false;
+    }
+    out.push_str(rest);
+    out
+}
+
 #[allow(clippy::too_many_arguments)]
 fn wrap_page(
     body: &str,
@@ -365,7 +396,7 @@ fn wrap_page(
     let toc_aside = format!(
         "<aside id=\"mdv-toc\" class=\"mdv-toc {toc_pos_class} mdv-toc--hidden\" aria-hidden=\"true\"><header><span>Contents</span><button id=\"mdv-toc-close\" type=\"button\" aria-label=\"Close\">\u{00D7}</button></header><nav id=\"mdv-toc-nav\"></nav></aside>"
     );
-    format!(
+    minify_head(format!(
         r##"<!DOCTYPE html>
 <html lang="en" class="{mode_class}">
 <head>
@@ -1478,7 +1509,7 @@ fn wrap_page(
 </body>
 </html>
 "##
-    )
+    ))
 }
 
 fn render_config_banner(errors: &[ConfigError]) -> String {
@@ -1817,5 +1848,31 @@ mod tests {
             html.contains("id=\"mdv-keymap\""),
             "expected mdv-keymap data island"
         );
+    }
+
+    #[test]
+    fn images_get_lazy_attrs() {
+        let html = render_page("![alt](https://example.com/a.png)\n", "t").expect("render");
+        assert!(
+            html.contains("loading=\"lazy\""),
+            "expected lazy attr in {html}"
+        );
+        assert!(
+            html.contains("decoding=\"async\""),
+            "expected decoding attr"
+        );
+    }
+
+    #[test]
+    fn head_minified() {
+        let html = render_page("# hi\n", "t").expect("render");
+        let head_end = html.find("</head>").unwrap();
+        let head = &html[..head_end];
+        for line in head.lines() {
+            assert!(
+                !line.starts_with("  "),
+                "head line should be stripped: {line:?}"
+            );
+        }
     }
 }
