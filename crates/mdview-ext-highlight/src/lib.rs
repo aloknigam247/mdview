@@ -91,7 +91,7 @@ impl MdViewExtension for Highlight {
             let (html, _delta) =
                 line_tokens_to_classed_spans(line, &ops, ClassStyle::Spaced, &mut scope_stack)
                     .unwrap_or_else(|_| (html_escape(line), 0));
-            let inline = classed_to_inline(&html);
+            let inline = classed_to_tokens(&html);
             let class = if highlighted.contains(&line_no) {
                 "hl-line hl-line--mark"
             } else {
@@ -186,7 +186,7 @@ fn html_escape(s: &str) -> String {
     out
 }
 
-fn classed_to_inline(classed: &str) -> String {
+fn classed_to_tokens(classed: &str) -> String {
     let mut body = String::with_capacity(classed.len());
     let mut rest = classed;
     while let Some(open) = rest.find(SPAN_OPEN) {
@@ -199,47 +199,35 @@ fn classed_to_inline(classed: &str) -> String {
         rest = &rest[end_quote + 1..];
         let Some(gt) = rest.find('>') else { break };
         rest = &rest[gt + 1..];
-        body.push_str("<span style=\"");
-        append_style_for_classes(&mut body, classes);
+        body.push_str("<span class=\"");
+        class_for_classes(&mut body, classes);
         body.push_str("\">");
     }
     body.push_str(rest);
     body
 }
 
-fn append_style_for_classes(out: &mut String, classes: &str) {
-    let mut color: Option<&str> = None;
-    let mut weight: Option<&str> = None;
-    let mut style: Option<&str> = None;
+fn class_for_classes(out: &mut String, classes: &str) {
+    let mut tok: Option<&str> = None;
     for c in classes.split_ascii_whitespace() {
         match c {
             "comment" => {
-                color = Some("#7f848e");
-                style = Some("italic");
+                tok = Some("mdv-tok-comment");
             }
-            "constant" | "numeric" => color = Some("#d19a66"),
-            "entity" | "function" | "variable" => color = Some("#61afef"),
+            "constant" | "numeric" => tok = Some("mdv-tok-constant"),
+            "entity" | "function" | "variable" => tok = Some("mdv-tok-function"),
             "keyword" | "storage" => {
-                color = Some("#c678dd");
-                weight = Some("bold");
+                tok = Some("mdv-tok-keyword");
             }
-            "string" => color = Some("#98c379"),
-            "type" | "support" => color = Some("#e5c07b"),
+            "string" => tok = Some("mdv-tok-string"),
+            "support" | "type" => tok = Some("mdv-tok-type"),
             _ => {}
         }
     }
-    let start = out.len();
-    if let Some(c) = color {
-        let _ = write!(out, "color:{c};");
-    }
-    if let Some(w) = weight {
-        let _ = write!(out, "font-weight:{w};");
-    }
-    if let Some(s) = style {
-        let _ = write!(out, "font-style:{s};");
-    }
-    if out.len() == start {
-        out.push_str("color:inherit;");
+    if let Some(t) = tok {
+        let _ = write!(out, "mdv-tok {t}");
+    } else {
+        out.push_str("mdv-tok");
     }
 }
 
@@ -348,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn html_rust_has_span_style() {
+    fn html_rust_has_token_classes() {
         let html = render_html_for("```rust\nfn main() { println!(\"hi\"); }\n```\n", "light");
         assert!(
             html.contains("<pre class=\"mdv-code\""),
@@ -356,24 +344,30 @@ mod tests {
         );
         assert!(html.contains("data-lang=\"rust\""));
         assert!(html.contains("<code>"));
-        assert!(html.contains("<span style="), "expected span style: {html}");
+        assert!(html.contains("mdv-tok"), "expected token class: {html}");
+        assert!(
+            html.contains("mdv-tok-function")
+                || html.contains("mdv-tok-type")
+                || html.contains("mdv-tok-string"),
+            "expected at least one specific token class: {html}"
+        );
     }
 
     #[test]
-    fn html_python_has_span_style() {
+    fn html_python_has_token_classes() {
         let html = render_html_for("```python\ndef f(x):\n    return x + 1\n```\n", "dark");
         assert!(html.contains("data-lang=\"python\""));
-        assert!(html.contains("<span style="));
+        assert!(html.contains("mdv-tok-keyword"));
     }
 
     #[test]
-    fn html_js_has_span_style() {
+    fn html_js_has_token_classes() {
         let html = render_html_for(
             "```javascript\nconst a = 1;\nconsole.log(a);\n```\n",
             "dracula",
         );
         assert!(html.contains("data-lang=\"javascript\""));
-        assert!(html.contains("<span style="));
+        assert!(html.contains("mdv-tok-keyword"));
     }
 
     #[test]

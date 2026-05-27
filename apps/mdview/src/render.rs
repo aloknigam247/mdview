@@ -486,6 +486,13 @@ fn wrap_page(
     padding-left: var(--mdv-code-padding, 1em);
     padding-right: var(--mdv-code-padding, 1em);
   }}
+  .mdv-code .mdv-tok            {{ color: inherit; }}
+  .mdv-code .mdv-tok-comment    {{ color: var(--mdv-muted, var(--muted)); font-style: italic; }}
+  .mdv-code .mdv-tok-constant   {{ color: var(--mdv-accent-peach, var(--accent)); }}
+  .mdv-code .mdv-tok-function   {{ color: var(--mdv-accent-blue, var(--accent)); }}
+  .mdv-code .mdv-tok-keyword    {{ color: var(--mdv-accent-mauve, var(--accent)); font-weight: bold; }}
+  .mdv-code .mdv-tok-string     {{ color: var(--mdv-accent-green, var(--accent)); }}
+  .mdv-code .mdv-tok-type       {{ color: var(--mdv-accent-yellow, var(--accent)); }}
   .mdv-toc {{
     background: color-mix(in srgb, var(--bg) 92%, transparent);
     border: 1px solid var(--border);
