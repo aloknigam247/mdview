@@ -158,6 +158,16 @@ cargo build --workspace --release
 ./target/release/mdview --terminal fixtures/showcase.md
 ```
 
+### PowerShell
+
+```powershell
+Get-Process | Where-Object { $_.CPU -gt 100 } | Select-Object Name, CPU
+$names = @("Alok", "Bob")
+foreach ($n in $names) {
+    Write-Host "Hello, $n"
+}
+```
+
 ### Highlighted lines — `hl_lines="2 5-7"`
 
 ```python hl_lines="2 5-7"

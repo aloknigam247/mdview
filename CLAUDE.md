@@ -86,6 +86,16 @@ synthesises a `Theme` at runtime and caches it by colorscheme name.
   `// TODO: replace with mdview_<sibling> after integration`.
 
 ## Where to extend
+- **Bundle a new language syntax (not in `load_defaults_newlines`)** →
+  vendor the `.sublime-syntax` file under
+  `crates/mdview-ext-highlight/assets/<Lang>.sublime-syntax`, attribute the
+  source license under `LICENSES/`, and register it in `SYNTAX_SET`'s
+  builder. See the PowerShell entry as a template.
+- **New codeblock language alias** → add a match arm in
+  `canonical_lang` in `crates/mdview-ext-highlight/src/lib.rs` mapping the
+  lowercase fenced-block hint to syntect's canonical syntax name. Inspect
+  the bundled set via `SyntaxSet::find_syntax_by_name` to discover the right
+  name. Keep entries alphabetical. Add a unit test in the same file.
 - **New extension** → new crate under `crates/mdview-ext-<name>/`, implement
   `MdViewExtension`, register in `crates/mdview-core/src/builtins.rs` (alphabetical).
 - **New theme** → `crates/mdview-theme/src/themes/<name>.rs`, register in

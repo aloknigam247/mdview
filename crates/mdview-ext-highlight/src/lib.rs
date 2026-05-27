@@ -9,14 +9,29 @@ use std::fmt::Write as _;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Theme as SyntectTheme, ThemeSet};
 use syntect::html::{line_tokens_to_classed_spans, ClassStyle};
-use syntect::parsing::{ParseState, ScopeStack, SyntaxReference, SyntaxSet};
+use syntect::parsing::{
+    syntax_definition::SyntaxDefinition, ParseState, ScopeStack, SyntaxReference, SyntaxSet,
+};
 use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
 
 pub use crate::_stubs::{
     Asset, AstNode, Html, MdViewExtension, RenderCtx, StyleSpec, TermChunk, TermChunks, Theme,
 };
 
-static SYNTAX_SET: Lazy<SyntaxSet> = Lazy::new(SyntaxSet::load_defaults_newlines);
+static SYNTAX_SET: Lazy<SyntaxSet> = Lazy::new(|| {
+    let mut builder = SyntaxSet::load_defaults_newlines().into_builder();
+    match SyntaxDefinition::load_from_str(
+        include_str!("../assets/PowerShell.sublime-syntax"),
+        true,
+        Some("PowerShell"),
+    ) {
+        Ok(syn) => builder.add(syn),
+        Err(e) => eprintln!(
+            "mdview-ext-highlight: failed to load PowerShell syntax: {e}; powershell fences will render as plain text"
+        ),
+    }
+    builder.build()
+});
 static THEME_SET: Lazy<ThemeSet> = Lazy::new(ThemeSet::load_defaults);
 
 #[derive(Debug, thiserror::Error)]
@@ -139,6 +154,7 @@ impl MdViewExtension for Highlight {
 fn canonical_lang(lang: &str) -> Option<&'static str> {
     match lang.to_ascii_lowercase().as_str() {
         "csharp" => Some("C#"),
+        "powershell" | "ps1" | "pwsh" => Some("PowerShell"),
         _ => None,
     }
 }
@@ -313,6 +329,36 @@ mod tests {
             .into_iter()
             .map(|c| c.text)
             .collect()
+    }
+
+    #[test]
+    fn alias_powershell_resolves() {
+        let syn = Highlight::syntax_for("powershell");
+        assert_eq!(syn.name, "PowerShell");
+    }
+
+    #[test]
+    fn alias_ps1_resolves() {
+        let syn = Highlight::syntax_for("ps1");
+        assert_eq!(syn.name, "PowerShell");
+    }
+
+    #[test]
+    fn alias_pwsh_resolves() {
+        let syn = Highlight::syntax_for("pwsh");
+        assert_eq!(syn.name, "PowerShell");
+    }
+
+    #[test]
+    fn html_powershell_has_token_classes() {
+        let html = render_html_for(
+            "```powershell\nGet-Process | Where-Object { $_.CPU -gt 100 }\n```\n",
+            "light",
+        );
+        assert!(
+            html.contains("mdv-tok"),
+            "expected mdv-tok class on PowerShell tokens: {html}"
+        );
     }
 
     #[test]
