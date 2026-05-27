@@ -371,6 +371,7 @@ fn wrap_page(
 <head>
 <meta charset="utf-8">
 <title>{title_esc}</title>
+<script>(function(){{try{{var s=window.sessionStorage;if(!s)return;var t=s.getItem('mdv:theme');if(t==='light'||t==='dark'){{var h=document.documentElement;h.classList.remove('theme-light','theme-dark');h.classList.add('theme-'+t);}}if(s.getItem('mdv:codemap-hidden')==='1')document.documentElement.classList.add('mdv-codemap-hidden');if(s.getItem('mdv:toc-hidden')==='1')document.documentElement.classList.add('mdv-toc-hidden');}}catch(_){{}}}})()</script>
 {head_extras}<style>
 {theme_css}
   html {{ scroll-behavior: smooth; }}
@@ -539,6 +540,8 @@ fn wrap_page(
                   backdrop-filter: blur(6px);
                   user-select: none; touch-action: none; }}
   #mdv-minimap.mdv-hidden {{ opacity: 0; pointer-events: none; }}
+  :root.mdv-codemap-hidden #mdv-minimap {{ opacity: 0; pointer-events: none; }}
+  :root.mdv-toc-hidden #mdv-toc {{ display: none; }}
   #mdv-minimap-content {{ transform-origin: top left; pointer-events: none;
                           user-select: none; position: absolute; top: 6px; left: 6px; }}
   #mdv-minimap-content article.mdv {{ margin: 0; }}
@@ -843,7 +846,12 @@ fn wrap_page(
 
       window.__mdvToggleCodemap = () => {{
         minimap.classList.toggle('mdv-hidden');
-        if (!minimap.classList.contains('mdv-hidden')) update();
+        const nowHidden = minimap.classList.contains('mdv-hidden');
+        try {{
+          if (nowHidden) window.sessionStorage.setItem('mdv:codemap-hidden', '1');
+          else window.sessionStorage.removeItem('mdv:codemap-hidden');
+        }} catch (_) {{}}
+        if (!nowHidden) update();
       }};
       window.__mdvCodemapVisible = () => !minimap.classList.contains('mdv-hidden');
 
@@ -855,8 +863,15 @@ fn wrap_page(
         }}
       }});
 
-      const docTaller = document.documentElement.scrollHeight > window.innerHeight + 100;
-      if (!docTaller) minimap.classList.add('mdv-hidden');
+      let codemapHidden = false;
+      try {{ codemapHidden = window.sessionStorage.getItem('mdv:codemap-hidden') === '1'; }} catch (_) {{}}
+      if (codemapHidden) {{
+        minimap.classList.add('mdv-hidden');
+      }} else {{
+        const docTaller = document.documentElement.scrollHeight > window.innerHeight + 100;
+        if (!docTaller) minimap.classList.add('mdv-hidden');
+      }}
+      document.documentElement.classList.remove('mdv-codemap-hidden');
     }};
     setTimeout(__mdvSetupMinimap, 500);
   }});
@@ -887,6 +902,7 @@ fn wrap_page(
       html.classList.remove('theme-light', 'theme-dark');
       const newMode = isDark ? 'light' : 'dark';
       html.classList.add('theme-' + newMode);
+      try {{ window.sessionStorage.setItem('mdv:theme', newMode); }} catch (_) {{}}
       if (window.ipc && typeof window.ipc.postMessage === 'function') {{
         try {{ window.ipc.postMessage('theme-' + newMode); }} catch (err) {{ console.warn('ipc:', err); }}
       }}
@@ -998,7 +1014,16 @@ fn wrap_page(
       enabled = !enabled;
       if (enabled) applyBionic();
       else removeBionic();
+      try {{
+        if (enabled) window.sessionStorage.setItem('mdv:bionic', '1');
+        else window.sessionStorage.removeItem('mdv:bionic');
+      }} catch (_) {{}}
     }};
+    try {{
+      if (window.sessionStorage && window.sessionStorage.getItem('mdv:bionic') === '1') {{
+        window.__mdvToggleBionic();
+      }}
+    }} catch (_) {{}}
   }})();
 </script>
 <script>
@@ -1088,7 +1113,22 @@ fn wrap_page(
       const wasHidden = aside.classList.contains('mdv-toc--hidden');
       aside.classList.toggle('mdv-toc--hidden');
       aside.setAttribute('aria-hidden', wasHidden ? 'false' : 'true');
+      try {{
+        if (wasHidden) window.sessionStorage.removeItem('mdv:toc-hidden');
+        else window.sessionStorage.setItem('mdv:toc-hidden', '1');
+      }} catch (_) {{}}
     }};
+
+    try {{
+      if (window.sessionStorage && window.sessionStorage.getItem('mdv:toc-hidden') === '1') {{
+        aside.classList.add('mdv-toc--hidden');
+        aside.setAttribute('aria-hidden', 'true');
+      }} else {{
+        aside.classList.remove('mdv-toc--hidden');
+        aside.setAttribute('aria-hidden', 'false');
+      }}
+    }} catch (_) {{}}
+    document.documentElement.classList.remove('mdv-toc-hidden');
 
     if (closeBtn) closeBtn.addEventListener('click', () => {{ window.__mdvToggleToc(); }});
     document.addEventListener('keydown', (e) => {{
