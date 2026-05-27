@@ -628,6 +628,60 @@ fn wrap_page(
   body:has(#mdv-config-banner:not(.mdv-config-banner--hidden)) {{
     padding-top: 48px;
   }}
+  .mdv-help-overlay {{
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(2px);
+  }}
+  .mdv-help-overlay.mdv-help-open {{ display: flex; }}
+  .mdv-help-panel {{
+    background: var(--mdv-bg, #fff);
+    color: var(--mdv-fg, #000);
+    border: 1px solid var(--mdv-border-subtle, rgba(127,127,127,0.25));
+    border-radius: 12px;
+    box-shadow: 0 18px 48px rgba(0,0,0,0.35);
+    min-width: 360px;
+    max-width: 540px;
+    width: 90vw;
+    max-height: 80vh;
+    padding: 20px 22px;
+    font: 14px/1.5 var(--mdv-font-body, system-ui);
+    outline: none;
+    overflow-y: auto;
+  }}
+  .mdv-help-title {{
+    margin: 0 0 12px;
+    font-size: 16px;
+    font-weight: 600;
+  }}
+  .mdv-help-row {{
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 6px 0;
+    border-top: 1px solid var(--mdv-border-subtle, rgba(127,127,127,0.12));
+  }}
+  .mdv-help-row:first-of-type {{ border-top: 0; }}
+  .mdv-help-action {{ font-weight: 500; }}
+  .mdv-help-desc {{ color: var(--mdv-muted, #888); font-size: 13px; }}
+  .mdv-help-binding {{ display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }}
+  .mdv-help-key {{
+    background: var(--mdv-code-bg, rgba(127,127,127,0.12));
+    border: 1px solid var(--mdv-border-subtle, rgba(127,127,127,0.25));
+    border-radius: 5px;
+    padding: 1px 7px;
+    font-family: var(--mdv-font-mono, ui-monospace, monospace);
+    font-size: 12px;
+  }}
+  .mdv-help-plus {{ color: var(--mdv-muted, #888); font-size: 12px; }}
+  .mdv-help-unbound {{ color: var(--mdv-muted, #888); }}
+  .mdv-help-footer {{ margin-top: 14px; font-size: 12px; color: var(--mdv-muted, #888); }}
 </style>
 </head>
 <body{body_style}>
@@ -1262,6 +1316,100 @@ fn wrap_page(
         }}
       }});
       pre.appendChild(btn);
+    }});
+  }})();
+</script>
+<script>
+  (function setupHelp() {{
+    if (document.getElementById('mdv-help-overlay')) return;
+    const ACTIONS = [
+      {{ name: 'quit',           desc: 'Close the mdview window' }},
+      {{ name: 'toggle-bionic',  desc: 'Toggle bionic-reading transform' }},
+      {{ name: 'toggle-codemap', desc: 'Show / hide the right-edge minimap' }},
+      {{ name: 'toggle-theme',   desc: 'Flip between light and dark themes' }},
+      {{ name: 'toggle-toc',     desc: 'Show / hide the floating table of contents' }},
+    ];
+    function formatBinding(b) {{
+      if (!b) return null;
+      const parts = [];
+      if (b.ctrl)  parts.push('Ctrl');
+      if (b.shift) parts.push('Shift');
+      if (b.alt)   parts.push('Alt');
+      if (b.super) parts.push('Super');
+      let k = b.key || '';
+      if (b.kind === 'char') k = k.length === 1 ? k.toUpperCase() : k;
+      if (k === ' ') k = 'Space';
+      parts.push(k);
+      return parts.join('+');
+    }}
+    function renderBinding(b) {{
+      if (!b) return '<span class="mdv-help-unbound">—</span>';
+      const formatted = formatBinding(b);
+      if (!formatted) return '<span class="mdv-help-unbound">—</span>';
+      const parts = formatted.split('+');
+      return '<span class="mdv-help-binding">' + parts.map((p, i) =>
+        (i > 0 ? '<span class="mdv-help-plus">+</span>' : '') +
+        '<kbd class="mdv-help-key">' + p + '</kbd>'
+      ).join('') + '</span>';
+    }}
+    function buildPanel() {{
+      const overlay = document.createElement('div');
+      overlay.id = 'mdv-help-overlay';
+      overlay.className = 'mdv-help-overlay';
+      const panel = document.createElement('div');
+      panel.className = 'mdv-help-panel';
+      panel.setAttribute('role', 'dialog');
+      panel.setAttribute('aria-modal', 'true');
+      panel.setAttribute('aria-label', 'Keyboard shortcuts');
+      panel.setAttribute('tabindex', '-1');
+      const title = document.createElement('h2');
+      title.className = 'mdv-help-title';
+      title.textContent = 'Keyboard shortcuts';
+      panel.appendChild(title);
+      const km = (window.__mdv_config && window.__mdv_config.keymap) || {{}};
+      for (const action of ACTIONS) {{
+        const row = document.createElement('div');
+        row.className = 'mdv-help-row';
+        const left = document.createElement('span');
+        left.innerHTML = '<span class="mdv-help-action">' + action.name + '</span> <span class="mdv-help-desc">' + action.desc + '</span>';
+        const right = document.createElement('span');
+        right.innerHTML = renderBinding(km[action.name] || null);
+        row.appendChild(left);
+        row.appendChild(right);
+        panel.appendChild(row);
+      }}
+      const footer = document.createElement('p');
+      footer.className = 'mdv-help-footer';
+      footer.innerHTML = '<kbd class="mdv-help-key">?</kbd> toggles this panel · <kbd class="mdv-help-key">Esc</kbd> closes it';
+      panel.appendChild(footer);
+      overlay.appendChild(panel);
+      return overlay;
+    }}
+    let lastFocus = null;
+    const overlay = buildPanel();
+    document.body.appendChild(overlay);
+    const panel = overlay.querySelector('.mdv-help-panel');
+    function open() {{
+      lastFocus = document.activeElement;
+      overlay.classList.add('mdv-help-open');
+      panel.focus();
+    }}
+    function close() {{
+      overlay.classList.remove('mdv-help-open');
+      if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
+    }}
+    function isOpen() {{ return overlay.classList.contains('mdv-help-open'); }}
+    overlay.addEventListener('click', (e) => {{ if (e.target === overlay) close(); }});
+    document.addEventListener('keydown', (e) => {{
+      const tag = (document.activeElement && document.activeElement.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey) {{
+        e.preventDefault();
+        isOpen() ? close() : open();
+      }} else if (e.key === 'Escape' && isOpen()) {{
+        e.preventDefault();
+        close();
+      }}
     }});
   }})();
 </script>
