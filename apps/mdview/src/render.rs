@@ -940,7 +940,7 @@ fn wrap_page(
 <script>
   (function setupBionic() {{
     let enabled = false;
-    const SKIP_SELECTORS = 'code, pre, script, style, h1, h2, h3, h4, h5, h6, #mdv-minimap, #mdv-toc, .mdview-frontmatter, [data-math-style], .katex';
+    const SKIP_SELECTORS = 'a, code, em, kbd, mark, pre, strong, sub, sup, [data-math-style], .katex';
 
     function shouldSkip(el) {{
       while (el && el.nodeType === 1) {{
@@ -971,12 +971,19 @@ fn wrap_page(
     }}
 
     function applyBionic() {{
-      const walker = document.createTreeWalker(
-        document.body, NodeFilter.SHOW_TEXT,
-        {{ acceptNode: function (n) {{ return n.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT; }} }}
-      );
+      const roots = document.querySelectorAll('article.mdv p, article p');
       const nodes = [];
-      let n; while ((n = walker.nextNode())) nodes.push(n);
+      roots.forEach(function (p) {{
+        const walker = document.createTreeWalker(
+          p, NodeFilter.SHOW_TEXT,
+          {{ acceptNode: function (n) {{
+            if (!n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+            if (shouldSkip(n.parentElement)) return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT;
+          }} }}
+        );
+        let m; while ((m = walker.nextNode())) nodes.push(m);
+      }});
       nodes.forEach(transformTextNode);
     }}
 
