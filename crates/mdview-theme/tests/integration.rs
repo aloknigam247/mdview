@@ -10,6 +10,7 @@ fn all_presets_have_required_keys() {
         "bg",
         "border.subtle",
         "code.bg",
+        "code.hl-bg",
         "fg",
         "link",
         "muted",
@@ -41,6 +42,14 @@ fn all_presets_have_required_keys() {
         }
         assert!(t.radii.sm > 0 && t.radii.md > 0 && t.radii.lg > 0);
     }
+}
+
+#[test]
+fn code_hl_bg_values_are_correct() {
+    let mocha = find("catppuccin-mocha").unwrap();
+    assert_eq!(mocha.colors.get("code.hl-bg").unwrap(), "#45475a");
+    let latte = find("catppuccin-latte").unwrap();
+    assert_eq!(latte.colors.get("code.hl-bg").unwrap(), "#bcc0cc");
 }
 
 #[test]

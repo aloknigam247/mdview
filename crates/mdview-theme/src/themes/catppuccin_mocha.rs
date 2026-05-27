@@ -18,6 +18,7 @@ pub fn get() -> &'static Theme {
             bg: "#1e1e2e",
             border_subtle: "#11111b",
             code_bg: "#313244",
+            code_hl_bg: "#45475a",
             code_inline_fg: "#f38ba8",
             fg: "#cdd6f4",
             heading: [

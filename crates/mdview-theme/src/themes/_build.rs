@@ -13,6 +13,7 @@ pub(crate) struct Palette {
     pub bg: &'static str,
     pub border_subtle: &'static str,
     pub code_bg: &'static str,
+    pub code_hl_bg: &'static str,
     pub code_inline_fg: &'static str,
     pub fg: &'static str,
     pub heading: [&'static str; 6],
@@ -34,6 +35,7 @@ pub(crate) fn build(p: Palette) -> Theme {
     colors.insert("bg".into(), p.bg.into());
     colors.insert("border.subtle".into(), p.border_subtle.into());
     colors.insert("code.bg".into(), p.code_bg.into());
+    colors.insert("code.hl-bg".into(), p.code_hl_bg.into());
     colors.insert("fg".into(), p.fg.into());
     colors.insert("frontmatter.card.bg".into(), p.code_bg.into());
     colors.insert("frontmatter.card.border".into(), p.border_subtle.into());

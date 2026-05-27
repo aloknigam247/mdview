@@ -496,8 +496,8 @@ fn wrap_page(
   article.mdv pre.mdv-code code {{ display: block; padding: 16px; }}
   .mdv-code .hl-line {{ display: block; }}
   .mdv-code .hl-line--mark {{
-    background: var(--mdv-hl-line-bg, rgba(255, 213, 79, 0.12));
-    box-shadow: inset 3px 0 0 var(--mdv-accent, #ffd54f);
+    background: var(--mdv-code-hl-bg, rgba(255, 213, 79, 0.12));
+    box-shadow: inset 3px 0 0 var(--mdv-accent-mauve, var(--mdv-accent, #cba6f7));
     margin: 0 calc(var(--mdv-code-padding, 1em) * -1);
     padding-left: var(--mdv-code-padding, 1em);
     padding-right: var(--mdv-code-padding, 1em);
