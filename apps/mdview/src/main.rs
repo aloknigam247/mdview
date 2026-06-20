@@ -66,10 +66,6 @@ fn validate_file(file: &std::path::Path) -> std::result::Result<(), i32> {
         Ok(_) => Ok(()),
         Err(e) if e.kind() == ErrorKind::NotFound => {
             let _ = writeln!(err, "mdview: file not found: {}", file.display());
-            let _ = writeln!(
-                err,
-                "hint: check the path is correct, or pipe stdin via a shell redirect."
-            );
             Err(2)
         }
         Err(e) if e.kind() == ErrorKind::PermissionDenied => {
