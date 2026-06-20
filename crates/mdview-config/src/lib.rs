@@ -594,4 +594,3 @@ pub const DEFAULT_CONFIG_TOML: &str = "# mdview configuration\n\
 #   toggle-toc      \u{2014} show / hide the floating table of contents\n\
 #\n\
 # quit = \"Ctrl+Q\"\n";
-
