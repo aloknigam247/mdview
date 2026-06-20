@@ -44,11 +44,33 @@ fn main() -> Result<()> {
         }
     }
 
+    // Fatal config errors (e.g. `toc.levels = 7`) abort before any rendering
+    // surface is opened. Non-fatal errors are still allowed to surface later
+    // via the in-page banner.
+    if let Err(code) = check_fatal_config() {
+        std::process::exit(code);
+    }
+
     match args.mode() {
         Mode::Terminal => pipeline::run_terminal(&args),
         Mode::Nvim => runtime()?.block_on(pipeline::run_nvim(&args)),
         Mode::Tauri => run_tauri(&args),
     }
+}
+
+fn check_fatal_config() -> std::result::Result<(), i32> {
+    use std::io::Write;
+    let loaded = mdview_config::Config::load_full();
+    let fatal: Vec<&mdview_config::ConfigError> =
+        loaded.errors.iter().filter(|e| e.fatal).collect();
+    if fatal.is_empty() {
+        return Ok(());
+    }
+    let mut err = std::io::stderr();
+    for e in fatal {
+        let _ = writeln!(err, "mdview: config error: {e}");
+    }
+    Err(2)
 }
 
 fn validate_file(file: &std::path::Path) -> std::result::Result<(), i32> {

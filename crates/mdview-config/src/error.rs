@@ -35,6 +35,10 @@ pub struct ConfigError {
     pub key: Option<String>,
     pub raw_value: Option<String>,
     pub message: String,
+    /// When true, the binary should refuse to start (non-zero exit, no window)
+    /// instead of degrading to defaults. Used for keys whose intent is
+    /// unambiguous and where silent fallback would mislead the user.
+    pub fatal: bool,
 }
 
 impl ConfigError {
@@ -45,6 +49,7 @@ impl ConfigError {
             key,
             raw_value: None,
             message: message.into(),
+            fatal: false,
         }
     }
 
@@ -58,6 +63,7 @@ impl ConfigError {
             key: Some(format!("keymap[{}]", action.into())),
             raw_value,
             message: message.into(),
+            fatal: false,
         }
     }
 
@@ -67,6 +73,19 @@ impl ConfigError {
             key: Some(format!("[toc] {field}")),
             raw_value,
             message: message.into(),
+            fatal: false,
+        }
+    }
+
+    /// Same as `toc` but marks the error as fatal: the binary must refuse to
+    /// start instead of falling back to defaults.
+    pub fn toc_fatal(field: &str, raw_value: Option<String>, message: impl Into<String>) -> Self {
+        ConfigError {
+            source: ConfigErrorSource::Toc,
+            key: Some(format!("[toc] {field}")),
+            raw_value,
+            message: message.into(),
+            fatal: true,
         }
     }
 
@@ -76,6 +95,7 @@ impl ConfigError {
             key: Some(format!("[code] {field}")),
             raw_value,
             message: message.into(),
+            fatal: false,
         }
     }
 
@@ -85,6 +105,7 @@ impl ConfigError {
             key: Some(format!("[codemap] {field}")),
             raw_value,
             message: message.into(),
+            fatal: false,
         }
     }
 
@@ -94,6 +115,7 @@ impl ConfigError {
             key: Some(format!("[theme] {field}")),
             raw_value,
             message: message.into(),
+            fatal: false,
         }
     }
 }
