@@ -75,6 +75,8 @@ synthesises a `Theme` at runtime and caches it by colorscheme name.
 ## Conventions
 - Rust 2021 edition; stable toolchain; `#![deny(unsafe_code)]` unless justified.
 - `cargo fmt` + `cargo clippy -- -D warnings` must pass.
+- After implementing a feature and all tests pass, always run
+  `cargo build --release -p mdview` so the release binary stays current.
 - Conventional-commit messages (`feat(core): …`).
 - Alphabetical ordering for new items; never reorder existing entries.
 - No comments unless the *why* is non-obvious.
@@ -121,14 +123,16 @@ synthesises a `Theme` at runtime and caches it by colorscheme name.
 
 User configuration lives at `$XDG_CONFIG_HOME/mdview/config.toml` (with
 `$HOME/.config/mdview/config.toml` as the fallback; on Windows `%USERPROFILE%`
-substitutes for `$HOME`). On first run mdview writes a fully-commented template;
-failures to read or write are non-fatal.
+substitutes for `$HOME`). If the file is not present, defaults are used silently.
+The config is never auto-created.
 
 **Bindings are opt-in — there are no built-in defaults. If an action is not
 listed in the user's config, it has no binding.**
 
 ### Sections
 
+- `[code]` — `tab_width` (integer 1..=8; default 4). Controls how tab characters
+  render in code blocks on both GUI (CSS `tab-size`) and terminal (expanded to spaces).
 - `[toc]` — `position` (one of `floating-right`, `floating-left`, `floating-center`,
   `fixed-right`, `fixed-left`, `inline`; default `floating-right`), `depth` (1..=6; default 3).
 - `[codemap]` — `enabled` (bool; default `true`).
