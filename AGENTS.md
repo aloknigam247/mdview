@@ -1,4 +1,4 @@
-# CLAUDE.md — mdview
+# AGENTS.md — mdview
 
 ## Project
 `mdview` is a lightweight, extensible markdown renderer built in **Rust** (core,
