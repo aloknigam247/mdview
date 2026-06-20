@@ -19,6 +19,10 @@ use crate::image::{
 
 const MDV_MISSING_SENTINEL: &str = "mdv-missing://";
 
+/// Fluent System Icons (Filled, 24px) used for GFM task list items.
+const FLUENT_CHECKMARK_CIRCLE_SVG: &str = r#"<svg class="mdv-task-icon mdv-task-checked" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2ZM16.2929 8.29289L10.5 14.0858L7.70711 11.2929C7.31658 10.9024 6.68342 10.9024 6.29289 11.2929C5.90237 11.6834 5.90237 12.3166 6.29289 12.7071L9.79289 16.2071C10.1834 16.5976 10.8166 16.5976 11.2071 16.2071L17.7071 9.70711C18.0976 9.31658 18.0976 8.68342 17.7071 8.29289C17.3166 7.90237 16.6834 7.90237 16.2929 8.29289Z" fill="currentColor"/></svg>"#;
+const FLUENT_CIRCLE_SVG: &str = r#"<svg class="mdv-task-icon mdv-task-unchecked" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2Z" fill="currentColor"/></svg>"#;
+
 const LIVE_RELOAD_SCRIPT: &str = r#"<script>
 (function () {
   try {
@@ -140,6 +144,7 @@ fn render_body<'a>(
             out.push_str(&fig);
         } else {
             let raw = comrak_serialize(child, opts);
+            let raw = swap_task_checkboxes(&raw);
             out.push_str(&swap_missing_sentinels(&raw));
         }
     }
@@ -181,6 +186,43 @@ fn standalone_image_figure<'a>(node: &'a AstNode<'a>) -> Option<String> {
         return Some(render_placeholder_html(label, None));
     }
     Some(render_image_html(&link.url, &alt, &link.title))
+}
+
+/// Replace comrak's default GFM task-list `<input type="checkbox" ...>` markers
+/// with inline Fluent System Icons (CheckmarkCircle for checked, Circle for
+/// unchecked). Scope: only `<input type="checkbox" ...>` markers — bullets and
+/// other inputs are untouched.
+fn swap_task_checkboxes(html: &str) -> String {
+    if !html.contains("type=\"checkbox\"") {
+        return html.to_string();
+    }
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+    while let Some(idx) = rest.find("<input ") {
+        out.push_str(&rest[..idx]);
+        let after = &rest[idx..];
+        let end = match after.find('>') {
+            Some(e) => e + 1,
+            None => {
+                out.push_str(after);
+                rest = "";
+                break;
+            }
+        };
+        let tag = &after[..end];
+        if tag.contains("type=\"checkbox\"") {
+            if tag.contains("checked") {
+                out.push_str(FLUENT_CHECKMARK_CIRCLE_SVG);
+            } else {
+                out.push_str(FLUENT_CIRCLE_SVG);
+            }
+        } else {
+            out.push_str(tag);
+        }
+        rest = &after[end..];
+    }
+    out.push_str(rest);
+    out
 }
 
 fn swap_missing_sentinels(html: &str) -> String {
@@ -311,5 +353,8 @@ body.mdv{font-family:var(--mdv-font-body);line-height:1.7;font-size:16px;padding
 .mdv-doc img{max-width:100%;height:auto;border-radius:var(--mdv-radius-md);}
 .mdv-img-missing{color:var(--mdv-muted);font-style:italic;}
 .mdv-doc .mdv-card{background:var(--mdv-bg);border:1px solid var(--mdv-border);border-radius:var(--mdv-radius-md);padding:1rem 1.25rem;box-shadow:0 1px 2px rgba(16,24,40,0.04);}
+.mdv-doc .mdv-task-icon{display:inline-block;vertical-align:-0.15em;margin-right:0.35em;width:1em;height:1em;}
+.mdv-doc .mdv-task-checked{color:var(--mdv-accent);}
+.mdv-doc .mdv-task-unchecked{color:var(--mdv-muted);}
 "#
 }
