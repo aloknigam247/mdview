@@ -75,6 +75,8 @@ synthesises a `Theme` at runtime and caches it by colorscheme name.
 ## Conventions
 - Rust 2021 edition; stable toolchain; `#![deny(unsafe_code)]` unless justified.
 - `cargo fmt` + `cargo clippy -- -D warnings` must pass.
+- After implementing a feature and all tests pass, always run
+  `cargo build --release -p mdview` so the release binary stays current.
 - Conventional-commit messages (`feat(core): …`).
 - Alphabetical ordering for new items; never reorder existing entries.
 - No comments unless the *why* is non-obvious.
