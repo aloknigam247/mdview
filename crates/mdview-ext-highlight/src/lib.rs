@@ -249,7 +249,7 @@ fn balanced_line_html(classed: &str) -> String {
             if let Some(pos) = remaining.find("</span>") {
                 // Check if this close is before any open
                 let next_open = remaining.find("<span ");
-                if next_open.map_or(true, |o| pos < o) {
+                if next_open.is_none_or(|o| pos < o) {
                     result.push_str(&remaining[..pos]);
                     remaining = &remaining[pos + 7..];
                     removed += 1;
