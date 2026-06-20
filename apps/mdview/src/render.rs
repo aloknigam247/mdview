@@ -171,6 +171,7 @@ pub fn render_page_full(
     let theme = Theme::default();
     let mut ctx = RenderCtx::new(&theme);
     ctx.source_dir = source_dir.map(|p| p.to_path_buf());
+    ctx.tab_width = code.tab_width;
 
     let mut opts = comrak::ComrakOptions::default();
     opts.extension.strikethrough = true;
@@ -1894,11 +1895,12 @@ mod tests {
         let html = render_page("```\n\tindented\n```\n", "t").expect("render");
         assert!(
             html.contains("tab-size: 4"),
-            "expected tab-size CSS property"
+            "expected tab-size CSS property as fallback"
         );
+        // Tabs are expanded to spaces by the highlight extension
         assert!(
-            html.contains("\tindented") || html.contains("&#9;indented"),
-            "expected tab character preserved in code block HTML"
+            html.contains("    indented"),
+            "expected tab expanded to 4 spaces in code block HTML"
         );
     }
 }

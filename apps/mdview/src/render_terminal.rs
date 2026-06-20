@@ -31,6 +31,7 @@ pub fn render_ansi_with_source(
     let theme = Theme::default();
     let mut ctx = RenderCtx::new(&theme);
     ctx.source_dir = source_dir.map(|p| p.to_path_buf());
+    ctx.tab_width = tab_width;
 
     let mut out = String::new();
     for ext in registry.terminal_renderers() {

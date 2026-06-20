@@ -92,8 +92,10 @@ impl MdViewExtension for Highlight {
         "highlight"
     }
 
-    fn render_html<'a>(&self, node: &'a AstNode<'a>, _ctx: &RenderCtx<'_>) -> Option<Html> {
+    fn render_html<'a>(&self, node: &'a AstNode<'a>, ctx: &RenderCtx<'_>) -> Option<Html> {
         let (lang, source, highlighted) = Self::code_info(node)?;
+        let tab_spaces = " ".repeat(ctx.tab_width as usize);
+        let source = source.replace('\t', &tab_spaces);
         let syntax = Self::syntax_for(&lang);
         let mut parse_state = ParseState::new(syntax);
         let mut scope_stack = ScopeStack::new();
@@ -106,7 +108,7 @@ impl MdViewExtension for Highlight {
             let (html, _delta) =
                 line_tokens_to_classed_spans(line, &ops, ClassStyle::Spaced, &mut scope_stack)
                     .unwrap_or_else(|_| (html_escape(line), 0));
-            let inline = classed_to_tokens(&html);
+            let inline = balanced_line_html(&html);
             let class = if highlighted.contains(&line_no) {
                 "hl-line hl-line--mark"
             } else {
@@ -221,6 +223,54 @@ fn classed_to_tokens(classed: &str) -> String {
     }
     body.push_str(rest);
     body
+}
+
+/// Convert syntect classed HTML to mdv-tok spans, ensuring the result is
+/// self-contained (no orphaned `</span>` from previous-line scope carryover).
+fn balanced_line_html(classed: &str) -> String {
+    let converted = classed_to_tokens(classed);
+    // Strip leading </span> tags (scope closers carried from previous line)
+    let mut s = converted.as_str();
+    while s.starts_with("</span>") {
+        s = &s[7..];
+    }
+    // Also handle cases where text appears between orphaned close tags
+    // e.g. "</span>text</span><span...>" — the close after text is also orphaned
+    let opens = s.matches("<span ").count() + s.matches("<span>").count();
+    let closes = s.matches("</span>").count();
+    if closes > opens {
+        // There are still orphaned closes after stripping leading ones.
+        // Remove them by rebuilding the string without excess closes.
+        let excess = closes - opens;
+        let mut result = String::with_capacity(s.len());
+        let mut remaining = s;
+        let mut removed = 0;
+        while removed < excess {
+            if let Some(pos) = remaining.find("</span>") {
+                // Check if this close is before any open
+                let next_open = remaining.find("<span ");
+                if next_open.map_or(true, |o| pos < o) {
+                    result.push_str(&remaining[..pos]);
+                    remaining = &remaining[pos + 7..];
+                    removed += 1;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        result.push_str(remaining);
+        result
+    } else if opens > closes {
+        let mut result = s.to_string();
+        for _ in 0..(opens - closes) {
+            result.push_str("</span>");
+        }
+        result
+    } else {
+        s.to_string()
+    }
 }
 
 fn class_for_classes(out: &mut String, classes: &str) {
@@ -482,11 +532,32 @@ mod tests {
     }
 
     #[test]
-    fn tabs_preserved_in_html_output() {
+    fn tabs_expanded_in_html_output() {
         let html = render_html_for("```rust\n\tlet x = 1;\n```\n", "dark");
         assert!(
-            html.contains('\t'),
-            "expected tab character preserved in HTML, got: {html}"
+            !html.contains('\t'),
+            "tabs should be expanded to spaces: {html}"
+        );
+        // 4 spaces (default tab_width) should appear in the output
+        assert!(
+            html.contains("    "),
+            "tab should expand to 4 spaces (default): {html}"
+        );
+    }
+
+    #[test]
+    fn hl_line_spans_are_self_contained() {
+        let src = "```rust\nfn main() {\n\tlet x = 1;\n\tif x > 0 {\n\t\tprintln!(\"hi\");\n\t}\n}\n```\n";
+        let html = render_html_for(src, "dark");
+        // Tabs should be expanded to spaces, so no raw tabs in output
+        assert!(
+            !html.contains('\t'),
+            "tabs should be expanded to spaces in HTML output: {html}"
+        );
+        // The closing brace should be on the same hl-line as its indentation
+        assert!(
+            !html.contains("hl-line\">    </span>"),
+            "closing brace should not be separated from its indentation: {html}"
         );
     }
 }

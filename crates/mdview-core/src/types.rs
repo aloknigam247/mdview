@@ -129,6 +129,7 @@ pub struct RenderCtx<'a> {
     pub asset_resolver: fn(&str) -> String,
     pub frontmatter: Option<serde_json::Value>,
     pub source_dir: Option<std::path::PathBuf>,
+    pub tab_width: u8,
     pub terminal_caps: Option<TerminalCaps>,
     pub theme: &'a Theme,
 }
@@ -139,6 +140,7 @@ impl<'a> RenderCtx<'a> {
             asset_resolver: default_asset_resolver,
             frontmatter: None,
             source_dir: None,
+            tab_width: 4,
             terminal_caps: None,
             theme,
         }
