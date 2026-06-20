@@ -396,12 +396,12 @@ fn wrap_page(
     let head_extras = build_head_extras(features);
     let lib_scripts = build_lib_scripts(features);
     let toc_pos = toc.position.as_kebab();
-    let toc_depth = toc.depth;
+    let toc_levels = toc.levels;
     let codemap_enabled = if codemap.enabled { "true" } else { "false" };
     let tab_width = code.tab_width;
     let toc_pos_class = format!("mdv-toc--{toc_pos}");
     let toc_aside = format!(
-        "<aside id=\"mdv-toc\" class=\"mdv-toc {toc_pos_class} mdv-toc--hidden\" aria-hidden=\"true\"><header><span>Contents</span><button id=\"mdv-toc-close\" type=\"button\" aria-label=\"Close\">\u{00D7}</button></header><nav id=\"mdv-toc-nav\"></nav></aside>"
+        "<aside id=\"mdv-toc\" class=\"mdv-toc {toc_pos_class} mdv-toc--hidden\" aria-hidden=\"true\"><header><span class=\"mdv-toc__title\">Table of Content</span><button id=\"mdv-toc-close\" type=\"button\" aria-label=\"Close\">\u{00D7}</button></header><nav id=\"mdv-toc-nav\"></nav></aside>"
     );
     minify_head(format!(
         r##"<!DOCTYPE html>
@@ -561,6 +561,7 @@ fn wrap_page(
   .mdv-toc--hidden {{ display: none; }}
   .mdv-toc header {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }}
   .mdv-toc header span {{ font-weight: 600; }}
+  .mdv-toc__title {{ color: #cba6f7; }}
   .mdv-toc header button {{ background: transparent; border: 0; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1; }}
   .mdv-toc header button:hover {{ color: var(--fg); }}
   .mdv-toc nav ul {{ list-style: none; padding-left: 0; margin: 0; }}
@@ -963,7 +964,7 @@ fn wrap_page(
     }};
     window.__mdv_config = Object.assign(window.__mdv_config || {{}}, {{
       keymap: bindings,
-      toc: {{ position: "{toc_pos}", depth: {toc_depth} }},
+      toc: {{ position: "{toc_pos}", levels: {toc_levels} }},
       codemap: {{ enabled: {codemap_enabled} }}
     }});
     document.addEventListener('keydown', (e) => {{
@@ -1089,8 +1090,8 @@ fn wrap_page(
     const article = document.querySelector('article.mdv');
     if (!article || !nav) {{ aside.remove(); return; }}
 
-    const cfg = (window.__mdv_config && window.__mdv_config.toc) || {{ position: "floating-right", depth: 3 }};
-    const maxDepth = Math.max(1, Math.min(6, cfg.depth || 3));
+    const cfg = (window.__mdv_config && window.__mdv_config.toc) || {{ position: "floating-right", levels: 3 }};
+    const maxLevel = Math.max(1, Math.min(6, cfg.levels || 3));
 
     function slugify(text) {{
       return text.toLowerCase()
@@ -1100,9 +1101,18 @@ fn wrap_page(
     }}
 
     const headings = Array.from(article.querySelectorAll('h1, h2, h3, h4, h5, h6'))
-      .filter(h => parseInt(h.tagName[1], 10) <= maxDepth);
+      .filter(h => parseInt(h.tagName[1], 10) <= maxLevel);
 
     if (headings.length < 2) {{ aside.remove(); return; }}
+
+    // Indent is computed relative to the shallowest heading actually present
+    // in the document. A doc whose top-level heading is H2 should not waste
+    // a leading indent step on the missing H1.
+    let shallowest = 6;
+    for (const h of headings) {{
+      const l = parseInt(h.tagName[1], 10);
+      if (l < shallowest) shallowest = l;
+    }}
 
     const slugCounts = {{}};
     headings.forEach(h => {{
@@ -1115,20 +1125,17 @@ fn wrap_page(
       }}
     }});
 
+    const INDENT_PX = 16;
     const root = document.createElement('ul');
-    let stack = [{{ level: 0, ul: root }}];
     headings.forEach(h => {{
       const lvl = parseInt(h.tagName[1], 10);
-      while (stack.length > 1 && stack[stack.length - 1].level >= lvl) stack.pop();
-      let parent = stack[stack.length - 1].ul;
-      while (stack[stack.length - 1].level < lvl - 1) {{
-        const innerUl = document.createElement('ul');
-        const lastLi = parent.lastElementChild;
-        if (lastLi) lastLi.appendChild(innerUl); else parent.appendChild(innerUl);
-        stack.push({{ level: stack[stack.length - 1].level + 1, ul: innerUl }});
-        parent = innerUl;
-      }}
+      const indent = lvl - shallowest;
       const li = document.createElement('li');
+      li.dataset.tocLevel = String(lvl);
+      li.dataset.tocIndent = String(indent);
+      if (indent > 0) {{
+        li.style.paddingLeft = (indent * INDENT_PX) + 'px';
+      }}
       const a = document.createElement('a');
       a.href = '#' + h.id;
       a.dataset.slug = h.id;
@@ -1140,10 +1147,7 @@ fn wrap_page(
         history.replaceState(null, '', '#' + h.id);
       }});
       li.appendChild(a);
-      parent.appendChild(li);
-      if (stack[stack.length - 1].level < lvl) {{
-        stack.push({{ level: lvl, ul: parent }});
-      }}
+      root.appendChild(li);
     }});
     nav.appendChild(root);
 
@@ -1686,8 +1690,8 @@ mod tests {
                 Some("Ctrl+T".to_string()),
                 "unknown action \"togle-theme\"",
             ),
-            ConfigError::toc(
-                "depth",
+            ConfigError::toc_fatal(
+                "levels",
                 Some("9".to_string()),
                 "out of range; expected 1..=6",
             ),
@@ -1714,8 +1718,8 @@ mod tests {
 
     #[test]
     fn single_error_omits_show_all_button() {
-        let errors = vec![ConfigError::toc(
-            "depth",
+        let errors = vec![ConfigError::toc_fatal(
+            "levels",
             Some("9".to_string()),
             "out of range; expected 1..=6",
         )];
@@ -1852,6 +1856,91 @@ mod tests {
         assert!(
             html.contains("mdv-toc--floating-right"),
             "expected default floating-right position class"
+        );
+    }
+
+    #[test]
+    fn toc_heading_text_is_table_of_content_singular() {
+        let html = render_page("# Hi\n\n## A\n\n## B\n", "t").expect("render");
+        assert!(
+            html.contains(">Table of Content<"),
+            "expected literal 'Table of Content' heading"
+        );
+        // Old text must be gone.
+        assert!(
+            !html.contains(">Contents<"),
+            "TOC heading must no longer say 'Contents'"
+        );
+        // Singular: no trailing 's'.
+        assert!(
+            !html.contains("Table of Contents"),
+            "TOC heading must be singular ('Content', not 'Contents')"
+        );
+    }
+
+    #[test]
+    fn toc_title_class_is_styled_mauve() {
+        let html = render_page("# Hi\n\n## A\n", "t").expect("render");
+        assert!(
+            html.contains("class=\"mdv-toc__title\""),
+            "expected title span carries mdv-toc__title class"
+        );
+        assert!(
+            html.contains(".mdv-toc__title") && html.contains("#cba6f7"),
+            "expected catppuccin mauve (#cba6f7) rule for .mdv-toc__title"
+        );
+    }
+
+    #[test]
+    fn toc_levels_propagates_to_js_data_island() {
+        let toc = TocConfig {
+            position: TocPosition::FloatingRight,
+            levels: 4,
+        };
+        let html = render_page_full(
+            "# H1\n## H2\n### H3\n#### H4\n##### H5\n",
+            "t",
+            &ThemeConfig::default(),
+            &Keymap::defaults(),
+            None,
+            &[],
+            &toc,
+            &CodemapConfig::default(),
+            &CodeConfig::default(),
+        )
+        .expect("render");
+        assert!(
+            html.contains("levels: 4"),
+            "expected `levels: 4` in __mdv_config TOC island"
+        );
+        assert!(
+            !html.contains("depth:"),
+            "old `depth:` key should be gone from data island"
+        );
+    }
+
+    #[test]
+    fn toc_indent_computation_handles_shallowest_baseline() {
+        // The indent rule is exercised in JS at runtime. We assert the JS
+        // source carries the baseline algorithm (shallowest-level scan +
+        // per-li padding) so the contract isn't silently regressed by future
+        // edits.
+        let html = render_page("# Hi\n## A\n### B\n", "t").expect("render");
+        assert!(
+            html.contains("shallowest"),
+            "TOC JS must compute the shallowest heading level"
+        );
+        assert!(
+            html.contains("lvl - shallowest"),
+            "TOC JS indent must be relative to the shallowest heading"
+        );
+        assert!(
+            html.contains("paddingLeft"),
+            "TOC JS must apply per-li padding for indent"
+        );
+        assert!(
+            html.contains("tocIndent") || html.contains("data-toc-indent"),
+            "TOC JS should expose computed indent on each <li>"
         );
     }
 
