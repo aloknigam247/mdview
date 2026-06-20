@@ -2193,6 +2193,7 @@ dependencies = [
  "libc",
  "mdview-config",
  "mdview-core",
+ "mdview-ext-d2",
  "mdview-ext-drawio",
  "mdview-ext-frontmatter",
  "mdview-ext-highlight",
@@ -2235,6 +2236,16 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "mdview-ext-d2"
+version = "0.1.0"
+dependencies = [
+ "comrak 0.29.0",
+ "mdview-core",
+ "tempfile",
+ "which",
 ]
 
 [[package]]

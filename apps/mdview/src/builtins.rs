@@ -6,6 +6,7 @@ use mdview_core::MdViewExtension;
 #[allow(dead_code)]
 pub fn builtin_extensions() -> Vec<Box<dyn MdViewExtension>> {
     vec![
+        Box::new(mdview_ext_d2::D2),
         Box::new(mdview_ext_drawio::Drawio),
         Box::new(mdview_ext_frontmatter::FrontmatterExt::new()),
         Box::new(mdview_ext_mermaid::Mermaid),
@@ -20,10 +21,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn all_five_extensions_registered() {
+    fn all_extensions_registered() {
         let exts = builtin_extensions();
-        assert_eq!(exts.len(), 6);
+        assert_eq!(exts.len(), 7);
         let names: Vec<&'static str> = exts.iter().map(|e| e.name()).collect();
+        assert!(names.contains(&"d2"));
         assert!(names.contains(&"drawio"));
         assert!(names.contains(&"frontmatter"));
         assert!(names.contains(&"highlight"));
