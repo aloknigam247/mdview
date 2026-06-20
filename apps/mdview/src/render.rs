@@ -1888,4 +1888,17 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn tab_size_css_applied() {
+        let html = render_page("```\n\tindented\n```\n", "t").expect("render");
+        assert!(
+            html.contains("tab-size: 4"),
+            "expected tab-size CSS property"
+        );
+        assert!(
+            html.contains("\tindented") || html.contains("&#9;indented"),
+            "expected tab character preserved in code block HTML"
+        );
+    }
 }

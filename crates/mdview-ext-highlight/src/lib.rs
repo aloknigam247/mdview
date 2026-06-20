@@ -332,6 +332,16 @@ mod tests {
     }
 
     #[test]
+    fn tabs_preserved_in_terminal_output() {
+        let term = render_term_for("```rust\n\tlet x = 1;\n```\n", "dark");
+        assert!(
+            term.contains('\t'),
+            "expected tab character preserved in terminal output, got: {:?}",
+            &term[..term.len().min(200)]
+        );
+    }
+
+    #[test]
     fn alias_powershell_resolves() {
         let syn = Highlight::syntax_for("powershell");
         assert_eq!(syn.name, "PowerShell");
@@ -471,4 +481,12 @@ mod tests {
         assert_eq!(Highlight::syntax_for("csharp").name, "C#");
     }
 
+    #[test]
+    fn tabs_preserved_in_html_output() {
+        let html = render_html_for("```rust\n\tlet x = 1;\n```\n", "dark");
+        assert!(
+            html.contains('\t'),
+            "expected tab character preserved in HTML, got: {html}"
+        );
+    }
 }
