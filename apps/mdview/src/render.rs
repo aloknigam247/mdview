@@ -4,7 +4,8 @@ use comrak::{format_html, Arena};
 #[allow(unused_imports)]
 use mdview_config::TocPosition;
 use mdview_config::{
-    Action, CodemapConfig, ConfigError, KeyBinding, Keymap, ThemeConfig, ThemeMode, TocConfig,
+    Action, CodeConfig, CodemapConfig, ConfigError, KeyBinding, Keymap, ThemeConfig, ThemeMode,
+    TocConfig,
 };
 use mdview_core::{parse, Registry, RenderCtx, Theme};
 use std::path::{Path, PathBuf};
@@ -138,6 +139,7 @@ pub fn render_page_with_config_and_source(
         &[],
         &TocConfig::default(),
         &CodemapConfig::default(),
+        &CodeConfig::default(),
     )
 }
 
@@ -151,6 +153,7 @@ pub fn render_page_full(
     config_errors: &[ConfigError],
     toc: &TocConfig,
     codemap: &CodemapConfig,
+    code: &CodeConfig,
 ) -> Result<String> {
     let mut registry = Registry::new();
     for ext in builtin_extensions() {
@@ -216,6 +219,7 @@ pub fn render_page_full(
         features,
         toc,
         codemap,
+        code,
     ))
 }
 
@@ -376,6 +380,7 @@ fn wrap_page(
     features: Features,
     toc: &TocConfig,
     codemap: &CodemapConfig,
+    code: &CodeConfig,
 ) -> String {
     let title_esc = html_escape(title);
     let theme_css = emit_theme_blocks(theme_cfg);
@@ -392,6 +397,7 @@ fn wrap_page(
     let toc_pos = toc.position.as_kebab();
     let toc_depth = toc.depth;
     let codemap_enabled = if codemap.enabled { "true" } else { "false" };
+    let tab_width = code.tab_width;
     let toc_pos_class = format!("mdv-toc--{toc_pos}");
     let toc_aside = format!(
         "<aside id=\"mdv-toc\" class=\"mdv-toc {toc_pos_class} mdv-toc--hidden\" aria-hidden=\"true\"><header><span>Contents</span><button id=\"mdv-toc-close\" type=\"button\" aria-label=\"Close\">\u{00D7}</button></header><nav id=\"mdv-toc-nav\"></nav></aside>"
@@ -446,7 +452,7 @@ fn wrap_page(
   article.mdv pre {{ background: var(--code-bg); padding: 16px; border-radius: 10px;
                      overflow-x: auto; border: 1px solid var(--border);
                      box-shadow: 0 1px 2px rgba(0,0,0,.04);
-                     white-space: pre; }}
+                     white-space: pre; tab-size: {tab_width}; -moz-tab-size: {tab_width}; }}
   article.mdv code {{ font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", "Cascadia Code",
                                     "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
                       font-size: .92em; font-variant-ligatures: contextual; }}
@@ -621,11 +627,12 @@ fn wrap_page(
   #mdv-context-menu .mdv-cm__divider {{ height: 1px; background: var(--mdv-border-subtle, var(--border));
                                          margin: 4px 0; }}
   .mdv-bionic {{ font-weight: 700; }}
-  .mdv-code {{ position: relative; }}
+  .mdv-code-wrap {{ position: relative; }}
   .mdv-copy {{
     position: absolute;
     top: 0.4rem;
     right: 0.4rem;
+    z-index: 1;
     width: 28px;
     height: 28px;
     display: inline-flex;
@@ -640,7 +647,7 @@ fn wrap_page(
     opacity: 0;
     transition: opacity 0.12s ease, background 0.12s ease;
   }}
-  .mdv-code:hover .mdv-copy,
+  .mdv-code-wrap:hover .mdv-copy,
   .mdv-copy:focus-visible {{ opacity: 1; }}
   .mdv-copy:hover {{ background: var(--mdv-accent-soft, rgba(127, 127, 127, 0.18)); }}
   .mdv-copy svg {{ width: 14px; height: 14px; display: block; }}
@@ -1369,9 +1376,13 @@ fn wrap_page(
     const clipboard = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
     const check = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
     document.querySelectorAll('pre.mdv-code').forEach(pre => {{
-      if (pre.querySelector(':scope > .mdv-copy')) return;
+      if (pre.parentElement && pre.parentElement.classList.contains('mdv-code-wrap')) return;
       const code = pre.querySelector(':scope > code');
       if (!code) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'mdv-code-wrap';
+      pre.parentNode.insertBefore(wrap, pre);
+      wrap.appendChild(pre);
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'mdv-copy';
@@ -1408,7 +1419,7 @@ fn wrap_page(
           show(false);
         }}
       }});
-      pre.appendChild(btn);
+      wrap.appendChild(btn);
     }});
   }})();
 </script>
@@ -1689,6 +1700,7 @@ mod tests {
             &errors,
             &TocConfig::default(),
             &CodemapConfig::default(),
+            &CodeConfig::default(),
         )
         .expect("render");
         assert!(html.contains("id=\"mdv-config-banner\""));
@@ -1715,6 +1727,7 @@ mod tests {
             &errors,
             &TocConfig::default(),
             &CodemapConfig::default(),
+            &CodeConfig::default(),
         )
         .expect("render");
         assert!(html.contains("id=\"mdv-config-banner\""));

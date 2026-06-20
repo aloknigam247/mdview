@@ -2,6 +2,7 @@ use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigErrorSource {
+    Code,
     Codemap,
     Keymap,
     Theme,
@@ -12,6 +13,7 @@ pub enum ConfigErrorSource {
 impl ConfigErrorSource {
     fn as_str(self) -> &'static str {
         match self {
+            ConfigErrorSource::Code => "code",
             ConfigErrorSource::Codemap => "codemap",
             ConfigErrorSource::Keymap => "keymap",
             ConfigErrorSource::Theme => "theme",
@@ -63,6 +65,15 @@ impl ConfigError {
         ConfigError {
             source: ConfigErrorSource::Toc,
             key: Some(format!("[toc] {field}")),
+            raw_value,
+            message: message.into(),
+        }
+    }
+
+    pub fn code(field: &str, raw_value: Option<String>, message: impl Into<String>) -> Self {
+        ConfigError {
+            source: ConfigErrorSource::Code,
+            key: Some(format!("[code] {field}")),
             raw_value,
             message: message.into(),
         }

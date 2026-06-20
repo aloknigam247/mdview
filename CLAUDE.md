@@ -188,6 +188,16 @@ The aspirational lines higher up describe a Tauri shell and a separate
   selectors; the app emits `<article class="mdv">`. The two CSS surfaces are
   not unified — copy needed rules into `render.rs` rather than importing
   `base_stylesheet()` wholesale.
+- **Extension init scripts auto-scan on `DOMContentLoaded`.**
+  `crates/mdview-ext-{mermaid,plotly,drawio}` each ship a `vendor/mdv-<name>-init.js`
+  asset that walks the DOM (`querySelectorAll('.mermaid')`, etc.) and calls
+  the library's renderer immediately. To lazy-load the CDN library tag
+  without crashing those inits, each ext needs a contract: the init script
+  exposes `window.__mdv_render_<name>(elements)` and **does not** auto-run on
+  DOMContentLoaded; a central lazy loader in `render.rs` invokes it via
+  `IntersectionObserver` after the library script has finished loading. Not
+  yet implemented — the scaled-back phase 2 of perf work only added `<img
+  loading="lazy">` and head minification.
 - **Server serves a snapshot.** `apps/mdview/src/server.rs` holds the HTML in
   `HtmlStore = Arc<RwLock<Arc<String>>>` exposed as `Server.html`. `webview.reload()`
   alone just re-fetches the same snapshot — it does **not** pick up file or
@@ -219,6 +229,25 @@ Lessons from the field:
   survived. Grep before declaring victory.
 - Stale `worktree-agent-*` branches accumulate. Use
   `scripts/clean-worktrees.ps1` to clean up after a session.
+- Shell CWD persists across Bash tool calls and can drift into an agent's
+  worktree directory after the agent finishes. Always `cd /d/mdview` before
+  `git merge --squash <branch>` on main. Symptom: merge reports "Already up
+  to date" despite divergent commits — that's the branch being merged into
+  itself.
+- Diff a stale-base worktree branch against main with **three dots**:
+  `git diff main...worktree-agent-XXX --stat` shows what the branch *added*
+  since the merge-base. Two dots (`main..branch`) shows the symmetric set
+  and surfaces main's recent commits as "removals", which is misleading.
+- Worktree agents will sometimes pick up unrelated `cargo fmt` / `clippy
+  --fix` cleanups across the workspace to make `-D warnings` pass on a
+  stale base. Benign but inflates diffs; review before merging.
+- On Windows, a running `mdview.exe` from a previous `cargo run` (e.g. the
+  GUI you opened to validate the last task) keeps `target/debug/mdview.exe`
+  locked and blocks `cargo build`. Kill the process before rebuilding.
+- `MDV_PROFILE=1` skips the daemonize step so profile lines logged after
+  the would-be detach still reach the parent terminal's stderr. Pattern
+  for env-gated debug modes: bypass detachment so post-fork output isn't
+  swallowed.
 
 ## Platform-specific notes
 

@@ -362,3 +362,31 @@ fn theme_mode_light_resolve_is_light() {
 fn theme_mode_dark_resolve_is_light() {
     assert!(!ThemeMode::Dark.resolve_is_light());
 }
+
+#[test]
+fn code_tab_width_default_is_4() {
+    let cfg = Config::defaults();
+    assert_eq!(cfg.code.tab_width, 4);
+}
+
+#[test]
+fn code_tab_width_parses() {
+    let cfg = Config::from_toml_str("[code]\ntab_width = 2\n");
+    assert_eq!(cfg.code.tab_width, 2);
+}
+
+#[test]
+fn code_tab_width_out_of_range_clamps() {
+    let res = Config::from_toml_str_full("[code]\ntab_width = 12\n");
+    assert_eq!(res.config.code.tab_width, 8);
+    assert_eq!(res.errors.len(), 1);
+    assert!(res.errors[0].to_string().contains("1..=8"));
+}
+
+#[test]
+fn code_tab_width_not_integer_is_error() {
+    let res = Config::from_toml_str_full("[code]\ntab_width = \"four\"\n");
+    assert_eq!(res.config.code.tab_width, 4);
+    assert_eq!(res.errors.len(), 1);
+    assert_eq!(res.errors[0].source, ConfigErrorSource::Code);
+}

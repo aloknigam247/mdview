@@ -25,10 +25,22 @@ pub use keymap::{KeyBinding, Keymap};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Config {
+    pub code: CodeConfig,
     pub keymap: Keymap,
     pub toc: TocConfig,
     pub codemap: CodemapConfig,
     pub theme: ThemeConfig,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CodeConfig {
+    pub tab_width: u8,
+}
+
+impl Default for CodeConfig {
+    fn default() -> Self {
+        CodeConfig { tab_width: 4 }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -136,6 +148,7 @@ pub struct LoadResult {
 impl Config {
     pub fn defaults() -> Self {
         Config {
+            code: CodeConfig::default(),
             keymap: Keymap::defaults(),
             toc: TocConfig::default(),
             codemap: CodemapConfig::default(),
@@ -155,6 +168,8 @@ impl Config {
     pub fn from_toml_str_full(s: &str) -> LoadResult {
         #[derive(Deserialize, Default)]
         struct Raw {
+            #[serde(default)]
+            code: Option<toml::Value>,
             #[serde(default)]
             keymap: BTreeMap<String, toml::Value>,
             #[serde(default)]
@@ -179,6 +194,40 @@ impl Config {
                 };
             }
         };
+
+        let mut code = CodeConfig::default();
+        match raw.code {
+            None => {}
+            Some(toml::Value::Table(t)) => {
+                if let Some(v) = t.get("tab_width") {
+                    match v.as_integer() {
+                        Some(i) if (1..=8).contains(&i) => code.tab_width = i as u8,
+                        Some(i) => {
+                            errors.push(ConfigError::code(
+                                "tab_width",
+                                Some(i.to_string()),
+                                "out of range; expected 1..=8".to_string(),
+                            ));
+                            code.tab_width = (i.clamp(1, 8)) as u8;
+                        }
+                        None => {
+                            errors.push(ConfigError::code(
+                                "tab_width",
+                                Some(v.to_string()),
+                                "not an integer; expected 1..=8".to_string(),
+                            ));
+                        }
+                    }
+                }
+            }
+            Some(other) => {
+                errors.push(ConfigError::code(
+                    "",
+                    Some(other.to_string()),
+                    "expected a table".to_string(),
+                ));
+            }
+        }
 
         let mut keymap = Keymap::defaults();
         for (action_name, value) in raw.keymap {
@@ -355,6 +404,7 @@ impl Config {
 
         LoadResult {
             config: Config {
+                code,
                 keymap,
                 toc,
                 codemap,
@@ -397,21 +447,10 @@ impl Config {
     pub fn load_full() -> LoadResult {
         match Self::config_path() {
             Some(p) => Self::load_from(&p),
-            None => {
-                let err = ConfigError {
-                    source: ConfigErrorSource::Toml,
-                    key: None,
-                    raw_value: None,
-                    message:
-                        "cannot resolve config path (XDG_CONFIG_HOME / HOME unset); using defaults"
-                            .into(),
-                };
-                report(std::slice::from_ref(&err));
-                LoadResult {
-                    config: Self::defaults(),
-                    errors: vec![err],
-                }
-            }
+            None => LoadResult {
+                config: Self::defaults(),
+                errors: Vec::new(),
+            },
         }
     }
 
@@ -437,12 +476,6 @@ impl Config {
                     };
                 }
             }
-        }
-        if let Err(e) = write_default(path) {
-            tracing::warn!(
-                "mdview-config: cannot write default config to {}: {e}",
-                path.display()
-            );
         }
         LoadResult {
             config: Self::defaults(),
@@ -525,6 +558,10 @@ fn looks_like_modifier(tok: &str) -> bool {
 pub const DEFAULT_CONFIG_TOML: &str = "# mdview configuration\n\
 # Reload mdview after editing.\n\
 \n\
+[code]\n\
+# tab_width: number of spaces a tab character occupies in code blocks. Default: 4.\n\
+# tab_width = 4\n\
+\n\
 [toc]\n\
 # position: floating-right (default), floating-center, floating-left, fixed-right, fixed-left, inline\n\
 # depth:    1..6, default 3\n\
@@ -558,9 +595,3 @@ pub const DEFAULT_CONFIG_TOML: &str = "# mdview configuration\n\
 #\n\
 # quit = \"Ctrl+Q\"\n";
 
-fn write_default(path: &Path) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, DEFAULT_CONFIG_TOML)
-}

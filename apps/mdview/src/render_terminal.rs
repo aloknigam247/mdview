@@ -8,10 +8,14 @@ use crate::builtins::builtin_extensions;
 
 #[allow(dead_code)]
 pub fn render_ansi(src: &str) -> Result<String> {
-    render_ansi_with_source(src, None)
+    render_ansi_with_source(src, None, 4)
 }
 
-pub fn render_ansi_with_source(src: &str, source_dir: Option<&Path>) -> Result<String> {
+pub fn render_ansi_with_source(
+    src: &str,
+    source_dir: Option<&Path>,
+    tab_width: u8,
+) -> Result<String> {
     let mut registry = Registry::new();
     for ext in builtin_extensions() {
         registry.register(ext);
@@ -35,7 +39,7 @@ pub fn render_ansi_with_source(src: &str, source_dir: Option<&Path>) -> Result<S
         }
     }
     for child in ast.children() {
-        render_block(child, &ctx, &registry, &mut out, 0);
+        render_block(child, &ctx, &registry, &mut out, 0, tab_width);
         out.push('\n');
     }
     Ok(out)
@@ -47,12 +51,13 @@ fn render_block<'a>(
     registry: &Registry,
     out: &mut String,
     depth: usize,
+    tab_width: u8,
 ) {
     // Code blocks always get the rounded frame; the extension (if any) only
     // colors the interior. Every other node type is handled by the
     // extension dispatch first, then the built-in block formatter.
     if matches!(node.data.borrow().value, NodeValue::CodeBlock(_)) {
-        render_code_block(node, ctx, registry, out);
+        render_code_block(node, ctx, registry, out, tab_width);
         return;
     }
     for ext in registry.terminal_renderers() {
@@ -66,7 +71,7 @@ fn render_block<'a>(
     match &data.value {
         NodeValue::Document => {
             for c in node.children() {
-                render_block(c, ctx, registry, out, depth);
+                render_block(c, ctx, registry, out, depth, tab_width);
             }
         }
         NodeValue::Heading(h) => {
@@ -85,7 +90,7 @@ fn render_block<'a>(
         NodeValue::BlockQuote => {
             let mut inner = String::new();
             for c in node.children() {
-                render_block(c, ctx, registry, &mut inner, depth);
+                render_block(c, ctx, registry, &mut inner, depth, tab_width);
             }
             for line in inner.trim_end().split('\n') {
                 out.push_str(ACCENT);
@@ -101,7 +106,7 @@ fn render_block<'a>(
             let children: Vec<_> = node.children().collect();
             let total = children.len();
             for (i, c) in children.into_iter().enumerate() {
-                render_list_item(c, ctx, registry, out, depth, i + 1, total);
+                render_list_item(c, ctx, registry, out, depth, i + 1, total, tab_width);
             }
         }
         NodeValue::ThematicBreak => {
@@ -122,7 +127,7 @@ fn render_block<'a>(
             out.push_str(&format!("[{}]: ", def.name));
             let mut inner = String::new();
             for c in node.children() {
-                render_block(c, ctx, registry, &mut inner, depth);
+                render_block(c, ctx, registry, &mut inner, depth, tab_width);
             }
             out.push_str(inner.trim_end());
             out.push_str(RESET);
@@ -133,7 +138,7 @@ fn render_block<'a>(
             render_inlines(node, out);
             if node.children().next().is_some() {
                 for c in node.children() {
-                    render_block(c, ctx, registry, out, depth);
+                    render_block(c, ctx, registry, out, depth, tab_width);
                 }
             }
         }
@@ -145,6 +150,7 @@ fn render_code_block<'a>(
     ctx: &RenderCtx<'_>,
     registry: &Registry,
     out: &mut String,
+    tab_width: u8,
 ) {
     let data = node.data.borrow();
     let NodeValue::CodeBlock(cb) = &data.value else {
@@ -161,6 +167,9 @@ fn render_code_block<'a>(
         .find_map(|ext| ext.render_terminal(node, ctx))
         .map(|chunks| chunks.into_iter().map(|c| c.text).collect::<String>())
         .unwrap_or(literal);
+
+    let tab_spaces: String = " ".repeat(tab_width as usize);
+    let body = body.replace('\t', &tab_spaces);
 
     let width = 60usize;
     let label = if lang.is_empty() {
@@ -194,6 +203,7 @@ fn render_code_block<'a>(
     out.push('\n');
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_list_item<'a>(
     node: &'a AstNode<'a>,
     ctx: &RenderCtx<'_>,
@@ -202,6 +212,7 @@ fn render_list_item<'a>(
     depth: usize,
     index: usize,
     _total: usize,
+    tab_width: u8,
 ) {
     let indent = "  ".repeat(depth);
     let data = node.data.borrow();
@@ -223,7 +234,7 @@ fn render_list_item<'a>(
     let mut first_line = true;
     let mut inner = String::new();
     for c in node.children() {
-        render_block(c, ctx, registry, &mut inner, depth + 1);
+        render_block(c, ctx, registry, &mut inner, depth + 1, tab_width);
     }
     for line in inner.trim_end().split('\n') {
         if first_line {
@@ -512,5 +523,14 @@ mod tests {
         assert!(out.contains("╭"));
         assert!(out.contains("rust"));
         assert!(out.contains("╯"));
+    }
+
+    #[test]
+    fn code_block_expands_tabs() {
+        let src = "```\n\tindented\n```\n";
+        let out = render_ansi_with_source(src, None, 4).unwrap();
+        assert!(out.contains("    indented"), "got: {out}");
+        let out2 = render_ansi_with_source(src, None, 2).unwrap();
+        assert!(out2.contains("  indented"), "got: {out2}");
     }
 }

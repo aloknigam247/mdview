@@ -45,7 +45,9 @@ fn render_once(file: &Path, cli: &Cli) -> Result<()> {
     let src =
         std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
     let source_dir = file.parent();
-    let ansi = crate::render_terminal::render_ansi_with_source(&src, source_dir)?;
+    let config = mdview_config::Config::load();
+    let ansi =
+        crate::render_terminal::render_ansi_with_source(&src, source_dir, config.code.tab_width)?;
 
     if cli.no_pager {
         use std::io::Write;
@@ -112,6 +114,7 @@ pub async fn run_tauri_child(cli: &Cli) -> Result<()> {
         &loaded.errors,
         &config.toc,
         &config.codemap,
+        &config.code,
     )?;
     crate::profile::log(&format!("html_rendered ({}B)", html.len()));
     let srv = crate::server::serve_html(html).await?;
@@ -306,6 +309,7 @@ fn run_gui_event_loop(
                             &reload_ctx.config_errors,
                             &reload_ctx.config.toc,
                             &reload_ctx.config.codemap,
+                            &reload_ctx.config.code,
                         ) {
                             Ok(html) => {
                                 if let Ok(mut guard) = reload_ctx.html_store.write() {
