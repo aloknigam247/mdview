@@ -35,6 +35,7 @@ pub struct ConfigError {
     pub key: Option<String>,
     pub raw_value: Option<String>,
     pub message: String,
+    pub line: Option<usize>,
 }
 
 impl ConfigError {
@@ -45,6 +46,7 @@ impl ConfigError {
             key,
             raw_value: None,
             message: message.into(),
+            line: line_col.map(|(l, _)| l),
         }
     }
 
@@ -58,6 +60,7 @@ impl ConfigError {
             key: Some(format!("keymap[{}]", action.into())),
             raw_value,
             message: message.into(),
+            line: None,
         }
     }
 
@@ -67,6 +70,7 @@ impl ConfigError {
             key: Some(format!("[toc] {field}")),
             raw_value,
             message: message.into(),
+            line: None,
         }
     }
 
@@ -76,6 +80,7 @@ impl ConfigError {
             key: Some(format!("[code] {field}")),
             raw_value,
             message: message.into(),
+            line: None,
         }
     }
 
@@ -85,6 +90,7 @@ impl ConfigError {
             key: Some(format!("[codemap] {field}")),
             raw_value,
             message: message.into(),
+            line: None,
         }
     }
 
@@ -94,7 +100,30 @@ impl ConfigError {
             key: Some(format!("[theme] {field}")),
             raw_value,
             message: message.into(),
+            line: None,
         }
+    }
+
+    /// Attach (or overwrite) the source line where this error was triggered.
+    pub fn with_line(mut self, line: Option<usize>) -> Self {
+        if line.is_some() {
+            self.line = line;
+        }
+        self
+    }
+
+    /// Render this error in the hard-fail format `<path>:<line> — <message>`.
+    /// `path` is the originating `config.toml` path; line falls back to `0`
+    /// when the precise location is unknown.
+    pub fn display_line(&self, path: &std::path::Path) -> String {
+        let line = self.line.unwrap_or(0);
+        let body = match (&self.key, &self.raw_value) {
+            (Some(k), Some(v)) => format!("{k} = {v:?}: {}", self.message),
+            (Some(k), None) => format!("{k}: {}", self.message),
+            (None, Some(v)) => format!("{v:?}: {}", self.message),
+            (None, None) => self.message.clone(),
+        };
+        format!("{}:{} \u{2014} {}", path.display(), line, body)
     }
 }
 
