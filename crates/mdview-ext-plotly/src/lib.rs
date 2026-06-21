@@ -15,18 +15,17 @@ pub use _stubs::{Asset, AstNode, Html, MdViewExtension, RenderCtx, TermChunk, Te
 
 use comrak::nodes::NodeValue;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-const PLACEHOLDER_LINES: &[&str] = &[
-    "╭──────────────────────────────╮",
-    "│  [plotly chart placeholder]  │",
-    "│  sidecar unavailable         │",
-    "╰──────────────────────────────╯",
-];
-
 const SIDECAR_BIN: &str = "mdview-sidecar";
-const SIDECAR_ENV: &str = "MDVIEW_SIDECAR";
+
+/// The literal prefix line shown when the `mdview-sidecar` binary is missing
+/// or otherwise unavailable. Surfaced in terminal output with ANSI red SGR.
+pub const MISSING_CLI_PREFIX: &str = "missing plotly command";
+
+const ANSI_RED: &str = "\x1b[31m";
+const ANSI_RESET: &str = "\x1b[0m";
 
 static CLIENT_ASSETS: &[Asset] = &[
     Asset {
@@ -84,26 +83,33 @@ impl Plotly {
         ))
     }
 
-    fn locate_sidecar() -> Option<PathBuf> {
-        if let Some(env_path) = std::env::var_os(SIDECAR_ENV) {
-            let p = PathBuf::from(env_path);
-            if p.exists() {
-                return Some(p);
-            }
-            return None;
+    /// Locate the sidecar binary.
+    ///
+    /// Production callers pass `None` and detection falls through to
+    /// `which::which("mdview-sidecar")`. Tests may pass `Some(p)` to inject a
+    /// specific binary (or a non-existent path to simulate a missing sidecar)
+    /// without mutating the process environment.
+    pub fn locate_sidecar(override_path: Option<&Path>) -> Option<PathBuf> {
+        if let Some(p) = override_path {
+            return if p.exists() {
+                Some(p.to_path_buf())
+            } else {
+                None
+            };
         }
         which::which(SIDECAR_BIN).ok()
     }
 
-    fn emit_terminal(source: &str) -> TermChunks {
-        match Self::run_sidecar(source) {
+    fn emit_terminal(source: &str, override_path: Option<&Path>) -> TermChunks {
+        match Self::run_sidecar(source, override_path) {
             Ok(svg) => vec![TermChunk::plain(String::from_utf8_lossy(&svg).into_owned())],
-            Err(_) => vec![TermChunk::plain(placeholder_text())],
+            Err(PlotlyError::SidecarMissing) => missing_cli_terminal(source),
+            Err(_) => fallback_code_terminal(source),
         }
     }
 
-    fn run_sidecar(source: &str) -> Result<Vec<u8>, PlotlyError> {
-        let sidecar = Self::locate_sidecar().ok_or(PlotlyError::SidecarMissing)?;
+    fn run_sidecar(source: &str, override_path: Option<&Path>) -> Result<Vec<u8>, PlotlyError> {
+        let sidecar = Self::locate_sidecar(override_path).ok_or(PlotlyError::SidecarMissing)?;
         let job = serde_json::json!({
             "kind": "plotly",
             "source": source,
@@ -137,7 +143,7 @@ impl MdViewExtension for Plotly {
 
     fn render_terminal<'a>(&self, n: &'a AstNode<'a>, _ctx: &RenderCtx<'_>) -> Option<TermChunks> {
         let source = Self::fenced_plotly_source(n)?;
-        Some(Self::emit_terminal(&source))
+        Some(Self::emit_terminal(&source, None))
     }
 
     fn client_assets(&self) -> &'static [Asset] {
@@ -160,8 +166,31 @@ fn escape_attr(s: &str) -> String {
     out
 }
 
-fn placeholder_text() -> String {
-    PLACEHOLDER_LINES.join("\n")
+/// Render the block as a normal code block with a single ANSI-red prefix line
+/// reading `missing plotly command`. Used when the sidecar binary cannot be
+/// located.
+fn missing_cli_terminal(source: &str) -> TermChunks {
+    let mut text = String::new();
+    text.push_str(ANSI_RED);
+    text.push_str(MISSING_CLI_PREFIX);
+    text.push_str(ANSI_RESET);
+    text.push('\n');
+    text.push_str(source);
+    if !source.ends_with('\n') {
+        text.push('\n');
+    }
+    vec![TermChunk::plain(text)]
+}
+
+/// Plain code-block fallback used when the sidecar is present but fails to
+/// render. Surfaces the user's source verbatim without claiming the CLI is
+/// missing.
+fn fallback_code_terminal(source: &str) -> TermChunks {
+    let mut text = source.to_string();
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+    vec![TermChunk::plain(text)]
 }
 
 /// Convenience entry point used by the demo binaries. Walks the parsed AST
@@ -278,27 +307,33 @@ mod tests {
         assert!(html.0.contains("data-spec=\"null\""));
     }
 
+    /// A path that is guaranteed not to exist on the host. Passing this to
+    /// the override parameter forces `locate_sidecar` to return `None` —
+    /// indistinguishable from "no `mdview-sidecar` on PATH" in the production
+    /// code path, without touching the process environment.
+    fn missing_path() -> std::path::PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push("mdview-plotly-tests");
+        p.push("definitely-not-a-real-sidecar-binary");
+        p
+    }
+
     #[test]
-    fn terminal_falls_back_to_placeholder_when_sidecar_missing() {
-        let prev_env = std::env::var_os(SIDECAR_ENV);
-        std::env::set_var(SIDECAR_ENV, "/definitely/nonexistent/mdview-sidecar-xyzzy");
-
-        let arena = comrak::Arena::new();
-        let node = parse_first_block(
-            &arena,
-            "```plotly\n{\"data\":[{\"x\":[1],\"y\":[2]}]}\n```\n",
-        );
-        let theme = Theme::default();
-        let ctx = RenderCtx::new(&theme);
-        let chunks = Plotly.render_terminal(node, &ctx).unwrap();
+    fn terminal_renders_code_with_ansi_red_prefix_when_sidecar_missing() {
+        let src = "{\"data\":[{\"x\":[1],\"y\":[2]}]}\n";
+        let missing = missing_path();
+        let chunks = Plotly::emit_terminal(src, Some(&missing));
         assert_eq!(chunks.len(), 1);
-        assert!(chunks[0].text.contains("placeholder"));
-        assert!(chunks[0].text.contains("╭"));
-
-        match prev_env {
-            Some(v) => std::env::set_var(SIDECAR_ENV, v),
-            None => std::env::remove_var(SIDECAR_ENV),
-        }
+        let text = &chunks[0].text;
+        assert!(
+            text.starts_with("\x1b[31mmissing plotly command\x1b[0m\n"),
+            "expected ANSI red prefix at start, got: {text:?}"
+        );
+        assert!(text.contains(src.trim()), "source missing: {text:?}");
+        assert!(
+            !text.contains("placeholder"),
+            "old placeholder marker leaked: {text:?}"
+        );
     }
 
     #[test]

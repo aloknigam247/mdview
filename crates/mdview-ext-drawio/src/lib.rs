@@ -11,6 +11,13 @@ pub use _stubs::{
     Asset, Html, MdViewExtension, RenderCtx, StyleSpec, TermChunk, TermChunks, Theme,
 };
 
+/// The literal prefix line shown when the `mdview-sidecar` binary is missing
+/// or otherwise unavailable. Surfaced in terminal output with ANSI red SGR.
+pub const MISSING_CLI_PREFIX: &str = "missing drawio command";
+
+const ANSI_RED: &str = "\x1b[31m";
+const ANSI_RESET: &str = "\x1b[0m";
+
 const CLIENT_ASSETS: &[Asset] = &[
     Asset {
         mime: "application/javascript",
@@ -54,10 +61,7 @@ impl MdViewExtension for Drawio {
         if !is_drawio_info(&info) {
             return None;
         }
-        match sidecar::run_sidecar("drawio", &body) {
-            Ok(svg) => Some(vec![TermChunk::plain(sixel_wrap(&svg))]),
-            Err(_) => Some(vec![TermChunk::plain(placeholder_ascii(&body))]),
-        }
+        Some(render_terminal_impl(&body, None))
     }
 
     fn client_assets(&self) -> &'static [Asset] {
@@ -102,11 +106,41 @@ fn sixel_wrap(svg: &str) -> String {
     format!("\x1bPq{svg}\x1b\\")
 }
 
-fn placeholder_ascii(body: &str) -> String {
-    let lines = body.lines().count();
-    format!(
-        "╭─ drawio diagram ({lines} lines) ─╮\n│ (sidecar unavailable)        │\n╰──────────────────────────────╯"
-    )
+/// Render the drawio body to terminal chunks. Tests pass `Some(p)` to inject
+/// a fake or non-existent sidecar binary; production callers pass `None`.
+fn render_terminal_impl(body: &str, override_path: Option<&std::path::Path>) -> TermChunks {
+    match sidecar::run_sidecar("drawio", body, override_path) {
+        Ok(svg) => vec![TermChunk::plain(sixel_wrap(&svg))],
+        Err(sidecar::SidecarError::NotFound) => missing_cli_terminal(body),
+        Err(_) => fallback_code_terminal(body),
+    }
+}
+
+/// Render the block as a normal code block with a single ANSI-red prefix line
+/// reading `missing drawio command`. Used when the sidecar binary cannot be
+/// located.
+fn missing_cli_terminal(source: &str) -> TermChunks {
+    let mut text = String::new();
+    text.push_str(ANSI_RED);
+    text.push_str(MISSING_CLI_PREFIX);
+    text.push_str(ANSI_RESET);
+    text.push('\n');
+    text.push_str(source);
+    if !source.ends_with('\n') {
+        text.push('\n');
+    }
+    vec![TermChunk::plain(text)]
+}
+
+/// Plain code-block fallback used when the sidecar is present but fails to
+/// render. Surfaces the user's source verbatim without claiming the CLI is
+/// missing.
+fn fallback_code_terminal(source: &str) -> TermChunks {
+    let mut text = source.to_string();
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+    vec![TermChunk::plain(text)]
 }
 
 #[cfg(test)]
@@ -166,21 +200,32 @@ mod tests {
         assert!(Drawio.render_terminal(cb, &ctx).is_none());
     }
 
+    /// A path that is guaranteed not to exist on the host. Passing this to
+    /// the override parameter forces `locate_sidecar` to return `NotFound` —
+    /// indistinguishable from "no `mdview-sidecar` on PATH" in the production
+    /// code path, without touching the process environment.
+    fn missing_path() -> std::path::PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push("mdview-drawio-tests");
+        p.push("definitely-not-a-real-sidecar-binary");
+        p
+    }
+
     #[test]
-    fn terminal_placeholder_when_sidecar_missing() {
-        let arena = Arena::new();
-        let md = "```drawio\n<mxfile/>\n```\n";
-        let root = parse_document(&arena, md, &ComrakOptions::default());
-        let cb = first_code_block(root).expect("code block");
-        let theme = Theme::default();
-        let ctx = RenderCtx::new(&theme);
-        let chunks = Drawio.render_terminal(cb, &ctx).expect("chunks");
+    fn terminal_renders_code_with_ansi_red_prefix_when_sidecar_missing() {
+        let body = "<mxfile/>\n";
+        let missing = missing_path();
+        let chunks = render_terminal_impl(body, Some(&missing));
         assert_eq!(chunks.len(), 1);
         let text = &chunks[0].text;
         assert!(
-            text.contains("drawio diagram") || text.starts_with("\x1bPq"),
-            "got: {}",
-            text
+            text.starts_with("\x1b[31mmissing drawio command\x1b[0m\n"),
+            "expected ANSI red prefix at start, got: {text:?}"
+        );
+        assert!(text.contains("<mxfile/>"), "source missing: {text:?}");
+        assert!(
+            !text.contains("drawio diagram") && !text.contains("sidecar unavailable"),
+            "old placeholder leaked: {text:?}"
         );
     }
 

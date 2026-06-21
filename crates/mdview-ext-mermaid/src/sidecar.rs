@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
@@ -9,7 +9,6 @@ use std::time::Duration;
 use thiserror::Error;
 
 pub const SIDECAR_BIN: &str = "mdview-sidecar";
-pub const SIDECAR_ENV: &str = "MDVIEW_SIDECAR";
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Error)]
@@ -28,16 +27,17 @@ pub enum SidecarError {
 
 /// Locate the sidecar binary.
 ///
-/// Priority:
-/// 1. `MDVIEW_SIDECAR` environment variable (absolute path to binary).
-/// 2. `mdview-sidecar` found on `PATH`.
-/// 3. `mdview-sidecar(.exe)` co-located with the current executable.
-pub fn locate_sidecar() -> Option<PathBuf> {
-    if let Some(env_path) = std::env::var_os(SIDECAR_ENV) {
-        let p = PathBuf::from(env_path);
-        if p.exists() {
-            return Some(p);
-        }
+/// Production callers pass `None` and detection falls through to a `PATH`
+/// lookup plus a co-located-with-executable check. Tests may pass `Some(p)`
+/// to inject a specific binary (or a non-existent path to simulate a missing
+/// sidecar) without mutating the process environment.
+pub fn locate_sidecar(override_path: Option<&Path>) -> Option<PathBuf> {
+    if let Some(p) = override_path {
+        return if p.exists() {
+            Some(p.to_path_buf())
+        } else {
+            None
+        };
     }
     if let Ok(p) = which::which(SIDECAR_BIN) {
         return Some(p);
