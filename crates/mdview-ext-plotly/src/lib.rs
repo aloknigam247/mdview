@@ -18,15 +18,15 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-const PLACEHOLDER_LINES: &[&str] = &[
-    "╭──────────────────────────────╮",
-    "│  [plotly chart placeholder]  │",
-    "│  sidecar unavailable         │",
-    "╰──────────────────────────────╯",
-];
-
 const SIDECAR_BIN: &str = "mdview-sidecar";
 const SIDECAR_ENV: &str = "MDVIEW_SIDECAR";
+
+/// The literal prefix line shown when the `mdview-sidecar` binary is missing
+/// or otherwise unavailable. Surfaced in terminal output with ANSI red SGR.
+pub const MISSING_CLI_PREFIX: &str = "missing plotly command";
+
+const ANSI_RED: &str = "\x1b[31m";
+const ANSI_RESET: &str = "\x1b[0m";
 
 static CLIENT_ASSETS: &[Asset] = &[
     Asset {
@@ -98,7 +98,8 @@ impl Plotly {
     fn emit_terminal(source: &str) -> TermChunks {
         match Self::run_sidecar(source) {
             Ok(svg) => vec![TermChunk::plain(String::from_utf8_lossy(&svg).into_owned())],
-            Err(_) => vec![TermChunk::plain(placeholder_text())],
+            Err(PlotlyError::SidecarMissing) => missing_cli_terminal(source),
+            Err(_) => fallback_code_terminal(source),
         }
     }
 
@@ -160,8 +161,31 @@ fn escape_attr(s: &str) -> String {
     out
 }
 
-fn placeholder_text() -> String {
-    PLACEHOLDER_LINES.join("\n")
+/// Render the block as a normal code block with a single ANSI-red prefix line
+/// reading `missing plotly command`. Used when the sidecar binary cannot be
+/// located.
+fn missing_cli_terminal(source: &str) -> TermChunks {
+    let mut text = String::new();
+    text.push_str(ANSI_RED);
+    text.push_str(MISSING_CLI_PREFIX);
+    text.push_str(ANSI_RESET);
+    text.push('\n');
+    text.push_str(source);
+    if !source.ends_with('\n') {
+        text.push('\n');
+    }
+    vec![TermChunk::plain(text)]
+}
+
+/// Plain code-block fallback used when the sidecar is present but fails to
+/// render. Surfaces the user's source verbatim without claiming the CLI is
+/// missing.
+fn fallback_code_terminal(source: &str) -> TermChunks {
+    let mut text = source.to_string();
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+    vec![TermChunk::plain(text)]
 }
 
 /// Convenience entry point used by the demo binaries. Walks the parsed AST
@@ -279,21 +303,28 @@ mod tests {
     }
 
     #[test]
-    fn terminal_falls_back_to_placeholder_when_sidecar_missing() {
+    fn terminal_renders_code_with_ansi_red_prefix_when_sidecar_missing() {
         let prev_env = std::env::var_os(SIDECAR_ENV);
         std::env::set_var(SIDECAR_ENV, "/definitely/nonexistent/mdview-sidecar-xyzzy");
 
         let arena = comrak::Arena::new();
-        let node = parse_first_block(
-            &arena,
-            "```plotly\n{\"data\":[{\"x\":[1],\"y\":[2]}]}\n```\n",
-        );
+        let src = "{\"data\":[{\"x\":[1],\"y\":[2]}]}";
+        let md = format!("```plotly\n{src}\n```\n");
+        let node = parse_first_block(&arena, &md);
         let theme = Theme::default();
         let ctx = RenderCtx::new(&theme);
         let chunks = Plotly.render_terminal(node, &ctx).unwrap();
         assert_eq!(chunks.len(), 1);
-        assert!(chunks[0].text.contains("placeholder"));
-        assert!(chunks[0].text.contains("╭"));
+        let text = &chunks[0].text;
+        assert!(
+            text.starts_with("\x1b[31mmissing plotly command\x1b[0m\n"),
+            "expected ANSI red prefix at start, got: {text:?}"
+        );
+        assert!(text.contains(src), "source missing: {text:?}");
+        assert!(
+            !text.contains("placeholder"),
+            "old placeholder marker leaked: {text:?}"
+        );
 
         match prev_env {
             Some(v) => std::env::set_var(SIDECAR_ENV, v),
