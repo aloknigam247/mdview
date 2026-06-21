@@ -112,7 +112,7 @@ fn format_html_from_result(source: &str, result: Result<Vec<u8>, cli::D2Error>) 
 }
 
 fn inline_svg(svg: &str) -> String {
-    // `d2 --omit-xml-tag` already strips the XML declaration; pass through as-is.
+    // `d2 --no-xml-tag` already strips the XML declaration; pass through as-is.
     svg.trim().to_string()
 }
 

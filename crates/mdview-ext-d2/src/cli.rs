@@ -1,6 +1,6 @@
 //! Local invocation of the `d2` CLI.
 //!
-//! We render via `d2 --omit-xml-tag --animate-interval=1000 - <output>`, reading
+//! We render via `d2 --no-xml-tag --animate-interval=1000 - <output>`, reading
 //! the diagram source from stdin and writing the SVG to a temp file. If the CLI
 //! is not on `PATH` we surface a structured error so callers can place a notice
 //! in the rendered output.
@@ -91,7 +91,7 @@ pub fn render_svg_with(
     let out_path = dir.path().join("out.svg");
 
     let mut cmd = Command::new(&bin);
-    cmd.arg("--omit-xml-tag")
+    cmd.arg("--no-xml-tag")
         .arg("--animate-interval=1000")
         .arg("-")
         .arg(&out_path)
@@ -142,7 +142,7 @@ fn render_svg_plain(bin: &std::path::Path, source: &str) -> Result<Vec<u8>, D2Er
     let out_path = dir.path().join("out.svg");
 
     let mut cmd = Command::new(bin);
-    cmd.arg("--omit-xml-tag")
+    cmd.arg("--no-xml-tag")
         .arg("-")
         .arg(&out_path)
         .stdin(Stdio::piped())
