@@ -21,6 +21,7 @@ comrak = { workspace = true }
 image = { version = "0.25", default-features = false, features = ["png"] }
 mdview-config = { path = "../../crates/mdview-config" }
 mdview-core = { path = "../../crates/mdview-core" }
+mdview-ext-d2 = { path = "../../crates/mdview-ext-d2" }
 mdview-ext-drawio = { path = "../../crates/mdview-ext-drawio" }
 mdview-ext-frontmatter = { path = "../../crates/mdview-ext-frontmatter" }
 mdview-ext-highlight = { path = "../../crates/mdview-ext-highlight" }

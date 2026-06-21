@@ -1,0 +1,21 @@
+[package]
+name = "mdview-ext-d2"
+version = "0.1.0"
+edition = "2021"
+description = "D2 diagram extension for mdview"
+license = "MIT"
+publish = false
+
+[dependencies]
+comrak = { workspace = true }
+mdview-core = { path = "../mdview-core" }
+tempfile = "3"
+which = "6"
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+# Enable to run tests that invoke the real `d2` CLI on the host. Skipped by
+# default so CI on machines without `d2` is unaffected.
+d2-cli-tests = []
