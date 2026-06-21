@@ -20,8 +20,8 @@ use crate::image::{
 const MDV_MISSING_SENTINEL: &str = "mdv-missing://";
 
 /// Fluent System Icons (Filled, 24px) used for GFM task list items.
-const FLUENT_CHECKMARK_CIRCLE_SVG: &str = r#"<svg class="mdv-task-icon mdv-task-checked" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2ZM16.2929 8.29289L10.5 14.0858L7.70711 11.2929C7.31658 10.9024 6.68342 10.9024 6.29289 11.2929C5.90237 11.6834 5.90237 12.3166 6.29289 12.7071L9.79289 16.2071C10.1834 16.5976 10.8166 16.5976 11.2071 16.2071L17.7071 9.70711C18.0976 9.31658 18.0976 8.68342 17.7071 8.29289C17.3166 7.90237 16.6834 7.90237 16.2929 8.29289Z" fill="currentColor"/></svg>"#;
-const FLUENT_CIRCLE_SVG: &str = r#"<svg class="mdv-task-icon mdv-task-unchecked" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2Z" fill="currentColor"/></svg>"#;
+pub const FLUENT_CHECKMARK_CIRCLE_SVG: &str = r#"<svg class="mdv-task-icon mdv-task-checked" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2ZM16.2929 8.29289L10.5 14.0858L7.70711 11.2929C7.31658 10.9024 6.68342 10.9024 6.29289 11.2929C5.90237 11.6834 5.90237 12.3166 6.29289 12.7071L9.79289 16.2071C10.1834 16.5976 10.8166 16.5976 11.2071 16.2071L17.7071 9.70711C18.0976 9.31658 18.0976 8.68342 17.7071 8.29289C17.3166 7.90237 16.6834 7.90237 16.2929 8.29289Z" fill="currentColor"/></svg>"#;
+pub const FLUENT_CIRCLE_SVG: &str = r#"<svg class="mdv-task-icon mdv-task-unchecked" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2Z" fill="currentColor"/></svg>"#;
 
 const LIVE_RELOAD_SCRIPT: &str = r#"<script>
 (function () {
@@ -192,7 +192,7 @@ fn standalone_image_figure<'a>(node: &'a AstNode<'a>) -> Option<String> {
 /// with inline Fluent System Icons (CheckmarkCircle for checked, Circle for
 /// unchecked). Scope: only `<input type="checkbox" ...>` markers — bullets and
 /// other inputs are untouched.
-fn swap_task_checkboxes(html: &str) -> String {
+pub fn swap_task_checkboxes(html: &str) -> String {
     if !html.contains("type=\"checkbox\"") {
         return html.to_string();
     }

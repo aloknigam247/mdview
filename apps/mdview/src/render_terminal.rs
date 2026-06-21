@@ -226,8 +226,8 @@ fn render_list_item<'a>(
             },
             ListType::Ordered => format!("{}.", index),
         },
-        NodeValue::TaskItem(Some(ch)) if *ch != ' ' => "☒".to_string(),
-        NodeValue::TaskItem(_) => "☐".to_string(),
+        NodeValue::TaskItem(Some(ch)) if *ch != ' ' => "\u{F05E1}".to_string(),
+        NodeValue::TaskItem(_) => "\u{F0130}".to_string(),
         _ => "•".to_string(),
     };
     drop(data);
@@ -508,8 +508,28 @@ mod tests {
     #[test]
     fn task_list_markers() {
         let out = render_ansi("- [x] done\n- [ ] todo\n").unwrap();
-        assert!(out.contains("☒"));
-        assert!(out.contains("☐"));
+        assert!(
+            out.contains('\u{F05E1}'),
+            "checked nerd-font icon U+F05E1 missing: {out:?}"
+        );
+        assert!(
+            out.contains('\u{F0130}'),
+            "unchecked nerd-font icon U+F0130 missing: {out:?}"
+        );
+        assert!(
+            !out.contains('☒') && !out.contains('☐'),
+            "legacy ballot box glyphs leaked: {out:?}"
+        );
+    }
+
+    #[test]
+    fn plain_bullet_list_not_decorated_with_task_icons() {
+        let out = render_ansi("- alpha\n- beta\n").unwrap();
+        assert!(out.contains('•'), "bullet missing: {out:?}");
+        assert!(
+            !out.contains('\u{F05E1}') && !out.contains('\u{F0130}'),
+            "task icons should not appear for plain bullets: {out:?}"
+        );
     }
 
     #[test]

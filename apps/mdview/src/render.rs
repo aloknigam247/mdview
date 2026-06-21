@@ -205,7 +205,11 @@ pub fn render_page_full(
         if !matched {
             let mut buf: Vec<u8> = Vec::new();
             format_html(child, &opts, &mut buf)?;
-            body.push_str(&String::from_utf8_lossy(&buf));
+            let raw = String::from_utf8_lossy(&buf);
+            // Replace comrak's default GFM task-list <input type="checkbox" ...>
+            // markers with inline Fluent System Icons SVGs (CheckmarkCircle /
+            // Circle). Keeps the swap consistent with mdview-render-html.
+            body.push_str(&mdview_render_html::swap_task_checkboxes(&raw));
         }
     }
 
@@ -478,44 +482,19 @@ fn wrap_page(
   article.mdv hr {{ border: 0; height: 1px; background: var(--border); margin: 2em 0; }}
   article.mdv img {{ max-width: 100%; border-radius: 8px; }}
   article.mdv ul, article.mdv ol {{ padding-inline-start: 24px; }}
-  article.mdv li.task-list-item,
-  article.mdv li:has(> input[type="checkbox"]) {{
+  article.mdv li:has(> .mdv-task-icon) {{
     list-style: none;
     margin-left: -1.5em;
   }}
-  article.mdv li.task-list-item > input[type="checkbox"],
-  article.mdv li > input[type="checkbox"] {{
-    appearance: none;
-    -webkit-appearance: none;
-    width: 1.05em;
-    height: 1.05em;
-    margin-right: 0.5em;
-    border: 1.5px solid var(--muted);
-    border-radius: 5px;
-    background: transparent;
-    vertical-align: -2px;
-    cursor: default;
-    position: relative;
-    transition: background 120ms ease, border-color 120ms ease;
+  article.mdv .mdv-task-icon {{
     display: inline-block;
+    vertical-align: -0.15em;
+    margin-right: 0.35em;
+    width: 1em;
+    height: 1em;
   }}
-  article.mdv li.task-list-item > input[type="checkbox"]:checked,
-  article.mdv li > input[type="checkbox"]:checked {{
-    background: var(--accent);
-    border-color: var(--accent);
-  }}
-  article.mdv li.task-list-item > input[type="checkbox"]:checked::after,
-  article.mdv li > input[type="checkbox"]:checked::after {{
-    content: "";
-    position: absolute;
-    left: 0.28em;
-    top: 0.04em;
-    width: 0.30em;
-    height: 0.55em;
-    border-right: 2px solid var(--bg);
-    border-bottom: 2px solid var(--bg);
-    transform: rotate(45deg);
-  }}
+  article.mdv .mdv-task-checked {{ color: var(--accent); }}
+  article.mdv .mdv-task-unchecked {{ color: var(--muted); }}
   article.mdv .mermaid, article.mdv .plotly-chart, article.mdv .drawio-viewer {{ margin: 24px 0; }}
   /* Cap diagram containers to viewport width so they don't balloon with the
      expanded page width from long content elsewhere on the page. */
@@ -1822,7 +1801,7 @@ mod tests {
     }
 
     #[test]
-    fn style_block_includes_toc_and_checkbox_rules() {
+    fn style_block_includes_toc_and_task_icon_rules() {
         let html = render_page("# Hi\n", "t").expect("render");
         assert!(
             html.contains(".mdv-toc--hidden"),
@@ -1833,8 +1812,46 @@ mod tests {
             "expected .mdv-toc--floating-right rule in <style>"
         );
         assert!(
-            html.contains("task-list-item > input"),
-            "expected rounded checkbox rule targeting task-list-item > input"
+            html.contains(".mdv-task-icon"),
+            "expected Fluent task icon CSS rule in <style>"
+        );
+        assert!(
+            html.contains(".mdv-task-checked"),
+            "expected .mdv-task-checked rule in <style>"
+        );
+        assert!(
+            html.contains(".mdv-task-unchecked"),
+            "expected .mdv-task-unchecked rule in <style>"
+        );
+        assert!(
+            !html.contains("task-list-item > input"),
+            "obsolete native-checkbox rule should be gone"
+        );
+    }
+
+    #[test]
+    fn task_list_html_uses_fluent_svg_icons() {
+        let html = render_page("- [x] done\n- [ ] todo\n", "t").expect("render");
+        assert!(
+            html.contains("mdv-task-checked"),
+            "Fluent CheckmarkCircle SVG missing in body: {html}"
+        );
+        assert!(
+            html.contains("mdv-task-unchecked"),
+            "Fluent Circle SVG missing in body: {html}"
+        );
+        assert!(
+            !html.contains("<input type=\"checkbox\""),
+            "native checkbox input should be replaced: {html}"
+        );
+    }
+
+    #[test]
+    fn plain_bullet_list_is_not_decorated_with_task_icons() {
+        let html = render_page("- one\n- two\n", "t").expect("render");
+        assert!(
+            !html.contains("<svg class=\"mdv-task-icon"),
+            "plain bullets should not get task icons: {html}"
         );
     }
 
