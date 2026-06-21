@@ -57,7 +57,7 @@ fn main() -> Result<()> {
 }
 
 /// Hard-fail config preflight: if the user's `config.toml` has any parse OR
-/// validation error, print one `<path>:<line> — <msg>` line per error to
+/// validation error, print one `<path>:<line> \u{2014} <msg>` line per error to
 /// stderr and return a non-zero exit code so the UI never starts.
 fn preflight_config() -> std::result::Result<(), i32> {
     use std::io::Write;

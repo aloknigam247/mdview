@@ -36,6 +36,10 @@ pub struct ConfigError {
     pub raw_value: Option<String>,
     pub message: String,
     pub line: Option<usize>,
+    /// When true, the binary refuses to start (non-zero exit, no window) instead
+    /// of degrading to defaults. Used for keys whose intent is unambiguous and
+    /// where silent fallback would mislead the user.
+    pub fatal: bool,
 }
 
 impl ConfigError {
@@ -47,6 +51,7 @@ impl ConfigError {
             raw_value: None,
             message: message.into(),
             line: line_col.map(|(l, _)| l),
+            fatal: false,
         }
     }
 
@@ -61,6 +66,7 @@ impl ConfigError {
             raw_value,
             message: message.into(),
             line: None,
+            fatal: false,
         }
     }
 
@@ -71,6 +77,20 @@ impl ConfigError {
             raw_value,
             message: message.into(),
             line: None,
+            fatal: false,
+        }
+    }
+
+    /// Same as `toc` but marks the error as fatal: the binary must refuse to
+    /// start instead of falling back to defaults.
+    pub fn toc_fatal(field: &str, raw_value: Option<String>, message: impl Into<String>) -> Self {
+        ConfigError {
+            source: ConfigErrorSource::Toc,
+            key: Some(format!("[toc] {field}")),
+            raw_value,
+            message: message.into(),
+            line: None,
+            fatal: true,
         }
     }
 
@@ -81,6 +101,7 @@ impl ConfigError {
             raw_value,
             message: message.into(),
             line: None,
+            fatal: false,
         }
     }
 
@@ -91,6 +112,7 @@ impl ConfigError {
             raw_value,
             message: message.into(),
             line: None,
+            fatal: false,
         }
     }
 
@@ -101,6 +123,7 @@ impl ConfigError {
             raw_value,
             message: message.into(),
             line: None,
+            fatal: false,
         }
     }
 
@@ -112,7 +135,7 @@ impl ConfigError {
         self
     }
 
-    /// Render this error in the hard-fail format `<path>:<line> — <message>`.
+    /// Render this error in the hard-fail format `<path>:<line> \u{2014} <message>`.
     /// `path` is the originating `config.toml` path; line falls back to `0`
     /// when the precise location is unknown.
     pub fn display_line(&self, path: &std::path::Path) -> String {

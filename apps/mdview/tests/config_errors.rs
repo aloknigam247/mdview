@@ -82,8 +82,8 @@ fn malformed_toml_hard_fails_with_line_and_message_on_stderr() {
 
 #[test]
 fn validation_error_hard_fails_with_line_and_message_on_stderr() {
-    // [toc] depth = 9 is out of range (1..=6) — value-validation error.
-    let body = "[toc]\ndepth = 9\n";
+    // [toc] levels = 9 is out of range (1..=6) — value-validation error.
+    let body = "[toc]\nlevels = 9\n";
     let (out, cfg_path) = run_with_config(body);
 
     assert!(
@@ -105,7 +105,7 @@ fn validation_error_hard_fails_with_line_and_message_on_stderr() {
         stderr.contains("1..=6"),
         "stderr should explain expected range; got:\n{stderr}"
     );
-    // The offending key `depth =` sits on line 2 in the fixture.
+    // The offending key `levels =` sits on line 2 in the fixture.
     let expected_prefix = format!("{path_str}:2 \u{2014}");
     assert!(
         stderr.contains(&expected_prefix),

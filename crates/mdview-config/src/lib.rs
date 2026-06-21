@@ -92,14 +92,14 @@ impl ThemeMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TocConfig {
     pub position: TocPosition,
-    pub depth: u8,
+    pub levels: u8,
 }
 
 impl Default for TocConfig {
     fn default() -> Self {
         TocConfig {
             position: TocPosition::FloatingRight,
-            depth: 3,
+            levels: 3,
         }
     }
 }
@@ -306,20 +306,19 @@ impl Config {
                         }
                     }
                 }
-                if let Some(v) = t.get("depth") {
+                if let Some(v) = t.get("levels") {
                     match v.as_integer() {
-                        Some(i) if (1..=6).contains(&i) => toc.depth = i as u8,
+                        Some(i) if (1..=6).contains(&i) => toc.levels = i as u8,
                         Some(i) => {
-                            errors.push(ConfigError::toc(
-                                "depth",
+                            errors.push(ConfigError::toc_fatal(
+                                "levels",
                                 Some(i.to_string()),
                                 "out of range; expected 1..=6".to_string(),
                             ));
-                            toc.depth = (i.clamp(1, 6)) as u8;
                         }
                         None => {
-                            errors.push(ConfigError::toc(
-                                "depth",
+                            errors.push(ConfigError::toc_fatal(
+                                "levels",
                                 Some(v.to_string()),
                                 "not an integer; expected 1..=6".to_string(),
                             ));
@@ -487,6 +486,7 @@ impl Config {
                         raw_value: None,
                         message: format!("cannot read file: {e}; using defaults"),
                         line: None,
+                        fatal: false,
                     };
                     report(std::slice::from_ref(&err));
                     return LoadResult {
@@ -639,9 +639,9 @@ pub const DEFAULT_CONFIG_TOML: &str = "# mdview configuration\n\
 \n\
 [toc]\n\
 # position: floating-right (default), floating-center, floating-left, fixed-right, fixed-left, inline\n\
-# depth:    1..6, default 3\n\
+# levels:   1..6, default 3 (number of heading levels included; H1..H<levels>)\n\
 # position = \"floating-right\"\n\
-# depth = 3\n\
+# levels = 3\n\
 \n\
 [codemap]\n\
 # enabled: show the right-edge minimap on launch. Default: true.\n\

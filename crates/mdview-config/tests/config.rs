@@ -115,7 +115,7 @@ fn defaults_include_toc_and_codemap() {
     let cfg = Config::defaults();
     assert_eq!(cfg.toc, TocConfig::default());
     assert_eq!(cfg.toc.position, TocPosition::FloatingRight);
-    assert_eq!(cfg.toc.depth, 3);
+    assert_eq!(cfg.toc.levels, 3);
     assert_eq!(cfg.codemap, CodemapConfig::default());
     assert!(cfg.codemap.enabled);
 }
@@ -124,7 +124,7 @@ fn defaults_include_toc_and_codemap() {
 fn toc_position_fixed_left_parses() {
     let cfg = Config::from_toml_str("[toc]\nposition = \"fixed-left\"\n");
     assert_eq!(cfg.toc.position, TocPosition::FixedLeft);
-    assert_eq!(cfg.toc.depth, 3);
+    assert_eq!(cfg.toc.levels, 3);
 }
 
 #[test]
@@ -140,21 +140,49 @@ fn toc_position_inline_parses() {
 }
 
 #[test]
-fn toc_depth_in_range_parses() {
-    let cfg = Config::from_toml_str("[toc]\ndepth = 5\n");
-    assert_eq!(cfg.toc.depth, 5);
+fn toc_levels_in_range_parses() {
+    let cfg = Config::from_toml_str("[toc]\nlevels = 5\n");
+    assert_eq!(cfg.toc.levels, 5);
 }
 
 #[test]
-fn toc_depth_zero_clamps_up() {
-    let cfg = Config::from_toml_str("[toc]\ndepth = 0\n");
-    assert_eq!(cfg.toc.depth, 1);
+fn toc_levels_default_is_three_when_unset() {
+    let cfg = Config::from_toml_str("[toc]\nposition = \"inline\"\n");
+    assert_eq!(cfg.toc.levels, 3);
 }
 
 #[test]
-fn toc_depth_over_six_clamps_down() {
-    let cfg = Config::from_toml_str("[toc]\ndepth = 9\n");
-    assert_eq!(cfg.toc.depth, 6);
+fn toc_levels_zero_is_fatal_and_does_not_clamp() {
+    let res = Config::from_toml_str_full("[toc]\nlevels = 0\n");
+    assert_eq!(res.errors.len(), 1);
+    assert!(res.errors[0].fatal, "levels=0 must be fatal");
+    let s = res.errors[0].to_string();
+    assert!(s.contains("[toc] levels"), "got: {s}");
+    assert!(s.contains("1..=6"), "got: {s}");
+    // No clamping: levels stays at its default rather than being silently coerced.
+    assert_eq!(res.config.toc.levels, 3);
+}
+
+#[test]
+fn toc_levels_seven_is_fatal_and_does_not_clamp() {
+    let res = Config::from_toml_str_full("[toc]\nlevels = 7\n");
+    assert_eq!(res.errors.len(), 1);
+    assert!(res.errors[0].fatal, "levels=7 must be fatal");
+    let s = res.errors[0].to_string();
+    assert!(s.contains("[toc] levels"), "got: {s}");
+    assert!(s.contains("1..=6"), "got: {s}");
+    assert_eq!(res.config.toc.levels, 3);
+}
+
+#[test]
+fn toc_levels_non_integer_is_fatal() {
+    let res = Config::from_toml_str_full("[toc]\nlevels = \"three\"\n");
+    assert_eq!(res.errors.len(), 1);
+    assert!(res.errors[0].fatal, "levels=\"three\" must be fatal");
+    let s = res.errors[0].to_string();
+    assert!(s.contains("[toc] levels"), "got: {s}");
+    assert!(s.contains("not an integer"), "got: {s}");
+    assert_eq!(res.config.toc.levels, 3);
 }
 
 #[test]
@@ -201,7 +229,7 @@ fn collects_all_errors_from_multi_problem_toml() {
                 quit = \"Ctrr+Q\"\n\
                 togle-theme = \"Ctrl+T\"\n\
                 [toc]\n\
-                depth = 9\n";
+                levels = 9\n";
     let res = Config::from_toml_str_full(toml);
     assert_eq!(res.errors.len(), 3, "errors: {:?}", res.errors);
     let lines: Vec<String> = res.errors.iter().map(|e| e.to_string()).collect();
@@ -215,8 +243,8 @@ fn collects_all_errors_from_multi_problem_toml() {
         "expected unknown-action line, got:\n{joined}"
     );
     assert!(
-        joined.contains("[toc] depth") && joined.contains("1..=6"),
-        "expected toc depth range line, got:\n{joined}"
+        joined.contains("[toc] levels") && joined.contains("1..=6"),
+        "expected toc levels range line, got:\n{joined}"
     );
 }
 
@@ -254,12 +282,14 @@ fn keymap_empty_binding_is_an_error() {
 }
 
 #[test]
-fn toc_depth_out_of_range_emits_error() {
-    let res = Config::from_toml_str_full("[toc]\ndepth = 9\n");
+fn toc_levels_out_of_range_emits_fatal_error() {
+    let res = Config::from_toml_str_full("[toc]\nlevels = 9\n");
     let s = res.errors[0].to_string();
-    assert!(s.contains("[toc] depth"));
+    assert!(s.contains("[toc] levels"));
     assert!(s.contains("1..=6"));
-    assert_eq!(res.config.toc.depth, 6);
+    assert!(res.errors[0].fatal);
+    // No clamping: default is preserved.
+    assert_eq!(res.config.toc.levels, 3);
 }
 
 #[test]
@@ -334,7 +364,7 @@ fn toggle_theme_keybinding_parses() {
 
 #[test]
 fn theme_errors_collected_alongside_other_sections() {
-    let toml = "[theme]\nmode = \"sepia\"\n[toc]\ndepth = 9\n";
+    let toml = "[theme]\nmode = \"sepia\"\n[toc]\nlevels = 9\n";
     let res = Config::from_toml_str_full(toml);
     assert_eq!(res.errors.len(), 2, "errors: {:?}", res.errors);
     let joined: String = res
@@ -344,9 +374,10 @@ fn theme_errors_collected_alongside_other_sections() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(joined.contains("[theme] mode"), "got:\n{joined}");
-    assert!(joined.contains("[toc] depth"), "got:\n{joined}");
+    assert!(joined.contains("[toc] levels"), "got:\n{joined}");
     assert_eq!(res.config.theme.mode, ThemeMode::Auto);
-    assert_eq!(res.config.toc.depth, 6);
+    // No clamping: default preserved.
+    assert_eq!(res.config.toc.levels, 3);
     assert!(res
         .errors
         .iter()
@@ -385,25 +416,25 @@ fn code_tab_width_out_of_range_clamps() {
 
 #[test]
 fn validation_error_carries_source_line() {
-    let toml = "[toc]\n#comment\ndepth = 9\n";
+    let toml = "[toc]\n#comment\nlevels = 9\n";
     let res = Config::from_toml_str_full(toml);
     assert_eq!(res.errors.len(), 1);
     assert_eq!(
         res.errors[0].line,
         Some(3),
-        "expected line 3 for depth on line 3; got {:?}",
+        "expected line 3 for levels on line 3; got {:?}",
         res.errors[0].line
     );
 }
 
 #[test]
 fn display_line_formats_path_line_em_dash_message() {
-    let toml = "[toc]\ndepth = 9\n";
+    let toml = "[toc]\nlevels = 9\n";
     let res = Config::from_toml_str_full(toml);
     let path = std::path::PathBuf::from("/tmp/config.toml");
     let s = res.errors[0].display_line(&path);
     assert!(s.starts_with("/tmp/config.toml:2 \u{2014}"), "got: {s}");
-    assert!(s.contains("[toc] depth"), "got: {s}");
+    assert!(s.contains("[toc] levels"), "got: {s}");
     assert!(s.contains("1..=6"), "got: {s}");
 }
 
