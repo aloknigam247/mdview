@@ -129,8 +129,8 @@ fn renders_section_3_content() {
     assert!(plain.contains('•'));
     assert!(plain.contains("1."));
     assert!(plain.contains("2."));
-    assert!(plain.contains('☐'));
-    assert!(plain.contains('☑'));
+    assert!(plain.contains('\u{F0130}'));
+    assert!(plain.contains('\u{F05E1}'));
     for tok in ["a", "b", "c", "one", "two", "done", "todo"] {
         assert!(plain.contains(tok), "missing {tok}");
     }

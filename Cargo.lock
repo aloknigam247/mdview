@@ -2200,6 +2200,7 @@ dependencies = [
  "mdview-ext-math",
  "mdview-ext-mermaid",
  "mdview-ext-plotly",
+ "mdview-render-html",
  "mdview-theme",
  "notify",
  "resvg",

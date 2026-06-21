@@ -35,10 +35,34 @@ fn blockquote_has_bar_prefix() {
 
 #[test]
 fn tasklist_markers_present() {
-    let md = "- [ ] unchecked item\n- [x] checked item\n";
+    let md = "- [x] done\n- [ ] todo\n";
     let out = render_str(md, &ctx(), &Registry::new());
-    assert!(out.contains('☐'), "unchecked marker ☐ missing: {:?}", out);
-    assert!(out.contains('☑'), "checked marker ☑ missing: {:?}", out);
+    assert!(
+        out.contains('\u{F05E1}'),
+        "checked nerd-font icon U+F05E1 missing: {:?}",
+        out
+    );
+    assert!(
+        out.contains('\u{F0130}'),
+        "unchecked nerd-font icon U+F0130 missing: {:?}",
+        out
+    );
+    assert!(
+        !out.contains('☑') && !out.contains('☐'),
+        "legacy ballot box glyphs leaked: {:?}",
+        out
+    );
+}
+
+#[test]
+fn tasklist_does_not_affect_plain_bullets() {
+    let out = render_str("- alpha\n- beta\n", &ctx(), &Registry::new());
+    assert!(out.contains('•'), "bullet missing: {:?}", out);
+    assert!(
+        !out.contains('\u{F05E1}') && !out.contains('\u{F0130}'),
+        "task icons should not appear for plain bullets: {:?}",
+        out
+    );
 }
 
 #[test]

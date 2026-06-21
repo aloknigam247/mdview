@@ -29,6 +29,39 @@ fn renders_paragraph_and_emphasis() {
 }
 
 #[test]
+fn renders_gfm_task_list_with_fluent_icons() {
+    let md = "- [x] done\n- [ ] todo\n";
+    let html = render_markdown(md, &ctx(), &Registry::new());
+    assert!(
+        html.contains("mdv-task-checked"),
+        "Fluent CheckmarkCircle SVG missing: {html}"
+    );
+    assert!(
+        html.contains("mdv-task-unchecked"),
+        "Fluent Circle SVG missing: {html}"
+    );
+    assert!(
+        !html.contains("<input type=\"checkbox\""),
+        "default checkbox input should be replaced: {html}"
+    );
+    assert!(!html.contains("[x]"), "raw [x] should not leak: {html}");
+    assert!(!html.contains("[ ]"), "raw [ ] should not leak: {html}");
+}
+
+#[test]
+fn plain_bullet_list_is_not_decorated_with_task_icons() {
+    let md = "- one\n- two\n";
+    let html = render_markdown(md, &ctx(), &Registry::new());
+    // Only the static CSS rule should reference the task-icon class — never
+    // a real <svg> instance in the document body.
+    assert!(
+        !html.contains("<svg class=\"mdv-task-icon"),
+        "plain bullets should not get task icons: {html}"
+    );
+    assert!(html.contains("<li>one</li>"));
+}
+
+#[test]
 fn renders_unordered_list() {
     let md = "- one\n- two\n- three\n";
     let html = render_markdown(md, &ctx(), &Registry::new());

@@ -28,6 +28,7 @@ mdview-ext-highlight = { path = "../../crates/mdview-ext-highlight" }
 mdview-ext-math = { path = "../../crates/mdview-ext-math" }
 mdview-ext-mermaid = { path = "../../crates/mdview-ext-mermaid" }
 mdview-ext-plotly = { path = "../../crates/mdview-ext-plotly" }
+mdview-render-html = { path = "../../crates/mdview-render-html" }
 mdview-theme = { path = "../../crates/mdview-theme" }
 notify = "6"
 tokio = { version = "1", features = ["full"] }

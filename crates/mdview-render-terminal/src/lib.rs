@@ -90,7 +90,11 @@ fn render_node<'a>(
             }
         }
         NodeValue::TaskItem(state) => {
-            let marker = if state.is_some() { "☑ " } else { "☐ " };
+            let marker = if state.is_some() {
+                "\u{F05E1} "
+            } else {
+                "\u{F0130} "
+            };
             out.push_styled(marker, ctx.theme.style("accent"));
             for child in node.children() {
                 render_node(child, ctx, registry, out, depth + 1);
@@ -276,7 +280,11 @@ fn render_list_item<'a>(
     }
 
     if let NodeValue::TaskItem(state) = &item.data.borrow().value {
-        let m = if state.is_some() { "☑ " } else { "☐ " };
+        let m = if state.is_some() {
+            "\u{F05E1} "
+        } else {
+            "\u{F0130} "
+        };
         out.push_styled(m.to_string(), ctx.theme.style("accent"));
     } else {
         out.push_styled(marker.to_string(), marker_style.clone());
