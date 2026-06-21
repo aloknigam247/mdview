@@ -384,6 +384,41 @@ fn code_tab_width_out_of_range_clamps() {
 }
 
 #[test]
+fn validation_error_carries_source_line() {
+    let toml = "[toc]\n#comment\ndepth = 9\n";
+    let res = Config::from_toml_str_full(toml);
+    assert_eq!(res.errors.len(), 1);
+    assert_eq!(
+        res.errors[0].line,
+        Some(3),
+        "expected line 3 for depth on line 3; got {:?}",
+        res.errors[0].line
+    );
+}
+
+#[test]
+fn display_line_formats_path_line_em_dash_message() {
+    let toml = "[toc]\ndepth = 9\n";
+    let res = Config::from_toml_str_full(toml);
+    let path = std::path::PathBuf::from("/tmp/config.toml");
+    let s = res.errors[0].display_line(&path);
+    assert!(s.starts_with("/tmp/config.toml:2 \u{2014}"), "got: {s}");
+    assert!(s.contains("[toc] depth"), "got: {s}");
+    assert!(s.contains("1..=6"), "got: {s}");
+}
+
+#[test]
+fn malformed_toml_display_line_uses_parser_line() {
+    let toml = "[toc]\n#good\nthis is = not [valid toml";
+    let res = Config::from_toml_str_full(toml);
+    let path = std::path::PathBuf::from("/tmp/config.toml");
+    let s = res.errors[0].display_line(&path);
+    assert!(s.starts_with("/tmp/config.toml:"), "got: {s}");
+    assert!(s.contains(" \u{2014} "), "got: {s}");
+    assert!(s.contains("invalid TOML"), "got: {s}");
+}
+
+#[test]
 fn code_tab_width_not_integer_is_error() {
     let res = Config::from_toml_str_full("[code]\ntab_width = \"four\"\n");
     assert_eq!(res.config.code.tab_width, 4);

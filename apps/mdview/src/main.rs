@@ -44,11 +44,35 @@ fn main() -> Result<()> {
         }
     }
 
+    // Hard-fail on any config parse / validation error before launching any UI.
+    if let Err(code) = preflight_config() {
+        std::process::exit(code);
+    }
+
     match args.mode() {
         Mode::Terminal => pipeline::run_terminal(&args),
         Mode::Nvim => runtime()?.block_on(pipeline::run_nvim(&args)),
         Mode::Tauri => run_tauri(&args),
     }
+}
+
+/// Hard-fail config preflight: if the user's `config.toml` has any parse OR
+/// validation error, print one `<path>:<line> — <msg>` line per error to
+/// stderr and return a non-zero exit code so the UI never starts.
+fn preflight_config() -> std::result::Result<(), i32> {
+    use std::io::Write;
+    let loaded = mdview_config::Config::load_full();
+    if loaded.errors.is_empty() {
+        return Ok(());
+    }
+    let path = loaded
+        .source_path
+        .unwrap_or_else(|| std::path::PathBuf::from("config.toml"));
+    let mut err = std::io::stderr();
+    for e in &loaded.errors {
+        let _ = writeln!(err, "{}", e.display_line(&path));
+    }
+    Err(78)
 }
 
 fn validate_file(file: &std::path::Path) -> std::result::Result<(), i32> {

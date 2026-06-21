@@ -143,6 +143,9 @@ impl Default for CodemapConfig {
 pub struct LoadResult {
     pub config: Config,
     pub errors: Vec<ConfigError>,
+    /// Path to the config file the errors originated from, if any. `None` when
+    /// no user config existed (defaults path).
+    pub source_path: Option<PathBuf>,
 }
 
 impl Config {
@@ -166,6 +169,12 @@ impl Config {
     /// Parse from a TOML string, collecting every key/value error encountered.
     /// Always returns a valid `Config` (falling back to defaults per field).
     pub fn from_toml_str_full(s: &str) -> LoadResult {
+        Self::from_toml_str_with_path(s, None)
+    }
+
+    /// Parse from a TOML string and remember the originating file path so that
+    /// errors can be rendered as `<path>:<line> — <msg>` for hard-fail output.
+    pub fn from_toml_str_with_path(s: &str, source_path: Option<PathBuf>) -> LoadResult {
         #[derive(Deserialize, Default)]
         struct Raw {
             #[serde(default)]
@@ -191,6 +200,7 @@ impl Config {
                 return LoadResult {
                     config: Self::defaults(),
                     errors,
+                    source_path,
                 };
             }
         };
@@ -402,6 +412,12 @@ impl Config {
             }
         }
 
+        for err in &mut errors {
+            if err.line.is_none() {
+                err.line = find_error_line(s, err);
+            }
+        }
+
         LoadResult {
             config: Config {
                 code,
@@ -411,6 +427,7 @@ impl Config {
                 theme,
             },
             errors,
+            source_path,
         }
     }
 
@@ -450,6 +467,7 @@ impl Config {
             None => LoadResult {
                 config: Self::defaults(),
                 errors: Vec::new(),
+                source_path: None,
             },
         }
     }
@@ -458,7 +476,7 @@ impl Config {
         if path.exists() {
             match std::fs::read_to_string(path) {
                 Ok(s) => {
-                    let result = Self::from_toml_str_full(&s);
+                    let result = Self::from_toml_str_with_path(&s, Some(path.to_path_buf()));
                     report(&result.errors);
                     return result;
                 }
@@ -468,11 +486,13 @@ impl Config {
                         key: Some(path.display().to_string()),
                         raw_value: None,
                         message: format!("cannot read file: {e}; using defaults"),
+                        line: None,
                     };
                     report(std::slice::from_ref(&err));
                     return LoadResult {
                         config: Self::defaults(),
                         errors: vec![err],
+                        source_path: Some(path.to_path_buf()),
                     };
                 }
             }
@@ -480,6 +500,7 @@ impl Config {
         LoadResult {
             config: Self::defaults(),
             errors: Vec::new(),
+            source_path: None,
         }
     }
 }
@@ -495,6 +516,60 @@ fn list_actions() -> String {
     let mut names: Vec<&str> = Action::ALL.iter().map(|a| a.as_str()).collect();
     names.sort_unstable();
     names.join(", ")
+}
+
+/// Best-effort search for the source line a value-validation error refers to.
+/// Returns the 1-based line number of `<key> =` inside the relevant
+/// `[<section>]` block, or `None` when no plausible match is found.
+fn find_error_line(src: &str, err: &ConfigError) -> Option<usize> {
+    let (section, key) = parse_section_key(err)?;
+    let mut current_section: Option<String> = None;
+    for (idx, line) in src.lines().enumerate() {
+        let trimmed = line.trim_start();
+        if let Some(rest) = trimmed.strip_prefix('[') {
+            if let Some(end) = rest.find(']') {
+                current_section = Some(rest[..end].trim().to_string());
+                continue;
+            }
+        }
+        if current_section.as_deref() != Some(section) {
+            continue;
+        }
+        if trimmed.starts_with('#') {
+            continue;
+        }
+        let eq = match trimmed.find('=') {
+            Some(i) => i,
+            None => continue,
+        };
+        let lhs = trimmed[..eq].trim().trim_matches('"');
+        if lhs == key {
+            return Some(idx + 1);
+        }
+    }
+    None
+}
+
+fn parse_section_key(err: &ConfigError) -> Option<(&'static str, String)> {
+    let k = err.key.as_deref()?;
+    if let Some(rest) = k.strip_prefix("keymap[") {
+        let action = rest.strip_suffix(']').unwrap_or(rest);
+        return Some(("keymap", action.to_string()));
+    }
+    for (prefix, name) in [
+        ("[code] ", "code"),
+        ("[codemap] ", "codemap"),
+        ("[theme] ", "theme"),
+        ("[toc] ", "toc"),
+    ] {
+        if let Some(field) = k.strip_prefix(prefix) {
+            if field.is_empty() {
+                return None;
+            }
+            return Some((name, field.to_string()));
+        }
+    }
+    None
 }
 
 fn line_col_at(src: &str, byte_offset: usize) -> (usize, usize) {
@@ -594,4 +669,3 @@ pub const DEFAULT_CONFIG_TOML: &str = "# mdview configuration\n\
 #   toggle-toc      \u{2014} show / hide the floating table of contents\n\
 #\n\
 # quit = \"Ctrl+Q\"\n";
-
