@@ -58,7 +58,7 @@ impl Mermaid {
         renderer: &R,
     ) -> Option<TermChunks> {
         let source = Self::extract_source(node)?;
-        Some(render_terminal_impl(&source, renderer))
+        Some(render_terminal_impl(&source, renderer, None))
     }
 }
 
@@ -81,15 +81,7 @@ impl MdViewExtension for Mermaid {
         _ctx: &RenderCtx<'_>,
     ) -> Option<TermChunks> {
         let source = Self::extract_source(node)?;
-        // Without a sixel renderer we cannot produce the rendered diagram. If
-        // the sidecar binary is missing entirely, surface the same red-prefix
-        // code block we emit elsewhere; otherwise fall back to the original
-        // source as a plain code block.
-        if sidecar::locate_sidecar().is_none() {
-            Some(missing_cli_terminal(&source))
-        } else {
-            Some(fallback_code_terminal(&source))
-        }
+        Some(render_terminal_default(&source, None))
     }
 
     fn client_assets(&self) -> &'static [Asset] {
@@ -119,8 +111,12 @@ fn escape_html(s: &str) -> String {
     out
 }
 
-fn render_terminal_impl<R: SixelRenderer>(source: &str, renderer: &R) -> TermChunks {
-    let Some(bin) = sidecar::locate_sidecar() else {
+fn render_terminal_impl<R: SixelRenderer>(
+    source: &str,
+    renderer: &R,
+    override_path: Option<&std::path::Path>,
+) -> TermChunks {
+    let Some(bin) = sidecar::locate_sidecar(override_path) else {
         return missing_cli_terminal(source);
     };
     let job = SidecarJob {
@@ -143,9 +139,19 @@ fn render_terminal_impl<R: SixelRenderer>(source: &str, renderer: &R) -> TermChu
     }
 }
 
+/// Default terminal path: no sixel renderer available, so we can only either
+/// surface the missing-binary red prefix or the plain source.
+fn render_terminal_default(source: &str, override_path: Option<&std::path::Path>) -> TermChunks {
+    if sidecar::locate_sidecar(override_path).is_none() {
+        missing_cli_terminal(source)
+    } else {
+        fallback_code_terminal(source)
+    }
+}
+
 /// Render the block as a normal code block with a single ANSI-red prefix line
 /// reading `missing mermaid command`. Used when the sidecar binary cannot be
-/// located on PATH (or the override env-var).
+/// located.
 fn missing_cli_terminal(source: &str) -> TermChunks {
     let mut text = String::new();
     text.push_str(ANSI_RED);
@@ -186,6 +192,17 @@ mod tests {
             .map(|c| c.text.as_str())
             .collect::<Vec<_>>()
             .join("")
+    }
+
+    /// A path that is guaranteed not to exist on the host. Passing this to
+    /// the override parameter forces `locate_sidecar` to return `None` —
+    /// indistinguishable from "no `mdview-sidecar` on PATH" in the production
+    /// code path, without touching the process environment.
+    fn missing_path() -> std::path::PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push("mdview-mermaid-tests");
+        p.push("definitely-not-a-real-sidecar-binary");
+        p
     }
 
     #[test]
@@ -234,21 +251,9 @@ mod tests {
 
     #[test]
     fn terminal_without_sidecar_renders_code_with_ansi_red_prefix() {
-        let prev_env = std::env::var_os(sidecar::SIDECAR_ENV);
-        std::env::remove_var(sidecar::SIDECAR_ENV);
-        let prev_path = std::env::var_os("PATH");
-        std::env::set_var("PATH", "");
-
-        let arena = Arena::new();
-        let root = parse_document(
-            &arena,
-            "```mermaid\ngraph TD; A-->B;\n```\n",
-            &ComrakOptions::default(),
-        );
-        let node = first_code_block(root).expect("code block");
-        let theme = Theme::default();
-        let ctx = RenderCtx::new(&theme);
-        let chunks = Mermaid.render_terminal(node, &ctx).expect("chunks");
+        let source = "graph TD; A-->B;\n";
+        let missing = missing_path();
+        let chunks = render_terminal_default(source, Some(&missing));
         let text = joined_text(&chunks);
         assert!(
             text.starts_with("\x1b[31mmissing mermaid command\x1b[0m\n"),
@@ -262,55 +267,26 @@ mod tests {
             !text.contains("(install sidecar to see rendered diagram)"),
             "old placeholder hint should be gone: {text:?}"
         );
-
-        if let Some(p) = prev_path {
-            std::env::set_var("PATH", p);
-        }
-        if let Some(v) = prev_env {
-            std::env::set_var(sidecar::SIDECAR_ENV, v);
-        }
     }
 
     /// Sixel-aware path: missing sidecar should also surface the red prefix.
     #[test]
     fn render_terminal_with_without_sidecar_renders_code_with_ansi_red_prefix() {
-        let prev_env = std::env::var_os(sidecar::SIDECAR_ENV);
-        std::env::remove_var(sidecar::SIDECAR_ENV);
-        let prev_path = std::env::var_os("PATH");
-        std::env::set_var("PATH", "");
-
         struct NeverRenderer;
         impl SixelRenderer for NeverRenderer {
             fn render_image(&self, _svg: &[u8]) -> Result<Vec<u8>, String> {
                 panic!("must not be invoked when sidecar missing");
             }
         }
-
-        let arena = Arena::new();
-        let root = parse_document(
-            &arena,
-            "```mermaid\ngraph TD; A-->B;\n```\n",
-            &ComrakOptions::default(),
-        );
-        let node = first_code_block(root).expect("code block");
-        let theme = Theme::default();
-        let ctx = RenderCtx::new(&theme);
-        let chunks = Mermaid
-            .render_terminal_with(node, &ctx, &NeverRenderer)
-            .expect("chunks");
+        let source = "graph TD; A-->B;\n";
+        let missing = missing_path();
+        let chunks = render_terminal_impl(source, &NeverRenderer, Some(&missing));
         let text = joined_text(&chunks);
         assert!(
             text.starts_with("\x1b[31mmissing mermaid command\x1b[0m\n"),
             "expected ANSI red prefix at start, got: {text:?}"
         );
         assert!(text.contains("graph TD; A-->B;"));
-
-        if let Some(p) = prev_path {
-            std::env::set_var("PATH", p);
-        }
-        if let Some(v) = prev_env {
-            std::env::set_var(sidecar::SIDECAR_ENV, v);
-        }
     }
 
     struct EchoRenderer;
@@ -332,23 +308,10 @@ mod tests {
         let mut p = std::fs::metadata(&script).unwrap().permissions();
         p.set_mode(0o755);
         std::fs::set_permissions(&script, p).unwrap();
-        std::env::set_var(sidecar::SIDECAR_ENV, &script);
 
-        let arena = Arena::new();
-        let root = parse_document(
-            &arena,
-            "```mermaid\ngraph TD; A-->B;\n```\n",
-            &ComrakOptions::default(),
-        );
-        let node = first_code_block(root).expect("code block");
-        let theme = Theme::default();
-        let ctx = RenderCtx::new(&theme);
-        let chunks = Mermaid
-            .render_terminal_with(node, &ctx, &EchoRenderer)
-            .unwrap();
+        let chunks = render_terminal_impl("graph TD; A-->B;\n", &EchoRenderer, Some(&script));
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0].text, "SIXEL:<svg>ok</svg>");
-        std::env::remove_var(sidecar::SIDECAR_ENV);
     }
 
     #[test]
@@ -361,26 +324,14 @@ mod tests {
             "@echo off\r\nset /p _=\r\n<nul set /p =<svg>ok</svg>\r\n",
         )
         .unwrap();
-        std::env::set_var(sidecar::SIDECAR_ENV, &script);
 
-        let arena = Arena::new();
-        let root = parse_document(
-            &arena,
-            "```mermaid\ngraph TD; A-->B;\n```\n",
-            &ComrakOptions::default(),
-        );
-        let node = first_code_block(root).expect("code block");
-        let theme = Theme::default();
-        let ctx = RenderCtx::new(&theme);
-        let result = Mermaid.render_terminal_with(node, &ctx, &EchoRenderer);
-        let chunks = result.expect("chunks");
+        let chunks = render_terminal_impl("graph TD; A-->B;\n", &EchoRenderer, Some(&script));
         let text = joined_text(&chunks);
         let has_sixel = text.contains("SIXEL:");
         // Either the fake sidecar succeeded (sixel chunk) or it failed and
         // we fell back to a plain code block containing the diagram source.
         let has_source = text.contains("graph TD; A-->B;");
         assert!(has_sixel || has_source, "got: {text:?}");
-        std::env::remove_var(sidecar::SIDECAR_ENV);
     }
 
     #[test]

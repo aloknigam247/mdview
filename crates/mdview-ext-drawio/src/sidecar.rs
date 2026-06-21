@@ -1,11 +1,11 @@
 use std::io::Write;
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use thiserror::Error;
 
 pub const SIDECAR_BIN: &str = "mdview-sidecar";
-pub const SIDECAR_ENV: &str = "MDVIEW_SIDECAR";
 
 #[derive(Debug, Error)]
 pub enum SidecarError {
@@ -19,21 +19,29 @@ pub enum SidecarError {
     Empty,
 }
 
-/// Locate the sidecar binary. Honors the `MDVIEW_SIDECAR` override before
-/// falling back to a PATH lookup, matching the other diagram extensions.
-pub fn locate_sidecar() -> Result<std::path::PathBuf, SidecarError> {
-    if let Some(env_path) = std::env::var_os(SIDECAR_ENV) {
-        let p = std::path::PathBuf::from(env_path);
-        if p.exists() {
-            return Ok(p);
-        }
-        return Err(SidecarError::NotFound);
+/// Locate the sidecar binary.
+///
+/// Production callers pass `None` and detection falls through to
+/// `which::which("mdview-sidecar")`. Tests may pass `Some(p)` to inject a
+/// specific binary (or a non-existent path to simulate a missing sidecar)
+/// without mutating the process environment.
+pub fn locate_sidecar(override_path: Option<&Path>) -> Result<std::path::PathBuf, SidecarError> {
+    if let Some(p) = override_path {
+        return if p.exists() {
+            Ok(p.to_path_buf())
+        } else {
+            Err(SidecarError::NotFound)
+        };
     }
     which::which(SIDECAR_BIN).map_err(|_| SidecarError::NotFound)
 }
 
-pub fn run_sidecar(kind: &str, source: &str) -> Result<String, SidecarError> {
-    let path = locate_sidecar()?;
+pub fn run_sidecar(
+    kind: &str,
+    source: &str,
+    override_path: Option<&Path>,
+) -> Result<String, SidecarError> {
+    let path = locate_sidecar(override_path)?;
     let payload = serde_json::json!({
         "kind": kind,
         "source": source,

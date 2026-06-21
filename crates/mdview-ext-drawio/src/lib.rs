@@ -61,11 +61,7 @@ impl MdViewExtension for Drawio {
         if !is_drawio_info(&info) {
             return None;
         }
-        match sidecar::run_sidecar("drawio", &body) {
-            Ok(svg) => Some(vec![TermChunk::plain(sixel_wrap(&svg))]),
-            Err(sidecar::SidecarError::NotFound) => Some(missing_cli_terminal(&body)),
-            Err(_) => Some(fallback_code_terminal(&body)),
-        }
+        Some(render_terminal_impl(&body, None))
     }
 
     fn client_assets(&self) -> &'static [Asset] {
@@ -110,9 +106,19 @@ fn sixel_wrap(svg: &str) -> String {
     format!("\x1bPq{svg}\x1b\\")
 }
 
+/// Render the drawio body to terminal chunks. Tests pass `Some(p)` to inject
+/// a fake or non-existent sidecar binary; production callers pass `None`.
+fn render_terminal_impl(body: &str, override_path: Option<&std::path::Path>) -> TermChunks {
+    match sidecar::run_sidecar("drawio", body, override_path) {
+        Ok(svg) => vec![TermChunk::plain(sixel_wrap(&svg))],
+        Err(sidecar::SidecarError::NotFound) => missing_cli_terminal(body),
+        Err(_) => fallback_code_terminal(body),
+    }
+}
+
 /// Render the block as a normal code block with a single ANSI-red prefix line
 /// reading `missing drawio command`. Used when the sidecar binary cannot be
-/// located on PATH (or the `MDVIEW_SIDECAR` override).
+/// located.
 fn missing_cli_terminal(source: &str) -> TermChunks {
     let mut text = String::new();
     text.push_str(ANSI_RED);
@@ -194,24 +200,22 @@ mod tests {
         assert!(Drawio.render_terminal(cb, &ctx).is_none());
     }
 
+    /// A path that is guaranteed not to exist on the host. Passing this to
+    /// the override parameter forces `locate_sidecar` to return `NotFound` —
+    /// indistinguishable from "no `mdview-sidecar` on PATH" in the production
+    /// code path, without touching the process environment.
+    fn missing_path() -> std::path::PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push("mdview-drawio-tests");
+        p.push("definitely-not-a-real-sidecar-binary");
+        p
+    }
+
     #[test]
     fn terminal_renders_code_with_ansi_red_prefix_when_sidecar_missing() {
-        // Force the sidecar lookup to fail by pointing the env override at a
-        // path that definitely does not exist. This bypasses any real
-        // `mdview-sidecar` that might happen to be installed on the host.
-        let prev_env = std::env::var_os(sidecar::SIDECAR_ENV);
-        std::env::set_var(
-            sidecar::SIDECAR_ENV,
-            "/definitely/nonexistent/mdview-sidecar-xyzzy",
-        );
-
-        let arena = Arena::new();
-        let md = "```drawio\n<mxfile/>\n```\n";
-        let root = parse_document(&arena, md, &ComrakOptions::default());
-        let cb = first_code_block(root).expect("code block");
-        let theme = Theme::default();
-        let ctx = RenderCtx::new(&theme);
-        let chunks = Drawio.render_terminal(cb, &ctx).expect("chunks");
+        let body = "<mxfile/>\n";
+        let missing = missing_path();
+        let chunks = render_terminal_impl(body, Some(&missing));
         assert_eq!(chunks.len(), 1);
         let text = &chunks[0].text;
         assert!(
@@ -223,11 +227,6 @@ mod tests {
             !text.contains("drawio diagram") && !text.contains("sidecar unavailable"),
             "old placeholder leaked: {text:?}"
         );
-
-        match prev_env {
-            Some(v) => std::env::set_var(sidecar::SIDECAR_ENV, v),
-            None => std::env::remove_var(sidecar::SIDECAR_ENV),
-        }
     }
 
     #[test]
