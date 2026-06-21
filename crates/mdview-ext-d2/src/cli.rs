@@ -4,6 +4,16 @@
 //! the diagram source from stdin and writing the SVG to a temp file. If the CLI
 //! is not on `PATH` we surface a structured error so callers can place a notice
 //! in the rendered output.
+//!
+//! ## Windows tempfile note
+//!
+//! We deliberately do NOT pre-create the output file via
+//! `tempfile::NamedTempFile`. On Windows, a `NamedTempFile` holds an exclusive
+//! handle on the path, which causes `d2` to fail with "access denied" when it
+//! tries to open the same path for writing. Instead we allocate a
+//! [`tempfile::TempDir`] and build a child path inside it that does not exist
+//! until `d2` creates it; the directory (and any file inside) is cleaned up
+//! when the [`TempDir`] is dropped.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -71,12 +81,14 @@ pub fn render_svg_with(
         return Err(D2Error::NotFound);
     };
 
-    let tmp = tempfile::Builder::new()
+    // Allocate a scratch directory but do NOT create the output file. d2 will
+    // create the file itself when it writes the SVG. The TempDir guard
+    // removes the directory (and the file inside it) on drop.
+    let dir = tempfile::Builder::new()
         .prefix("mdview-d2-")
-        .suffix(".svg")
-        .tempfile()
+        .tempdir()
         .map_err(|e| D2Error::Io(e.to_string()))?;
-    let out_path = tmp.path().to_path_buf();
+    let out_path = dir.path().join("out.svg");
 
     let mut cmd = Command::new(&bin);
     cmd.arg("--omit-xml-tag")
@@ -121,12 +133,13 @@ pub fn render_svg_with(
 }
 
 fn render_svg_plain(bin: &std::path::Path, source: &str) -> Result<Vec<u8>, D2Error> {
-    let tmp = tempfile::Builder::new()
+    // Same tempdir-not-tempfile contract as `render_svg_with`; see the
+    // Windows note at the top of this module.
+    let dir = tempfile::Builder::new()
         .prefix("mdview-d2-")
-        .suffix(".svg")
-        .tempfile()
+        .tempdir()
         .map_err(|e| D2Error::Io(e.to_string()))?;
-    let out_path = tmp.path().to_path_buf();
+    let out_path = dir.path().join("out.svg");
 
     let mut cmd = Command::new(bin);
     cmd.arg("--omit-xml-tag")
