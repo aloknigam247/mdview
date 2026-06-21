@@ -43,7 +43,7 @@ impl D2 {
         renderer: &R,
     ) -> Option<TermChunks> {
         let source = Self::extract_source(node)?;
-        Some(render_terminal_impl(&source, renderer))
+        Some(render_terminal_impl(&source, renderer, None))
     }
 }
 
@@ -54,7 +54,7 @@ impl MdViewExtension for D2 {
 
     fn render_html<'a>(&self, node: &'a AstNode<'a>, _ctx: &RenderCtx<'_>) -> Option<Html> {
         let source = Self::extract_source(node)?;
-        Some(Html(render_html_impl(&source)))
+        Some(Html(render_html_impl(&source, None)))
     }
 
     fn render_terminal<'a>(
@@ -63,7 +63,7 @@ impl MdViewExtension for D2 {
         _ctx: &RenderCtx<'_>,
     ) -> Option<TermChunks> {
         let source = Self::extract_source(node)?;
-        Some(render_terminal_default(&source))
+        Some(render_terminal_default(&source, None))
     }
 
     fn client_assets(&self) -> &'static [Asset] {
@@ -78,8 +78,8 @@ fn is_d2_info(info: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn render_html_impl(source: &str) -> String {
-    match cli::render_svg(source) {
+fn render_html_impl(source: &str, override_path: Option<&std::path::Path>) -> String {
+    match cli::render_svg_with(source, override_path, cli::DEFAULT_TIMEOUT) {
         Ok(svg) => {
             let svg_str = String::from_utf8_lossy(&svg);
             format!("<div class=\"d2\">{}</div>", inline_svg(&svg_str))
@@ -134,8 +134,12 @@ fn escape_html(s: &str) -> String {
     out
 }
 
-fn render_terminal_impl<R: SixelRenderer>(source: &str, renderer: &R) -> TermChunks {
-    match cli::render_svg(source) {
+fn render_terminal_impl<R: SixelRenderer>(
+    source: &str,
+    renderer: &R,
+    override_path: Option<&std::path::Path>,
+) -> TermChunks {
+    match cli::render_svg_with(source, override_path, cli::DEFAULT_TIMEOUT) {
         Ok(svg) => match renderer.render_image(&svg) {
             Ok(bytes) => vec![TermChunk::plain(
                 String::from_utf8_lossy(&bytes).into_owned(),
@@ -147,12 +151,12 @@ fn render_terminal_impl<R: SixelRenderer>(source: &str, renderer: &R) -> TermChu
     }
 }
 
-fn render_terminal_default(source: &str) -> TermChunks {
+fn render_terminal_default(source: &str, override_path: Option<&std::path::Path>) -> TermChunks {
     // The default path is the one invoked when no sixel-capable renderer is
     // wired up. If `d2` is missing, surface the same red prefix block;
     // otherwise fall back to plain code (still safer than silently dropping
     // the diagram).
-    if cli::locate_d2().is_none() {
+    if cli::locate_d2(override_path).is_none() {
         missing_cli_terminal(source)
     } else {
         fallback_code_terminal(source)
@@ -201,37 +205,15 @@ mod tests {
             .join("")
     }
 
-    /// Force `locate_d2` to fail by clearing PATH and the override env var.
-    /// Returns a guard that restores the previous values on drop.
-    struct PathGuard {
-        prev_env: Option<std::ffi::OsString>,
-        prev_path: Option<std::ffi::OsString>,
-    }
-
-    impl PathGuard {
-        fn isolate() -> Self {
-            let prev_env = std::env::var_os(cli::D2_ENV);
-            let prev_path = std::env::var_os("PATH");
-            std::env::remove_var(cli::D2_ENV);
-            std::env::set_var("PATH", "");
-            Self {
-                prev_env,
-                prev_path,
-            }
-        }
-    }
-
-    impl Drop for PathGuard {
-        fn drop(&mut self) {
-            if let Some(p) = self.prev_path.take() {
-                std::env::set_var("PATH", p);
-            } else {
-                std::env::remove_var("PATH");
-            }
-            if let Some(v) = self.prev_env.take() {
-                std::env::set_var(cli::D2_ENV, v);
-            }
-        }
+    /// A path that is guaranteed not to exist on the host. Passing this to
+    /// the override parameter forces `locate_d2` to return `None` — which is
+    /// indistinguishable from "no `d2` on PATH" in the production code path,
+    /// without touching the process environment.
+    fn missing_path() -> std::path::PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push("mdview-d2-tests");
+        p.push("definitely-not-a-real-d2-binary");
+        p
     }
 
     #[test]
@@ -273,30 +255,28 @@ mod tests {
 
     /// HTML: missing CLI renders as a code block, the source is visible, and
     /// the first line of code content is the red `missing d2 command` span.
+    /// Detection is forced to "missing" by passing a non-existent override
+    /// path to the internal renderer (the same path the trait method takes
+    /// after extracting the source).
     #[test]
     fn html_without_cli_renders_code_block_with_red_prefix() {
-        let _guard = PathGuard::isolate();
-        let arena = Arena::new();
-        let root = parse_document(&arena, "```d2\na -> b\n```\n", &ComrakOptions::default());
-        let node = first_code_block(root).expect("code block");
-        let theme = Theme::default();
-        let ctx = RenderCtx::new(&theme);
-        let html = D2.render_html(node, &ctx).expect("html");
+        let source = "a -> b\n";
+        let missing = missing_path();
+        let html = render_html_impl(source, Some(&missing));
 
         // 1. Output looks like a normal mdview code block container.
         assert!(
-            html.0.contains("<pre class=\"mdv-code\""),
-            "expected mdv-code container, got: {}",
-            html.0
+            html.contains("<pre class=\"mdv-code\""),
+            "expected mdv-code container, got: {html}"
         );
-        assert!(html.0.contains("<code>"));
+        assert!(html.contains("<code>"));
 
         // 2. Original d2 source is preserved (HTML-escaped).
-        assert!(html.0.contains("a -&gt; b"), "source missing: {}", html.0);
+        assert!(html.contains("a -&gt; b"), "source missing: {html}");
 
         // 3. Red prefix line is the first thing inside <code>.
-        let code_open = html.0.find("<code>").expect("code open");
-        let after_code = &html.0[code_open + "<code>".len()..];
+        let code_open = html.find("<code>").expect("code open");
+        let after_code = &html[code_open + "<code>".len()..];
         assert!(
             after_code.starts_with("<span class=\"mdv-d2-missing\""),
             "red prefix not first child of <code>: {after_code}"
@@ -307,21 +287,16 @@ mod tests {
         );
 
         // 4. Red styling is present (either class or inline style).
+        assert!(html.contains("mdv-d2-missing"), "expected red prefix class");
         assert!(
-            html.0.contains("mdv-d2-missing"),
-            "expected red prefix class"
-        );
-        assert!(
-            html.0.contains("#f38ba8") || html.0.contains("--mdv-error"),
-            "expected red color hint (catppuccin red or --mdv-error): {}",
-            html.0
+            html.contains("#f38ba8") || html.contains("--mdv-error"),
+            "expected red color hint (catppuccin red or --mdv-error): {html}"
         );
 
         // 5. Regression: install URL must NOT appear in rendered output.
         assert!(
-            !html.0.contains("d2lang.com/tour/install"),
-            "install URL leaked into rendered output: {}",
-            html.0
+            !html.contains("d2lang.com/tour/install"),
+            "install URL leaked into rendered output: {html}"
         );
     }
 
@@ -329,13 +304,9 @@ mod tests {
     /// with an ANSI-red prefix line `missing d2 command` and no install URL.
     #[test]
     fn terminal_without_cli_renders_code_with_ansi_red_prefix() {
-        let _guard = PathGuard::isolate();
-        let arena = Arena::new();
-        let root = parse_document(&arena, "```d2\na -> b\n```\n", &ComrakOptions::default());
-        let node = first_code_block(root).expect("code block");
-        let theme = Theme::default();
-        let ctx = RenderCtx::new(&theme);
-        let chunks = D2.render_terminal(node, &ctx).expect("chunks");
+        let source = "a -> b\n";
+        let missing = missing_path();
+        let chunks = render_terminal_default(source, Some(&missing));
         let text = joined_text(&chunks);
 
         // 4. ANSI red prefix at start.
@@ -357,21 +328,15 @@ mod tests {
     /// Terminal (sixel-aware path): same expectations when CLI is missing.
     #[test]
     fn render_terminal_with_without_cli_renders_code_with_ansi_red_prefix() {
-        let _guard = PathGuard::isolate();
         struct NeverRenderer;
         impl SixelRenderer for NeverRenderer {
             fn render_image(&self, _svg: &[u8]) -> Result<Vec<u8>, String> {
                 panic!("must not be invoked when CLI missing");
             }
         }
-        let arena = Arena::new();
-        let root = parse_document(&arena, "```d2\na -> b\n```\n", &ComrakOptions::default());
-        let node = first_code_block(root).expect("code block");
-        let theme = Theme::default();
-        let ctx = RenderCtx::new(&theme);
-        let chunks = D2
-            .render_terminal_with(node, &ctx, &NeverRenderer)
-            .expect("chunks");
+        let source = "a -> b\n";
+        let missing = missing_path();
+        let chunks = render_terminal_impl(source, &NeverRenderer, Some(&missing));
         let text = joined_text(&chunks);
 
         assert!(

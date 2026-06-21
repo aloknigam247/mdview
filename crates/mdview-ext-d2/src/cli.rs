@@ -2,16 +2,15 @@
 //!
 //! We render via `d2 --omit-xml-tag --animate-interval=1000 - <output>`, reading
 //! the diagram source from stdin and writing the SVG to a temp file. If the CLI
-//! is not on PATH we surface a structured error so callers can place a notice
+//! is not on `PATH` we surface a structured error so callers can place a notice
 //! in the rendered output.
 
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
 pub const D2_BIN: &str = "d2";
-pub const D2_ENV: &str = "MDVIEW_D2_BIN";
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 pub const INSTALL_HINT: &str = "d2 CLI not found on PATH. Install: https://d2lang.com/tour/install";
 
@@ -40,26 +39,35 @@ impl std::error::Error for D2Error {}
 
 /// Locate the `d2` binary.
 ///
-/// Priority:
-/// 1. `MDVIEW_D2_BIN` env var (absolute path to the binary).
-/// 2. `d2` discovered on `PATH`.
-pub fn locate_d2() -> Option<PathBuf> {
-    if let Some(env_path) = std::env::var_os(D2_ENV) {
-        let p = PathBuf::from(env_path);
-        if p.exists() {
-            return Some(p);
-        }
+/// Production callers pass `None` and detection falls through to
+/// `which::which("d2")`. Tests may pass `Some(path)` to inject a specific
+/// binary (or a non-existent path to simulate a missing CLI) without
+/// mutating the process environment.
+pub fn locate_d2(override_path: Option<&Path>) -> Option<PathBuf> {
+    if let Some(p) = override_path {
+        return if p.exists() {
+            Some(p.to_path_buf())
+        } else {
+            None
+        };
     }
     which::which(D2_BIN).ok()
 }
 
 /// Render a `d2` diagram to SVG bytes by invoking the local CLI.
 pub fn render_svg(source: &str) -> Result<Vec<u8>, D2Error> {
-    render_svg_with_timeout(source, DEFAULT_TIMEOUT)
+    render_svg_with(source, None, DEFAULT_TIMEOUT)
 }
 
-pub fn render_svg_with_timeout(source: &str, _timeout: Duration) -> Result<Vec<u8>, D2Error> {
-    let Some(bin) = locate_d2() else {
+/// Render with an explicit binary-path override and timeout. Production
+/// callers should use [`render_svg`]; tests use this to inject a fake or
+/// missing binary deterministically.
+pub fn render_svg_with(
+    source: &str,
+    override_path: Option<&Path>,
+    _timeout: Duration,
+) -> Result<Vec<u8>, D2Error> {
+    let Some(bin) = locate_d2(override_path) else {
         return Err(D2Error::NotFound);
     };
 
