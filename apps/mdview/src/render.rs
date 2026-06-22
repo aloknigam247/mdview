@@ -431,7 +431,7 @@ fn wrap_page(
 <head>
 <meta charset="utf-8">
 <title>{title_esc}</title>
-<script>(function(){{try{{var s=window.sessionStorage;if(!s)return;var t=s.getItem('mdv:theme');if(t==='light'||t==='dark'){{var h=document.documentElement;h.classList.remove('theme-light','theme-dark');h.classList.add('theme-'+t);h.style.background='';}}if(s.getItem('mdv:codemap-hidden')==='1')document.documentElement.classList.add('mdv-codemap-hidden');if(s.getItem('mdv:toc-hidden')==='1')document.documentElement.classList.add('mdv-toc-hidden');}}catch(_){{}}}})()</script>
+<script>(function(){{try{{var s=window.sessionStorage;if(!s)return;var t=s.getItem('mdv:theme');if(t==='light'||t==='dark'){{var h=document.documentElement;h.classList.remove('theme-light','theme-dark');h.classList.add('theme-'+t);h.style.background='';}}if(s.getItem('mdv:toc-hidden')==='1')document.documentElement.classList.add('mdv-toc-hidden');}}catch(_){{}}}})()</script>
 <script>
 (function() {{
     try {{
@@ -590,8 +590,7 @@ fn wrap_page(
                   cursor: ns-resize; transition: opacity .15s ease;
                   backdrop-filter: blur(6px);
                   user-select: none; touch-action: none; }}
-  #mdv-minimap.mdv-hidden {{ opacity: 0; pointer-events: none; }}
-  :root.mdv-codemap-hidden #mdv-minimap {{ opacity: 0; pointer-events: none; }}
+  #mdv-minimap.mdv-hidden {{ display: none; }}
   :root.mdv-toc-hidden #mdv-toc {{ display: none; }}
   #mdv-minimap-content {{ transform-origin: top left; pointer-events: none;
                           user-select: none; position: absolute; top: 6px; left: 6px; }}
@@ -809,10 +808,15 @@ fn wrap_page(
       }} catch (e) {{ console.warn('drawio:', e); }}
     }}
 
-    const __mdvSetupMinimap = () => {{
+    // Codemap is hidden on load by hardcoded default (tasks.md #12/#13). The DOM
+    // is NOT mounted until the user first toggles it on; once mounted, subsequent
+    // toggles flip a `mdv-hidden` class (display:none) rather than unmounting,
+    // so we never pay the construction cost twice.
+    let __mdvMinimap = null;
+    const __mdvMountMinimap = () => {{
+      if (__mdvMinimap) return __mdvMinimap;
       const article = document.querySelector('article.mdv');
-      if (!article) return;
-      if (document.getElementById('mdv-minimap')) return;
+      if (!article) return null;
 
       const minimap = document.createElement('div');
       minimap.id = 'mdv-minimap';
@@ -850,10 +854,6 @@ fn wrap_page(
         viewport.style.height = Math.max(8, viewH * scale) + 'px';
       }};
 
-      update();
-      window.addEventListener('scroll', () => {{ if (!isDragging) update(); }}, {{ passive: true }});
-      window.addEventListener('resize', update);
-
       let isDragging = false;
       let pendingY = 0;
       let rafId = 0;
@@ -872,6 +872,10 @@ fn wrap_page(
         applyDragScroll();
         rafId = requestAnimationFrame(dragFrame);
       }};
+
+      window.addEventListener('scroll', () => {{ if (__mdvMinimap && !__mdvMinimap.hidden && !isDragging) update(); }}, {{ passive: true }});
+      window.addEventListener('resize', () => {{ if (__mdvMinimap && !__mdvMinimap.hidden) update(); }});
+
       minimap.addEventListener('pointerdown', (e) => {{
         if (e.button !== 0) return;
         isDragging = true;
@@ -896,36 +900,29 @@ fn wrap_page(
       minimap.addEventListener('pointerup', endDrag);
       minimap.addEventListener('pointercancel', endDrag);
 
-      window.__mdvToggleCodemap = () => {{
-        minimap.classList.toggle('mdv-hidden');
-        const nowHidden = minimap.classList.contains('mdv-hidden');
-        try {{
-          if (nowHidden) window.sessionStorage.setItem('mdv:codemap-hidden', '1');
-          else window.sessionStorage.removeItem('mdv:codemap-hidden');
-        }} catch (_) {{}}
-        if (!nowHidden) update();
-      }};
-      window.__mdvCodemapVisible = () => !minimap.classList.contains('mdv-hidden');
-
-      document.addEventListener('keydown', (e) => {{
-        const tag = (document.activeElement && document.activeElement.tagName) || '';
-        if (e.key === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey
-            && tag !== 'INPUT' && tag !== 'TEXTAREA') {{
-          window.__mdvToggleCodemap();
-        }}
-      }});
-
-      let codemapHidden = false;
-      try {{ codemapHidden = window.sessionStorage.getItem('mdv:codemap-hidden') === '1'; }} catch (_) {{}}
-      if (codemapHidden) {{
-        minimap.classList.add('mdv-hidden');
-      }} else {{
-        const docTaller = document.documentElement.scrollHeight > window.innerHeight + 100;
-        if (!docTaller) minimap.classList.add('mdv-hidden');
-      }}
-      document.documentElement.classList.remove('mdv-codemap-hidden');
+      __mdvMinimap = {{ el: minimap, update, hidden: false }};
+      return __mdvMinimap;
     }};
-    setTimeout(__mdvSetupMinimap, 500);
+
+    window.__mdvToggleCodemap = () => {{
+      // First toggle: lazy-mount and show. Subsequent toggles: flip visibility
+      // on the already-mounted element.
+      const mm = __mdvMountMinimap();
+      if (!mm) return;
+      mm.hidden = !mm.hidden;
+      mm.el.classList.toggle('mdv-hidden', mm.hidden);
+      if (!mm.hidden) mm.update();
+    }};
+    window.__mdvCodemapVisible = () =>
+      !!(__mdvMinimap && !__mdvMinimap.hidden);
+
+    document.addEventListener('keydown', (e) => {{
+      const tag = (document.activeElement && document.activeElement.tagName) || '';
+      if (e.key === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey
+          && tag !== 'INPUT' && tag !== 'TEXTAREA') {{
+        window.__mdvToggleCodemap();
+      }}
+    }});
   }});
 </script>
 <script id="mdv-keymap" type="application/json">{keymap_js}</script>
@@ -1611,7 +1608,66 @@ mod tests {
     fn includes_minimap_scaffold() {
         let html = render_page("# Hi\n\nsome text\n", "t").expect("render");
         assert!(html.contains("#mdv-minimap"), "expected minimap CSS");
-        assert!(html.contains("__mdvSetupMinimap"), "expected minimap JS");
+        assert!(
+            html.contains("__mdvToggleCodemap"),
+            "expected minimap toggle JS"
+        );
+        assert!(
+            html.contains("__mdvMountMinimap"),
+            "expected lazy-mount JS function"
+        );
+    }
+
+    #[test]
+    fn codemap_dom_not_mounted_on_load() {
+        // tasks.md #12: codemap should not be present in the initial document.
+        // Only the minimap *toggle* and *mount* function definitions appear in
+        // script bodies; the page itself must not include a pre-built
+        // `<div id="mdv-minimap">` or `<div id="mdv-minimap-content">` element.
+        let html = render_page("# Hi\n\nsome text\n", "t").expect("render");
+        let body_start = html.find("<body").expect("body tag");
+        let body_end = html.find("</body>").expect("end body tag");
+        let body = &html[body_start..body_end];
+        // Strip out <script>…</script> blocks before scanning so we only
+        // examine markup that the browser materializes on initial paint.
+        let mut stripped = String::with_capacity(body.len());
+        let mut rest = body;
+        while let Some(open) = rest.find("<script") {
+            stripped.push_str(&rest[..open]);
+            let after_open = &rest[open..];
+            let close = after_open
+                .find("</script>")
+                .map(|i| i + "</script>".len())
+                .unwrap_or(after_open.len());
+            rest = &after_open[close..];
+        }
+        stripped.push_str(rest);
+        assert!(
+            !stripped.contains("id=\"mdv-minimap\""),
+            "minimap DOM must not be present on initial page load; found in: {stripped}"
+        );
+        assert!(
+            !stripped.contains("id=\"mdv-minimap-content\""),
+            "minimap content DOM must not be present on initial page load"
+        );
+    }
+
+    #[test]
+    fn codemap_initial_state_is_hardcoded_hidden() {
+        // tasks.md #13: no flicker. The early <head> bootstrap script must not
+        // touch any `mdv-codemap-hidden` html class (we removed the flip), and
+        // the page must not depend on sessionStorage for initial codemap state.
+        let html = render_page("# Hi\n", "t").expect("render");
+        let head_end = html.find("</head>").expect("head end");
+        let head = &html[..head_end];
+        assert!(
+            !head.contains("mdv-codemap-hidden"),
+            "early bootstrap must not toggle mdv-codemap-hidden; got head: {head}"
+        );
+        assert!(
+            !head.contains("mdv:codemap-hidden"),
+            "initial state must not read mdv:codemap-hidden from sessionStorage"
+        );
     }
 
     #[test]
