@@ -1637,7 +1637,12 @@ mod tests {
 
     #[test]
     fn emits_both_light_and_dark_theme_blocks() {
-        let html = render_page("# Hi\n", "t").expect("render");
+        use mdview_config::ThemeMode;
+        let cfg = ThemeConfig {
+            mode: ThemeMode::Dark,
+            ..ThemeConfig::default()
+        };
+        let html = render_page_with_theme("# Hi\n", "t", &cfg).expect("render");
         assert!(
             html.contains(":root.theme-light {"),
             "expected :root.theme-light block"
@@ -1668,7 +1673,11 @@ mod tests {
 
     #[test]
     fn initial_bg_hex_uses_mocha_for_default_dark() {
-        let cfg = ThemeConfig::default();
+        use mdview_config::ThemeMode;
+        let cfg = ThemeConfig {
+            mode: ThemeMode::Dark,
+            ..ThemeConfig::default()
+        };
         assert_eq!(initial_bg_hex(&cfg), "#1e1e2e");
     }
 
@@ -1684,7 +1693,9 @@ mod tests {
 
     #[test]
     fn initial_bg_hex_falls_back_when_theme_missing() {
+        use mdview_config::ThemeMode;
         let cfg = ThemeConfig {
+            mode: ThemeMode::Dark,
             dark: "does-not-exist".to_string(),
             ..ThemeConfig::default()
         };
@@ -1694,7 +1705,12 @@ mod tests {
 
     #[test]
     fn html_has_inline_background_matching_theme_dark() {
-        let html = render_page("# Hi\n", "t").expect("render");
+        use mdview_config::ThemeMode;
+        let cfg = ThemeConfig {
+            mode: ThemeMode::Dark,
+            ..ThemeConfig::default()
+        };
+        let html = render_page_with_theme("# Hi\n", "t", &cfg).expect("render");
         assert!(
             html.contains("<html lang=\"en\" class=\"theme-dark\" style=\"background:#1e1e2e\">"),
             "expected initial <html> to inline the dark theme background; got:\n{}",
