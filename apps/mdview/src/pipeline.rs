@@ -208,8 +208,11 @@ fn run_gui_event_loop(
     use wry::WebViewBuilder;
 
     let event_loop = EventLoopBuilder::<MdvUserEvent>::with_user_event().build();
+    let bg_hex = crate::render::initial_bg_hex(&config.theme);
+    let bg_rgba = parse_hex_to_rgba(&bg_hex).unwrap_or((30, 30, 46, 255));
     let mut builder = WindowBuilder::new()
         .with_title(title)
+        .with_background_color(bg_rgba)
         .with_inner_size(LogicalSize::new(1200.0, 800.0))
         .with_min_inner_size(LogicalSize::new(600.0, 400.0));
     if let Some(icon) = load_icon() {
@@ -241,6 +244,7 @@ fn run_gui_event_loop(
     let dark_name = config.theme.dark.clone();
     let webview = WebViewBuilder::new()
         .with_url(url)
+        .with_background_color(bg_rgba)
         .with_custom_protocol("mdview".into(), |_id, req| {
             let path_part = req.uri().path().trim_start_matches('/');
             let decoded = urlencoding::decode(path_part)
@@ -461,6 +465,21 @@ fn apply_dwm_theme(window: &tao::window::Window, theme: &mdview_theme::Theme) {
     }
 }
 
+// Parse a `#rrggbb` (or `rrggbb`) hex string into an (R, G, B, 255) tuple, the
+// shape both tao's `with_background_color` and wry's `with_background_color`
+// accept.
+#[cfg(feature = "gui")]
+fn parse_hex_to_rgba(hex: &str) -> Option<(u8, u8, u8, u8)> {
+    let s = hex.strip_prefix('#').unwrap_or(hex);
+    if s.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&s[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&s[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&s[4..6], 16).ok()?;
+    Some((r, g, b, 255))
+}
+
 // Windows COLORREF packs RGB as 0x00BBGGRR (little-endian byte order: R,G,B,0),
 // NOT the usual 0x00RRGGBB. Swap byte positions when converting from a #RRGGBB hex.
 fn parse_hex_to_colorref(hex: &str) -> Option<u32> {
@@ -488,6 +507,8 @@ fn is_dark_hex(hex: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "gui")]
+    use super::parse_hex_to_rgba;
     use super::{format_window_title, is_dark_hex, parse_hex_to_colorref};
     use std::path::Path;
 
@@ -553,5 +574,26 @@ mod tests {
     #[test]
     fn latte_bg_is_light() {
         assert!(!is_dark_hex("#eff1f5"));
+    }
+
+    #[cfg(feature = "gui")]
+    #[test]
+    fn rgba_mocha_matches_window_color() {
+        // catppuccin-mocha bg = #1e1e2e.
+        assert_eq!(parse_hex_to_rgba("#1e1e2e"), Some((30, 30, 46, 255)));
+    }
+
+    #[cfg(feature = "gui")]
+    #[test]
+    fn rgba_latte_matches_window_color() {
+        // catppuccin-latte bg = #eff1f5.
+        assert_eq!(parse_hex_to_rgba("#eff1f5"), Some((239, 241, 245, 255)));
+    }
+
+    #[cfg(feature = "gui")]
+    #[test]
+    fn rgba_rejects_bad_input() {
+        assert_eq!(parse_hex_to_rgba("#zzz"), None);
+        assert_eq!(parse_hex_to_rgba("#12345"), None);
     }
 }

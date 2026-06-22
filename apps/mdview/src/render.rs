@@ -80,6 +80,23 @@ fn lookup_theme_or_fallback(name: &str, fallback: &str) -> mdview_theme::Theme {
         .unwrap_or_default()
 }
 
+/// Hex `#rrggbb` background color of the theme that will paint first, given the
+/// resolved (config-only, pre-sessionStorage) mode. Falls back to the catppuccin
+/// mocha base when the configured theme can't be resolved.
+pub fn initial_bg_hex(theme_cfg: &ThemeConfig) -> String {
+    let mode = resolve_mode(theme_cfg.mode);
+    let (name, fallback) = match mode {
+        ResolvedMode::Dark => (theme_cfg.dark.as_str(), "catppuccin-mocha"),
+        ResolvedMode::Light => (theme_cfg.light.as_str(), "catppuccin-latte"),
+    };
+    let theme = lookup_theme_or_fallback(name, fallback);
+    theme
+        .colors
+        .get("bg")
+        .cloned()
+        .unwrap_or_else(|| "#1e1e2e".to_string())
+}
+
 fn emit_root_inner(theme: &mdview_theme::Theme) -> String {
     let css = mdview_theme::emit_css(theme);
     let start = match css.find(":root {") {
@@ -390,6 +407,7 @@ fn wrap_page(
     let title_esc = html_escape(title);
     let theme_css = emit_theme_blocks(theme_cfg);
     let mode_class = resolve_mode(theme_cfg.mode).class();
+    let initial_bg = initial_bg_hex(theme_cfg);
     let keymap_js = keymap_json(keymap);
     let banner_html = render_config_banner(config_errors);
     let body_style = if config_errors.is_empty() {
@@ -409,11 +427,11 @@ fn wrap_page(
     );
     minify_head(format!(
         r##"<!DOCTYPE html>
-<html lang="en" class="{mode_class}">
+<html lang="en" class="{mode_class}" style="background:{initial_bg}">
 <head>
 <meta charset="utf-8">
 <title>{title_esc}</title>
-<script>(function(){{try{{var s=window.sessionStorage;if(!s)return;var t=s.getItem('mdv:theme');if(t==='light'||t==='dark'){{var h=document.documentElement;h.classList.remove('theme-light','theme-dark');h.classList.add('theme-'+t);}}if(s.getItem('mdv:codemap-hidden')==='1')document.documentElement.classList.add('mdv-codemap-hidden');if(s.getItem('mdv:toc-hidden')==='1')document.documentElement.classList.add('mdv-toc-hidden');}}catch(_){{}}}})()</script>
+<script>(function(){{try{{var s=window.sessionStorage;if(!s)return;var t=s.getItem('mdv:theme');if(t==='light'||t==='dark'){{var h=document.documentElement;h.classList.remove('theme-light','theme-dark');h.classList.add('theme-'+t);h.style.background='';}}if(s.getItem('mdv:codemap-hidden')==='1')document.documentElement.classList.add('mdv-codemap-hidden');if(s.getItem('mdv:toc-hidden')==='1')document.documentElement.classList.add('mdv-toc-hidden');}}catch(_){{}}}})()</script>
 <script>
 (function() {{
     try {{
@@ -936,6 +954,7 @@ fn wrap_page(
       html.classList.remove('theme-light', 'theme-dark');
       const newMode = isDark ? 'light' : 'dark';
       html.classList.add('theme-' + newMode);
+      html.style.background = '';
       try {{ window.sessionStorage.setItem('mdv:theme', newMode); }} catch (_) {{}}
       if (window.ipc && typeof window.ipc.postMessage === 'function') {{
         try {{ window.ipc.postMessage('theme-' + newMode); }} catch (err) {{ console.warn('ipc:', err); }}
@@ -1628,7 +1647,7 @@ mod tests {
             "expected :root.theme-dark block"
         );
         assert!(
-            html.contains("<html lang=\"en\" class=\"theme-dark\">"),
+            html.contains("<html lang=\"en\" class=\"theme-dark\""),
             "expected initial <html class=\"theme-dark\">"
         );
     }
@@ -1642,8 +1661,58 @@ mod tests {
         };
         let html = render_page_with_theme("# Hi\n", "t", &cfg).expect("render");
         assert!(
-            html.contains("<html lang=\"en\" class=\"theme-light\">"),
+            html.contains("<html lang=\"en\" class=\"theme-light\""),
             "expected initial <html class=\"theme-light\">"
+        );
+    }
+
+    #[test]
+    fn initial_bg_hex_uses_mocha_for_default_dark() {
+        let cfg = ThemeConfig::default();
+        assert_eq!(initial_bg_hex(&cfg), "#1e1e2e");
+    }
+
+    #[test]
+    fn initial_bg_hex_uses_latte_when_light_mode() {
+        use mdview_config::ThemeMode;
+        let cfg = ThemeConfig {
+            mode: ThemeMode::Light,
+            ..ThemeConfig::default()
+        };
+        assert_eq!(initial_bg_hex(&cfg), "#eff1f5");
+    }
+
+    #[test]
+    fn initial_bg_hex_falls_back_when_theme_missing() {
+        let cfg = ThemeConfig {
+            dark: "does-not-exist".to_string(),
+            ..ThemeConfig::default()
+        };
+        // Falls back to catppuccin-mocha base.
+        assert_eq!(initial_bg_hex(&cfg), "#1e1e2e");
+    }
+
+    #[test]
+    fn html_has_inline_background_matching_theme_dark() {
+        let html = render_page("# Hi\n", "t").expect("render");
+        assert!(
+            html.contains("<html lang=\"en\" class=\"theme-dark\" style=\"background:#1e1e2e\">"),
+            "expected initial <html> to inline the dark theme background; got:\n{}",
+            &html[..html.find("<head").unwrap_or(200.min(html.len()))]
+        );
+    }
+
+    #[test]
+    fn html_has_inline_background_matching_theme_light() {
+        use mdview_config::ThemeMode;
+        let cfg = ThemeConfig {
+            mode: ThemeMode::Light,
+            ..ThemeConfig::default()
+        };
+        let html = render_page_with_theme("# Hi\n", "t", &cfg).expect("render");
+        assert!(
+            html.contains("<html lang=\"en\" class=\"theme-light\" style=\"background:#eff1f5\">"),
+            "expected initial <html> to inline the light theme background"
         );
     }
 
