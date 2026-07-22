@@ -323,7 +323,7 @@ test` will cover your new surface.
 
 ## Architecture
 
-See [CLAUDE.md](./CLAUDE.md) for the full architecture reference (crate
+See [AGENTS.md](./AGENTS.md) for the full architecture reference (crate
 matrix, interaction sequences, trait + theme contracts, extensibility model,
 and non-goals).
 

@@ -107,7 +107,7 @@ bun build --compile ./src/index.ts --outfile ./mdview-sidecar
       change crosses crate boundaries).
 - [ ] Playwright e2e passes locally (for HTML-surface changes).
 - [ ] Screenshots attached for HTML-surface changes.
-- [ ] Docs updated (`README.md`, `CLAUDE.md`, crate-level docs) when
+- [ ] Docs updated (`README.md`, `AGENTS.md`, crate-level docs) when
       public behaviour changes.
 - [ ] No new direct dependencies between extension crates.
 - [ ] Owned paths only — no collateral edits in other crates.

@@ -460,7 +460,7 @@ by design; HTML renderer uses CSS `border-radius`.
 
 - The **same file** above renders in three places: Tauri/wry window,
   terminal pager (ANSI + sixel), and inside Neovim via the Lua plugin.
-- See `CLAUDE.md` for architecture.
+- See `AGENTS.md` for architecture.
 - See `apps/mdview/src/builtins.rs` for the extension registration order
   (diagram extensions precede `Highlight` so fenced `mermaid` / `drawio` /
   `plotly` / `math` blocks aren't swallowed by the code-highlighter).

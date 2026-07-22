@@ -418,7 +418,7 @@ specially themed by mdview.
 
 [38;2;108;112;134m• [0mThe [1msame file[0m above renders in three places: Tauri/wry window, terminal pager (ANSI + sixel), and
 inside Neovim via the Lua plugin.
-[38;2;108;112;134m• [0mSee [38;2;249;226;175;48;2;49;50;68m CLAUDE.md [0m for architecture.
+[38;2;108;112;134m• [0mSee [38;2;249;226;175;48;2;49;50;68m AGENTS.md [0m for architecture.
 [38;2;108;112;134m• [0mSee [38;2;249;226;175;48;2;49;50;68m apps/mdview/src/builtins.rs [0m for the extension registration order (diagram extensions precede [38;2;249;226;175;48;2;49;50;68m[0m
 [38;2;249;226;175;48;2;49;50;68mHighlight [0m so fenced [38;2;249;226;175;48;2;49;50;68m mermaid [0m / [38;2;249;226;175;48;2;49;50;68m drawio [0m / [38;2;249;226;175;48;2;49;50;68m plotly [0m / [38;2;249;226;175;48;2;49;50;68m math [0m blocks aren't swallowed by the
 code-highlighter).

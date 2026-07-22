@@ -224,17 +224,15 @@ Lessons from the field:
   merges silently drop earlier work. Verify by grepping for sentinel
   identifiers (`load_icon`, `pre_render_html`, `setupToc`, etc.) — see
   `scripts/verify-features.ps1`.
-- An agent that uses a full-file `Write` (or `Set-Content` / `WriteAllText`
+- An agent that uses a full-file `create` (or `Set-Content` / `WriteAllText`
   fallback) can erase any change between its initial read and its write.
-  **Prefer targeted `Edit` calls** in agent prompts; only allow `Write` when
+  **Prefer targeted `edit` calls** in agent prompts; only allow full-file writes when
   the agent has just read the full file and preserves everything it isn't
   changing.
 - Agent self-reports occasionally describe what was intended, not what
   survived. Grep before declaring victory.
-- Stale `worktree-agent-*` branches accumulate. Use
-  `scripts/clean-worktrees.ps1` to clean up after a session.
-- Shell CWD persists across Bash tool calls and can drift into an agent's
-  worktree directory after the agent finishes. Always `cd /d/mdview` before
+- Shell CWD persists across powershell tool calls and can drift into an agent's
+  worktree directory after the agent finishes. Always `cd D:\mdview` before
   `git merge --squash <branch>` on main. Symptom: merge reports "Already up
   to date" despite divergent commits — that's the branch being merged into
   itself.
