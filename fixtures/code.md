@@ -61,6 +61,16 @@ done
 }
 ```
 
+## JSONC
+
+```jsonc
+{
+  // curved by default
+  "name": "mdview",
+  "radii": { "sm": 6, "md": 10, "lg": 16 } /* corner radii */
+}
+```
+
 ## Indented code (4-space)
 
     let x = 1;
