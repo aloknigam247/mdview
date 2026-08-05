@@ -23,10 +23,6 @@ pub struct Cli {
     #[arg(long = "nvim-socket", value_name = "PATH")]
     pub nvim_socket: Option<PathBuf>,
 
-    /// Built-in theme preset name (default: auto from OS / nvim).
-    #[arg(long, value_name = "NAME")]
-    pub theme: Option<String>,
-
     /// Terminal mode only: dump to stdout and exit (pipe-friendly).
     #[arg(long = "no-pager")]
     pub no_pager: bool,
@@ -68,7 +64,6 @@ mod tests {
         assert!(!cli.watch);
         assert!(!cli.no_pager);
         assert!(cli.nvim_socket.is_none());
-        assert!(cli.theme.is_none());
         assert_eq!(cli.mode(), Mode::Tauri);
     }
 
@@ -108,9 +103,8 @@ mod tests {
     }
 
     #[test]
-    fn parses_theme() {
-        let cli = Cli::try_parse_from(["mdview", "--theme", "dracula", "x.md"]).unwrap();
-        assert_eq!(cli.theme.as_deref(), Some("dracula"));
+    fn rejects_theme_flag() {
+        assert!(Cli::try_parse_from(["mdview", "--theme", "dracula", "x.md"]).is_err());
     }
 
     #[test]
@@ -128,8 +122,6 @@ mod tests {
             "-w",
             "--nvim-socket",
             "/tmp/n.sock",
-            "--theme",
-            "solarized",
             "--no-pager",
             "input.md",
         ])
@@ -137,7 +129,6 @@ mod tests {
         assert!(cli.terminal);
         assert!(cli.watch);
         assert!(cli.no_pager);
-        assert_eq!(cli.theme.as_deref(), Some("solarized"));
         assert_eq!(
             cli.nvim_socket.as_deref(),
             Some(std::path::Path::new("/tmp/n.sock"))

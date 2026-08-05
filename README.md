@@ -161,12 +161,15 @@ No fixed page width — mdview grows horizontally for long lines / wide content:
 
 ### Built-in presets
 
-`mdview` ships four presets: `dark`, `dracula`, `light`, `solarized`. Select
-one on the command line:
+`mdview` ships built-in Catppuccin presets. Theme selection is driven by the
+`[theme]` section of `config.toml` — set `mode` (`auto` | `light` | `dark`) and
+the `light` / `dark` preset names:
 
-```sh
-mdview --theme dracula README.md
-mdview --terminal --theme solarized README.md
+```toml
+[theme]
+mode = "auto"
+light = "catppuccin-latte"
+dark = "catppuccin-mocha"
 ```
 
 Inside Tauri, use the theme picker in the bottom-right corner of the window to
@@ -231,7 +234,8 @@ pub fn presets() -> Vec<Theme> {
 }
 ```
 
-Rebuild and select with `mdview --theme mytheme`.
+Rebuild, then select it via the `[theme]` section of `config.toml` (set `light`
+or `dark` to `mytheme`).
 
 ## Extension authoring
 
