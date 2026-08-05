@@ -156,6 +156,7 @@ impl MdViewExtension for Highlight {
 fn canonical_lang(lang: &str) -> Option<&'static str> {
     match lang.to_ascii_lowercase().as_str() {
         "csharp" => Some("C#"),
+        "jsonc" => Some("JSON"),
         "powershell" | "ps1" | "pwsh" => Some("PowerShell"),
         _ => None,
     }
@@ -523,6 +524,36 @@ mod tests {
     #[test]
     fn alias_csharp_resolves() {
         assert_eq!(Highlight::syntax_for("csharp").name, "C#");
+    }
+
+    #[test]
+    fn alias_jsonc_resolves() {
+        assert_eq!(Highlight::syntax_for("jsonc").name, "JSON");
+    }
+
+    #[test]
+    fn html_jsonc_uses_json_highlighting_with_raw_lang_attr() {
+        let html = render_html_for("```jsonc\n{\"enabled\": true}\n```\n", "light");
+        assert!(html.contains("data-lang=\"jsonc\""), "{html}");
+        assert!(
+            html.contains("mdv-tok-string"),
+            "expected JSON string token span: {html}"
+        );
+    }
+
+    #[test]
+    fn terminal_jsonc_uses_json_highlighting() {
+        let src = "```{lang}\n{\"enabled\": true}\n```\n";
+        let jsonc = render_term_for(&src.replace("{lang}", "jsonc"), "dark");
+        let plain = render_term_for(&src.replace("{lang}", "flibbertigibbet"), "dark");
+        assert!(
+            jsonc.contains("\x1b[38;2;"),
+            "expected 24-bit ANSI color output: {jsonc:?}"
+        );
+        assert_ne!(
+            jsonc, plain,
+            "jsonc should be highlighted differently than plaintext"
+        );
     }
 
     #[test]

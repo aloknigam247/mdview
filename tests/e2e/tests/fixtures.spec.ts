@@ -14,7 +14,7 @@ const FIXTURES: FixtureExpectation[] = [
   {
     name: "code",
     headings: ["Code"],
-    selectors: ["pre code"],
+    selectors: ["pre code", "pre.mdv-code[data-lang='jsonc'] .mdv-tok-string"],
   },
   {
     name: "drawio",
