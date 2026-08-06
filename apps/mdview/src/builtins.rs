@@ -43,4 +43,16 @@ mod tests {
         names.dedup();
         assert_eq!(names.len(), len_before);
     }
+
+    #[test]
+    fn highlight_extension_is_registered_last() {
+        let exts = builtin_extensions();
+        let names: Vec<&'static str> = exts.iter().map(|e| e.name()).collect();
+        assert_eq!(
+            names.last().copied(),
+            Some("highlight"),
+            "the catch-all `highlight` extension must be registered last, or it shadows the \
+             selective-match diagram extensions; got order: {names:?}"
+        );
+    }
 }
