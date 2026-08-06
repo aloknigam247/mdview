@@ -141,10 +141,12 @@ Use the bundled helper script — it derives the repo root, ensures each label e
 ```ps1
 pwsh -NoProfile -ExecutionPolicy Bypass `
   -File .github/skills/triage/scripts/new-issue.ps1 `
-  -Draft tmp/triage-issue.md -Label <cat1> -Label <cat2>
+  -Draft tmp/triage-issue.md -Label <cat1>,<cat2>
 ```
 
-Pass one `-Label` per chosen category. Then report the created issue URL to the user.
+Pass the chosen categories as a single comma-separated `-Label` value (`pwsh -File` passes
+arguments as literal strings, so repeating `-Label` fails to bind). Then report the created issue
+URL to the user.
 
 **Link dependent issues as sub-issues.** If the draft declared a parent (a `Depends on #NN` issue,
 or a broader item this was split from), link the newly created issue as a **sub-issue** of that
