@@ -11,6 +11,7 @@ use syntect::highlighting::{Theme as SyntectTheme, ThemeSet};
 use syntect::html::{line_tokens_to_classed_spans, ClassStyle};
 use syntect::parsing::{
     syntax_definition::SyntaxDefinition, ParseState, ScopeStack, SyntaxReference, SyntaxSet,
+    SyntaxSetBuilder,
 };
 use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
 
@@ -18,18 +19,33 @@ pub use crate::_stubs::{
     Asset, AstNode, Html, MdViewExtension, RenderCtx, StyleSpec, TermChunk, TermChunks, Theme,
 };
 
-static SYNTAX_SET: Lazy<SyntaxSet> = Lazy::new(|| {
-    let mut builder = SyntaxSet::load_defaults_newlines().into_builder();
-    match SyntaxDefinition::load_from_str(
-        include_str!("../assets/PowerShell.sublime-syntax"),
-        true,
-        Some("PowerShell"),
-    ) {
+fn load_vendored(yaml: &str, name: &'static str) -> Result<SyntaxDefinition, String> {
+    SyntaxDefinition::load_from_str(yaml, true, Some(name)).map_err(|e| e.to_string())
+}
+
+fn add_vendored(builder: &mut SyntaxSetBuilder, yaml: &str, name: &'static str, fence: &str) {
+    match load_vendored(yaml, name) {
         Ok(syn) => builder.add(syn),
         Err(e) => eprintln!(
-            "mdview-ext-highlight: failed to load PowerShell syntax: {e}; powershell fences will render as plain text"
+            "mdview-ext-highlight: failed to load {name} syntax: {e}; {fence} fences will render as plain text"
         ),
     }
+}
+
+static SYNTAX_SET: Lazy<SyntaxSet> = Lazy::new(|| {
+    let mut builder = SyntaxSet::load_defaults_newlines().into_builder();
+    add_vendored(
+        &mut builder,
+        include_str!("../assets/http-request-response.sublime-syntax"),
+        "HTTP Request and Response",
+        "http",
+    );
+    add_vendored(
+        &mut builder,
+        include_str!("../assets/PowerShell.sublime-syntax"),
+        "PowerShell",
+        "powershell",
+    );
     builder.build()
 });
 static THEME_SET: Lazy<ThemeSet> = Lazy::new(ThemeSet::load_defaults);
@@ -156,6 +172,7 @@ impl MdViewExtension for Highlight {
 fn canonical_lang(lang: &str) -> Option<&'static str> {
     match lang.to_ascii_lowercase().as_str() {
         "csharp" => Some("C#"),
+        "http" => Some("HTTP Request and Response"),
         "jsonc" => Some("JSON"),
         "powershell" | "ps1" | "pwsh" => Some("PowerShell"),
         _ => None,
@@ -389,6 +406,141 @@ mod tests {
             term.contains('\t'),
             "expected tab character preserved in terminal output, got: {:?}",
             &term[..term.len().min(200)]
+        );
+    }
+
+    const HTTP_REQUEST: &str =
+        "```http\nGET /users?limit=10 HTTP/1.1\nHost: example.com\nAccept: application/json\n```\n";
+
+    const HTTP_RESPONSE: &str = "```http\nHTTP/1.1 200 OK\nContent-Type: application/json\nContent-Length: 27\n\n{\"ok\": true}\n```\n";
+
+    #[test]
+    fn probe_http_grammar_scopes() {
+        let ss: &SyntaxSet = &SYNTAX_SET;
+        let syn = ss
+            .find_syntax_by_name("HTTP Request and Response")
+            .expect("vendored HTTP grammar must load");
+
+        let mut scopes = String::new();
+        let mut state = ParseState::new(syn);
+        let body = "GET /users?limit=10 HTTP/1.1\nHost: example.com\n\nHTTP/1.1 200 OK\nContent-Type: application/json\n\n{\"ok\": true}\n";
+        for line in LinesWithEndings::from(body) {
+            for (_, op) in state
+                .parse_line(line, ss)
+                .expect("parse_line must not fail")
+            {
+                scopes.push_str(&format!("{op:?} "));
+            }
+        }
+
+        for expected in [
+            "keyword.operator.word",
+            "constant.language",
+            "constant.numeric",
+            "keyword.other",
+        ] {
+            assert!(
+                scopes.contains(expected),
+                "expected scope {expected} in HTTP parse, got: {scopes}"
+            );
+        }
+    }
+
+    #[test]
+    fn alias_http_resolves() {
+        let syn = Highlight::syntax_for("http");
+        assert_eq!(syn.name, "HTTP Request and Response");
+    }
+
+    #[test]
+    fn html_http_request_has_semantic_tokens() {
+        let html = render_html_for(HTTP_REQUEST, "light");
+        assert!(html.contains("data-lang=\"http\""), "{html}");
+        assert!(
+            html.contains("mdv-tok-keyword\">GET</span>"),
+            "expected the HTTP verb scoped as a keyword: {html}"
+        );
+        assert!(
+            html.contains("mdv-tok-constant\">HTTP/1.1</span>"),
+            "expected the protocol version scoped as a constant: {html}"
+        );
+        assert!(
+            html.contains("mdv-tok-keyword\">Host</span>"),
+            "expected the header name scoped as a keyword: {html}"
+        );
+    }
+
+    #[test]
+    fn html_http_response_has_semantic_tokens() {
+        let html = render_html_for(HTTP_RESPONSE, "light");
+        assert!(html.contains("data-lang=\"http\""), "{html}");
+        assert!(
+            html.contains("mdv-tok-constant\">200</span>"),
+            "expected the status code scoped as a constant: {html}"
+        );
+        assert!(
+            html.contains("mdv-tok-string\">OK</span>"),
+            "expected the status text scoped as a string: {html}"
+        );
+        assert!(
+            html.contains("mdv-tok-keyword\">Content-Type</span>"),
+            "expected the header name scoped as a keyword: {html}"
+        );
+    }
+
+    #[test]
+    fn html_http_json_body_is_embedded_highlighted() {
+        let html = render_html_for(HTTP_RESPONSE, "light");
+        assert!(
+            html.contains("mdv-tok-constant\">true</span>"),
+            "expected the JSON body to highlight via `embed: scope:source.json`: {html}"
+        );
+    }
+
+    #[test]
+    fn terminal_http_request_differs_from_plaintext() {
+        let http = render_term_for(HTTP_REQUEST, "dark");
+        let plain = render_term_for(&HTTP_REQUEST.replace("```http", "```"), "dark");
+        assert!(
+            http.contains("\x1b[38;2;"),
+            "expected truecolor ANSI: {http:?}"
+        );
+        assert_ne!(
+            http, plain,
+            "http fence must be styled differently from the same text as a plain fence"
+        );
+    }
+
+    #[test]
+    fn terminal_http_response_differs_from_plaintext() {
+        let http = render_term_for(HTTP_RESPONSE, "dark");
+        let plain = render_term_for(&HTTP_RESPONSE.replace("```http", "```"), "dark");
+        assert!(
+            http.contains("\x1b[38;2;"),
+            "expected truecolor ANSI: {http:?}"
+        );
+        assert_ne!(
+            http, plain,
+            "http fence must be styled differently from the same text as a plain fence"
+        );
+    }
+
+    #[test]
+    fn vendored_grammar_load_failure_is_graceful() {
+        let err = load_vendored("%YAML 1.2\n---\nthis: [is, not, a, syntax", "Bogus")
+            .expect_err("malformed grammar must not load");
+        assert!(!err.is_empty(), "error must be reportable");
+
+        let mut builder = SyntaxSet::load_defaults_newlines().into_builder();
+        add_vendored(&mut builder, "not a grammar at all", "Bogus", "bogus");
+        let set = builder.build();
+        assert!(
+            set.find_syntax_by_name("Bogus").is_none(),
+            "a failed grammar must not be registered"
+        );
+        assert!(
+            set.find_syntax_by_name("Rust").is_some(),
+            "a failed grammar must not poison the rest of the set"
         );
     }
 

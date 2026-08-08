@@ -71,6 +71,24 @@ done
 }
 ```
 
+## HTTP
+
+```http
+GET /users?limit=10 HTTP/1.1
+Host: api.example.com
+Accept: application/json
+If-None-Match: "e1a7c9"
+```
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 42
+Cache-Control: no-cache
+
+{ "users": [], "next": null, "ok": true }
+```
+
 ## Indented code (4-space)
 
     let x = 1;
