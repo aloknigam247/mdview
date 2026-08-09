@@ -50,6 +50,7 @@ fn main() -> Result<()> {
     }
 
     match args.mode() {
+        Mode::Serve => runtime()?.block_on(pipeline::run_serve(&args)),
         Mode::Terminal => pipeline::run_terminal(&args),
         Mode::Nvim => runtime()?.block_on(pipeline::run_nvim(&args)),
         Mode::Tauri => run_tauri(&args),

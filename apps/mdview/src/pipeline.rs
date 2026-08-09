@@ -149,6 +149,51 @@ pub async fn run_tauri_child(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
+/// Serve rendered markdown over HTTP and block until Ctrl+C.
+///
+/// No window and no daemonize: the process must stay in the foreground so a
+/// supervising harness (Playwright's `webServer`) can detect liveness and kill
+/// it on teardown.
+pub async fn run_serve(cli: &Cli) -> Result<()> {
+    let file = cli
+        .file
+        .as_ref()
+        .context("serve-only mode requires a FILE argument")?;
+    let index =
+        std::fs::canonicalize(file).with_context(|| format!("resolving {}", file.display()))?;
+    let root = std::env::current_dir()?.canonicalize()?;
+
+    let srv = crate::server::serve_dir(root.clone(), index, cli.port, move |path| {
+        let src =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        let title = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("mdview")
+            .to_string();
+        let loaded = mdview_config::Config::load_full();
+        let config = loaded.config;
+        crate::render::render_page_full(
+            &src,
+            &title,
+            &config.theme,
+            &config.keymap,
+            path.parent(),
+            &loaded.errors,
+            &config.toc,
+            &config.codemap,
+            &config.code,
+        )
+    })
+    .await?;
+
+    eprintln!("mdview: serving on http://127.0.0.1:{}", srv.port);
+    eprintln!("mdview: serve root {}", root.display());
+    tokio::signal::ctrl_c().await.ok();
+    drop(srv);
+    Ok(())
+}
+
 #[cfg(not(feature = "gui"))]
 fn open_in_browser(url: &str) {
     #[cfg(windows)]
