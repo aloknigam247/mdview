@@ -431,7 +431,7 @@ fn wrap_page(
 <head>
 <meta charset="utf-8">
 <title>{title_esc}</title>
-<script>(function(){{try{{var s=window.sessionStorage;if(!s)return;var t=s.getItem('mdv:theme');if(t==='light'||t==='dark'){{var h=document.documentElement;h.classList.remove('theme-light','theme-dark');h.classList.add('theme-'+t);h.style.background='';}}if(s.getItem('mdv:toc-hidden')==='1')document.documentElement.classList.add('mdv-toc-hidden');}}catch(_){{}}}})()</script>
+<script>(function(){{try{{var s=window.sessionStorage;if(!s)return;var t=s.getItem('mdv:theme');if(t==='light'||t==='dark'){{var h=document.documentElement;h.classList.remove('theme-light','theme-dark');h.classList.add('theme-'+t);h.style.background='';}}}}catch(_){{}}}})()</script>
 <script>
 (function() {{
     try {{
@@ -591,7 +591,6 @@ fn wrap_page(
                   backdrop-filter: blur(6px);
                   user-select: none; touch-action: none; }}
   #mdv-minimap.mdv-hidden {{ display: none; }}
-  :root.mdv-toc-hidden #mdv-toc {{ display: none; }}
   #mdv-minimap-content {{ transform-origin: top left; pointer-events: none;
                           user-select: none; position: absolute; top: 6px; left: 6px; }}
   #mdv-minimap-content article.mdv {{ margin: 0; }}
@@ -1166,22 +1165,7 @@ fn wrap_page(
       const wasHidden = aside.classList.contains('mdv-toc--hidden');
       aside.classList.toggle('mdv-toc--hidden');
       aside.setAttribute('aria-hidden', wasHidden ? 'false' : 'true');
-      try {{
-        if (wasHidden) window.sessionStorage.removeItem('mdv:toc-hidden');
-        else window.sessionStorage.setItem('mdv:toc-hidden', '1');
-      }} catch (_) {{}}
     }};
-
-    try {{
-      if (window.sessionStorage && window.sessionStorage.getItem('mdv:toc-hidden') === '1') {{
-        aside.classList.add('mdv-toc--hidden');
-        aside.setAttribute('aria-hidden', 'true');
-      }} else {{
-        aside.classList.remove('mdv-toc--hidden');
-        aside.setAttribute('aria-hidden', 'false');
-      }}
-    }} catch (_) {{}}
-    document.documentElement.classList.remove('mdv-toc-hidden');
 
     if (closeBtn) closeBtn.addEventListener('click', () => {{ window.__mdvToggleToc(); }});
     document.addEventListener('keydown', (e) => {{
@@ -2014,6 +1998,25 @@ mod tests {
         assert!(
             html.contains("mdv-toc--floating-right"),
             "expected default floating-right position class"
+        );
+    }
+
+    #[test]
+    fn toc_initial_state_stays_hidden_until_toggle() {
+        let html = render_page("# One\n\n## Two\n", "t").expect("render");
+        assert!(
+            html.contains(
+                "id=\"mdv-toc\" class=\"mdv-toc mdv-toc--floating-right mdv-toc--hidden\" aria-hidden=\"true\""
+            ),
+            "TOC aside must be emitted hidden on load; got: {html}"
+        );
+        assert!(
+            !html.contains("aside.classList.remove('mdv-toc--hidden')"),
+            "setupToc must not reveal the TOC during initial load"
+        );
+        assert!(
+            html.contains("window.__mdvToggleToc = function"),
+            "toggle-toc must remain available so the hidden TOC can be shown"
         );
     }
 
