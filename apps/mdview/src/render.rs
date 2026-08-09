@@ -1923,10 +1923,21 @@ mod tests {
             Some(dir.as_path()),
         )
         .expect("render");
+        let src = html
+            .split_once("<img ")
+            .and_then(|(_, rest)| rest.split_once("src=\""))
+            .and_then(|(_, rest)| rest.split_once('"'))
+            .map(|(src, _)| src)
+            .unwrap_or_else(|| panic!("no <img src> in rendered page, got: {html}"));
         assert!(
-            html.contains("mdview://localhost/"),
-            "expected rewritten image url, got: {html}"
+            src.starts_with(MDVIEW_PROTOCOL_BASE),
+            "expected image src under {MDVIEW_PROTOCOL_BASE}, got: {src}"
         );
+        assert!(
+            src.contains("test.png"),
+            "rewritten src lost the image filename, got: {src}"
+        );
+        assert_ne!(src, "./test.png", "relative image src was not rewritten");
     }
 
     #[test]
