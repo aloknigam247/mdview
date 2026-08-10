@@ -34,7 +34,7 @@ const FIXTURES: FixtureExpectation[] = [
   {
     name: "gfm",
     headings: ["GFM"],
-    selectors: ["table", "ul.contains-task-list"],
+    selectors: ["table", ".mdv-task-checked", ".mdv-task-unchecked"],
   },
   {
     name: "math",
