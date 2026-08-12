@@ -423,7 +423,7 @@ fn wrap_page(
     let tab_width = code.tab_width;
     let toc_pos_class = format!("mdv-toc--{toc_pos}");
     let toc_aside = format!(
-        "<aside id=\"mdv-toc\" class=\"mdv-toc {toc_pos_class} mdv-toc--hidden\" aria-hidden=\"true\"><header><span class=\"mdv-toc__title\">Table of Content</span><button id=\"mdv-toc-close\" type=\"button\" aria-label=\"Close\">\u{00D7}</button></header><nav id=\"mdv-toc-nav\"></nav></aside>"
+        "<aside id=\"mdv-toc\" class=\"mdv-toc {toc_pos_class} mdv-toc--hidden\" aria-hidden=\"true\"><header><span class=\"mdv-toc__title\">Table of Content</span></header><nav id=\"mdv-toc-nav\"></nav></aside>"
     );
     minify_head(format!(
         r##"<!DOCTYPE html>
@@ -559,8 +559,6 @@ fn wrap_page(
   .mdv-toc header {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }}
   .mdv-toc header span {{ font-weight: 600; }}
   .mdv-toc__title {{ color: #cba6f7; }}
-  .mdv-toc header button {{ background: transparent; border: 0; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1; }}
-  .mdv-toc header button:hover {{ color: var(--fg); }}
   .mdv-toc nav ul {{ list-style: none; padding-left: 0; margin: 0; }}
   .mdv-toc nav ul ul {{ padding-left: 16px; }}
   .mdv-toc nav li {{ margin: 4px 0; }}
@@ -1080,7 +1078,6 @@ fn wrap_page(
     const aside = document.getElementById('mdv-toc');
     if (!aside) return;
     const nav = document.getElementById('mdv-toc-nav');
-    const closeBtn = document.getElementById('mdv-toc-close');
     const article = document.querySelector('article.mdv');
     if (!article || !nav) {{ aside.remove(); return; }}
 
@@ -1167,7 +1164,6 @@ fn wrap_page(
       aside.setAttribute('aria-hidden', wasHidden ? 'false' : 'true');
     }};
 
-    if (closeBtn) closeBtn.addEventListener('click', () => {{ window.__mdvToggleToc(); }});
     document.addEventListener('keydown', (e) => {{
       if (e.key === 'Escape' && !aside.classList.contains('mdv-toc--hidden')) {{
         window.__mdvToggleToc();
@@ -2060,6 +2056,28 @@ mod tests {
         assert!(
             html.contains(".mdv-toc__title") && html.contains("#cba6f7"),
             "expected catppuccin mauve (#cba6f7) rule for .mdv-toc__title"
+        );
+    }
+
+    #[test]
+    fn toc_aside_omits_close_button() {
+        let html = render_page("# Hi\n\n## Section\n", "t").expect("render");
+        assert!(
+            html.contains("id=\"mdv-toc\""),
+            "expected TOC aside element"
+        );
+        assert!(
+            html.contains("class=\"mdv-toc__title\""),
+            "expected TOC title span to remain"
+        );
+        assert!(
+            !html.contains("id=\"mdv-toc-close\""),
+            "TOC close button must be removed"
+        );
+        assert!(!html.contains("closeBtn"), "no dead closeBtn JS reference");
+        assert!(
+            !html.contains(".mdv-toc header button"),
+            "dead close-button CSS must be removed"
         );
     }
 
