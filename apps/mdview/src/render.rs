@@ -1134,7 +1134,13 @@ fn wrap_page(
       a.addEventListener('click', (e) => {{
         e.preventDefault();
         const target = document.getElementById(h.id);
-        if (target) target.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+        if (target) {{
+          // Reset the inline axis: scrolling back to x=0 guarantees the left margin is
+          // visible, and avoids the browser's default 'nearest' inline scrolling shifting
+          // scrollX when the document overflows horizontally.
+          const y = target.getBoundingClientRect().top + window.scrollY;
+          window.scrollTo({{ left: 0, top: y, behavior: 'smooth' }});
+        }}
         history.replaceState(null, '', '#' + h.id);
       }});
       li.appendChild(a);
@@ -2024,6 +2030,21 @@ mod tests {
         assert!(
             html.contains("window.__mdvToggleToc = function"),
             "toggle-toc must remain available so the hidden TOC can be shown"
+        );
+    }
+
+    #[test]
+    fn toc_click_scroll_resets_inline_axis() {
+        let html = render_page("# Hi\n\n## Target\n\n## Other\n", "t").expect("render");
+        assert!(
+            html.contains(
+                "const y = target.getBoundingClientRect().top + window.scrollY;\n          window.scrollTo({ left: 0, top: y, behavior: 'smooth' });"
+            ),
+            "TOC click handler must reset the inline axis via window.scrollTo; got: {html}"
+        );
+        assert!(
+            !html.contains("scrollIntoView"),
+            "TOC click handler must not use scrollIntoView, which scrolls the inline axis"
         );
     }
 
