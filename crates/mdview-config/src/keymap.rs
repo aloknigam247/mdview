@@ -154,11 +154,22 @@ impl KeyBinding {
     // Crossterm reports SHIFT for printable upper-case chars on some platforms
     // but not others; treat an uppercase ASCII-letter binding without an
     // explicit Shift modifier as matching regardless of the SHIFT flag.
+    // Similarly, punctuation and symbol keys that require Shift on many keyboard
+    // layouts (such as '?' on US keyboards) report SHIFT when typed; if the
+    // binding did not explicitly specify Shift, treat the character match as
+    // authoritative regardless of the SHIFT modifier flag.
     fn shift_matches(&self, ev: &KeyEvent) -> bool {
-        if matches!(self.key, Key::Char(c) if c.is_ascii_uppercase() && !self.shift) {
-            return true;
+        match self.key {
+            Key::Char(c) if c.is_ascii_alphabetic() => {
+                if !self.shift && c.is_ascii_uppercase() {
+                    true
+                } else {
+                    self.shift == ev.modifiers.contains(KeyModifiers::SHIFT)
+                }
+            }
+            Key::Char(_) if !self.shift => true,
+            _ => self.shift == ev.modifiers.contains(KeyModifiers::SHIFT),
         }
-        self.shift == ev.modifiers.contains(KeyModifiers::SHIFT)
     }
 }
 

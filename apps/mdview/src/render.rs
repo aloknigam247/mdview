@@ -273,10 +273,8 @@ fn resolve_to_mdview_url(url: &str, source_dir: Option<&Path>) -> Option<String>
     let raw = PathBuf::from(url);
     let abs: PathBuf = if raw.is_absolute() {
         raw
-    } else if let Some(dir) = source_dir {
-        dir.join(raw)
     } else {
-        return None;
+        source_dir?.join(raw)
     };
     let abs = std::fs::canonicalize(&abs).unwrap_or(abs);
     let s = abs.to_string_lossy();
@@ -920,20 +918,25 @@ fn wrap_page(
     const raw = document.getElementById('mdv-keymap');
     let bindings = {{}};
     try {{ bindings = JSON.parse((raw && raw.textContent) || '{{}}'); }} catch (e) {{ console.warn('mdv-keymap parse:', e); }}
-    // Modifier matching is exact, Shift included. mdview-config's KeyBinding
-    // deliberately treats Shift as optional for letter chords to paper over
-    // crossterm reporting it inconsistently across platforms; the DOM has no
-    // such quirk, so porting that leniency here only made distinct chords
-    // collide (Ctrl+B matching Ctrl+Shift+B).
+    // Modifier matching is exact, Shift included, with one necessary exception:
+    // for non-alphabetic character keys (like '?' or ':') where the binding
+    // did not explicitly specify Shift, Shift is ignored because producing that
+    // character on many keyboard layouts inherently requires the Shift modifier.
+    // For letter chords, Shift matching remains strictly exact to prevent collisions
+    // (e.g. Ctrl+B never matching Ctrl+Shift+B).
     const matchBinding = (b, e) => {{
       if (!b) return false;
       if (b.ctrl !== !!e.ctrlKey) return false;
-      if (b.shift !== !!e.shiftKey) return false;
       if (b.alt !== !!e.altKey) return false;
       if (b.super !== !!e.metaKey) return false;
       if (b.kind === 'char') {{
+        const isLetter = b.key >= 'a' && b.key <= 'z';
+        if (isLetter || b.shift) {{
+          if (b.shift !== !!e.shiftKey) return false;
+        }}
         return (e.key || '').toLowerCase() === b.key;
       }}
+      if (b.shift !== !!e.shiftKey) return false;
       return e.key === b.key;
     }};
     window.__mdvToggleTheme = () => {{

@@ -159,3 +159,56 @@ test("m bound to toc does not also toggle codemap", async ({ page }) => {
   await expect(page.locator("#mdv-toc")).toHaveAttribute("aria-hidden", "false");
   expect(await codemapVisible(page)).toBe(false);
 });
+
+test("Shift-requiring punctuation binding '?' toggles toc on '?' keypress", async ({ page }) => {
+  await openFixture(page);
+  await installKeymap(page, { "toggle-toc": chord({ key: "?" }) });
+
+  // In DOM keyboard events, typing '?' produces e.key === '?' with e.shiftKey === true on US layouts.
+  await page.keyboard.press("?");
+
+  await expect.poll(() => actionLog(page)).toEqual(["toggle-toc"]);
+  await expect(page.locator("#mdv-toc")).toHaveAttribute("aria-hidden", "false");
+});
+
+test("punctuation binding matches both shifted and unshifted DOM events and rejects different key", async ({ page }) => {
+  await openFixture(page);
+  await installKeymap(page, { "toggle-toc": chord({ key: "?" }) });
+
+  // Different punctuation '/' must not trigger '?' binding
+  await page.evaluate(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "/", bubbles: true }));
+  });
+  await expect.poll(() => actionLog(page)).toEqual([]);
+
+  // Unshifted '?' matches on layouts where '?' does not require Shift
+  await page.evaluate(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "?", shiftKey: false, bubbles: true }));
+  });
+  await expect.poll(() => actionLog(page)).toEqual(["toggle-toc"]);
+
+  // Shift-bearing '?' event also matches on layouts where '?' requires Shift
+  await page.evaluate(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "?", shiftKey: true, bubbles: true }));
+  });
+  await expect.poll(() => actionLog(page)).toEqual(["toggle-toc", "toggle-toc"]);
+});
+
+test("explicit Shift+? binding requires shiftKey in DOM", async ({ page }) => {
+  await openFixture(page);
+  await installKeymap(page, { "toggle-toc": chord({ key: "?", shift: true }) });
+
+  // Unshifted '?' must NOT trigger explicit Shift+? binding
+  await page.evaluate(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "?", shiftKey: false, bubbles: true }));
+  });
+  await expect.poll(() => actionLog(page)).toEqual([]);
+
+  // Shifted '?' triggers explicit Shift+? binding
+  await page.evaluate(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "?", shiftKey: true, bubbles: true }));
+  });
+  await expect.poll(() => actionLog(page)).toEqual(["toggle-toc"]);
+});
+
+

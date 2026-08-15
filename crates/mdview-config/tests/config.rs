@@ -456,3 +456,93 @@ fn code_tab_width_not_integer_is_error() {
     assert_eq!(res.errors.len(), 1);
     assert_eq!(res.errors[0].source, ConfigErrorSource::Code);
 }
+
+#[test]
+fn punctuation_binding_without_shift_matches_shift_bearing_event() {
+    let cfg = Config::from_toml_str("[keymap]\ntoggle-toc = \"?\"\n");
+    // Typing '?' on a layout requiring Shift emits KeyCode::Char('?') with SHIFT.
+    assert_eq!(
+        cfg.keymap
+            .lookup(&ev(KeyCode::Char('?'), KeyModifiers::SHIFT)),
+        Some(Action::ToggleToc)
+    );
+    // On a layout where '?' is unshifted, it emits KeyCode::Char('?') with NONE.
+    assert_eq!(
+        cfg.keymap
+            .lookup(&ev(KeyCode::Char('?'), KeyModifiers::NONE)),
+        Some(Action::ToggleToc)
+    );
+    // Different punctuation key must not match.
+    assert_eq!(
+        cfg.keymap
+            .lookup(&ev(KeyCode::Char('/'), KeyModifiers::NONE)),
+        None
+    );
+    assert_eq!(
+        cfg.keymap
+            .lookup(&ev(KeyCode::Char('/'), KeyModifiers::SHIFT)),
+        None
+    );
+}
+
+#[test]
+fn punctuation_binding_with_explicit_shift_requires_shift() {
+    let cfg = Config::from_toml_str("[keymap]\ntoggle-toc = \"Shift+?\"\n");
+    assert_eq!(
+        cfg.keymap
+            .lookup(&ev(KeyCode::Char('?'), KeyModifiers::SHIFT)),
+        Some(Action::ToggleToc)
+    );
+    assert_eq!(
+        cfg.keymap
+            .lookup(&ev(KeyCode::Char('?'), KeyModifiers::NONE)),
+        None
+    );
+}
+
+#[test]
+fn various_punctuation_bindings_match_consistently() {
+    let toml = r#"
+[keymap]
+quit = ":"
+toggle-bionic = "_"
+toggle-codemap = ";"
+toggle-theme = "~"
+"#;
+    let cfg = Config::from_toml_str(toml);
+    for (char_code, action) in [
+        (':', Action::Quit),
+        ('_', Action::ToggleBionic),
+        (';', Action::ToggleCodemap),
+        ('~', Action::ToggleTheme),
+    ] {
+        // Both shifted and unshifted input events for the exact punctuation character must match.
+        assert_eq!(
+            cfg.keymap
+                .lookup(&ev(KeyCode::Char(char_code), KeyModifiers::SHIFT)),
+            Some(action)
+        );
+        assert_eq!(
+            cfg.keymap
+                .lookup(&ev(KeyCode::Char(char_code), KeyModifiers::NONE)),
+            Some(action)
+        );
+    }
+}
+
+#[test]
+fn letter_chord_explicit_shift_requires_shift() {
+    let cfg = Config::from_toml_str("[keymap]\ntoggle-bionic = \"Ctrl+Shift+B\"\n");
+    assert_eq!(
+        cfg.keymap.lookup(&ev(
+            KeyCode::Char('b'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT
+        )),
+        Some(Action::ToggleBionic)
+    );
+    assert_eq!(
+        cfg.keymap
+            .lookup(&ev(KeyCode::Char('b'), KeyModifiers::CONTROL)),
+        None
+    );
+}
