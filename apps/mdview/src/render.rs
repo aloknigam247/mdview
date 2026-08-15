@@ -928,15 +928,17 @@ fn wrap_page(
     const raw = document.getElementById('mdv-keymap');
     let bindings = {{}};
     try {{ bindings = JSON.parse((raw && raw.textContent) || '{{}}'); }} catch (e) {{ console.warn('mdv-keymap parse:', e); }}
+    // Modifier matching is exact, Shift included. mdview-config's KeyBinding
+    // deliberately treats Shift as optional for letter chords to paper over
+    // crossterm reporting it inconsistently across platforms; the DOM has no
+    // such quirk, so porting that leniency here only made distinct chords
+    // collide (Ctrl+B matching Ctrl+Shift+B).
     const matchBinding = (b, e) => {{
       if (!b) return false;
       if (b.ctrl !== !!e.ctrlKey) return false;
+      if (b.shift !== !!e.shiftKey) return false;
       if (b.alt !== !!e.altKey) return false;
       if (b.super !== !!e.metaKey) return false;
-      if (b.shift !== !!e.shiftKey) {{
-        const isUpper = b.kind === 'char' && b.key >= 'a' && b.key <= 'z' && !b.shift;
-        if (!isUpper) return false;
-      }}
       if (b.kind === 'char') {{
         return (e.key || '').toLowerCase() === b.key;
       }}
@@ -959,30 +961,35 @@ fn wrap_page(
       toc: {{ position: "{toc_pos}", levels: {toc_levels} }},
       codemap: {{ enabled: {codemap_enabled} }}
     }});
+    // Ordered dispatch table: one keydown selects at most one action. A ready()
+    // that fails falls through to the next candidate rather than swallowing the
+    // event, so an absent optional toggle cannot mask a later binding.
+    const mdvActions = [
+      ['quit',
+        () => !!(window.ipc && typeof window.ipc.postMessage === 'function'),
+        () => {{ try {{ window.ipc.postMessage('quit'); }} catch (err) {{ console.warn('ipc:', err); }} }}],
+      ['toggle-theme',
+        () => typeof window.__mdvToggleTheme === 'function',
+        () => window.__mdvToggleTheme()],
+      ['toggle-bionic',
+        () => typeof window.__mdvToggleBionic === 'function',
+        () => window.__mdvToggleBionic()],
+      ['toggle-codemap',
+        () => typeof window.__mdvToggleCodemap === 'function',
+        () => window.__mdvToggleCodemap()],
+      ['toggle-toc',
+        () => typeof window.__mdvToggleToc === 'function',
+        () => window.__mdvToggleToc()],
+    ];
     document.addEventListener('keydown', (e) => {{
       const tag = (document.activeElement && document.activeElement.tagName) || '';
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if (matchBinding(bindings['quit'], e)) {{
+      for (const [name, ready, run] of mdvActions) {{
+        if (!matchBinding(bindings[name], e)) continue;
+        if (!ready()) continue;
         e.preventDefault();
-        if (window.ipc && typeof window.ipc.postMessage === 'function') {{
-          try {{ window.ipc.postMessage('quit'); }} catch (err) {{ console.warn('ipc:', err); }}
-        }}
-      }}
-      if (matchBinding(bindings['toggle-theme'], e)) {{
-        e.preventDefault();
-        window.__mdvToggleTheme();
-      }}
-      if (matchBinding(bindings['toggle-bionic'], e) && typeof window.__mdvToggleBionic === 'function') {{
-        e.preventDefault();
-        window.__mdvToggleBionic();
-      }}
-      if (matchBinding(bindings['toggle-codemap'], e) && typeof window.__mdvToggleCodemap === 'function') {{
-        e.preventDefault();
-        window.__mdvToggleCodemap();
-      }}
-      if (matchBinding(bindings['toggle-toc'], e) && typeof window.__mdvToggleToc === 'function') {{
-        e.preventDefault();
-        window.__mdvToggleToc();
+        run();
+        return;
       }}
     }});
   }})();
