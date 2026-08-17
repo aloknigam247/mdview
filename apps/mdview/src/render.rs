@@ -912,14 +912,6 @@ fn wrap_page(
     }};
     window.__mdvCodemapVisible = () =>
       !!(__mdvMinimap && !__mdvMinimap.hidden);
-
-    document.addEventListener('keydown', (e) => {{
-      const tag = (document.activeElement && document.activeElement.tagName) || '';
-      if (e.key === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey
-          && tag !== 'INPUT' && tag !== 'TEXTAREA') {{
-        window.__mdvToggleCodemap();
-      }}
-    }});
   }});
 </script>
 <script id="mdv-keymap" type="application/json">{keymap_js}</script>
