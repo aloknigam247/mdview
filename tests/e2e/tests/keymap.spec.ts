@@ -34,6 +34,7 @@ const chord = (over: Partial<Chord> & { key: string }): Chord => ({
 
 const CTRL_SHIFT_B = chord({ key: "b", ctrl: true, shift: true });
 const CTRL_B = chord({ key: "b", ctrl: true });
+const M = chord({ key: "m" });
 
 /**
  * Replace every binding with `bindings`, and wrap each toggle so it appends its
@@ -125,4 +126,36 @@ test("duplicate exact chord fires first action only", async ({ page }) => {
   // First-defined wins: quit, toggle-theme, toggle-bionic, toggle-codemap, toggle-toc.
   await expect.poll(() => actionLog(page)).toEqual(["toggle-bionic"]);
   await expect(page.locator("#mdv-toc")).toHaveAttribute("aria-hidden", "true");
+});
+
+// Regression tests for #52: the codemap must be reachable only through an opt-in
+// [keymap] binding. A hardcoded bare-`m` keydown listener used to toggle it
+// independently of the dispatcher, so `m` ran two actions per press.
+
+const codemapVisible = (page: Page) =>
+  page.evaluate(
+    () => (window as unknown as { __mdvCodemapVisible: () => boolean }).__mdvCodemapVisible(),
+  );
+
+test("m toggles codemap exactly once", async ({ page }) => {
+  await openFixture(page);
+  await installKeymap(page, { "toggle-codemap": M });
+
+  await page.keyboard.press("m");
+
+  // Before the fix this was ["toggle-codemap", "toggle-codemap"]: the hardcoded
+  // bare-`m` listener fired alongside the dispatcher.
+  await expect.poll(() => actionLog(page)).toEqual(["toggle-codemap"]);
+});
+
+test("m bound to toc does not also toggle codemap", async ({ page }) => {
+  await openFixture(page);
+  await installKeymap(page, { "toggle-toc": M });
+
+  await page.keyboard.press("m");
+
+  // Before the fix this was ["toggle-toc", "toggle-codemap"].
+  await expect.poll(() => actionLog(page)).toEqual(["toggle-toc"]);
+  await expect(page.locator("#mdv-toc")).toHaveAttribute("aria-hidden", "false");
+  expect(await codemapVisible(page)).toBe(false);
 });
