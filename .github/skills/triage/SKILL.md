@@ -12,6 +12,7 @@ Turn a rough task, bug, or idea into a **well-formed GitHub issue** that a *diff
 - **Discuss first, create last.** Never run `gh issue create` until the user has reviewed the drafted issue and explicitly accepted it.
 - **The issue is for another agent, at another time.** Write it as a self-contained task: enough context, file references, and acceptance criteria that an agent with zero conversation history can pick it up and implement it.
 - **Ask for missing details.** Do not guess when scope, expected behavior, or acceptance criteria are ambiguous.
+- **Check what already exists.** Search the repo's open and closed issues before filing — surface duplicates to the user, and link genuinely related issues rather than creating disconnected ones.
 
 ## Input
 
@@ -63,24 +64,58 @@ The subagent must **return a structured report** containing:
 
 If the subagent returns `openQuestions`, resolve them with the user (via `ask_user`) before drafting the issue.
 
-### 3. Classify the task
+### 3. Search for existing duplicate and related issues
+
+**Always run this before classifying** — never file an issue without first checking what already
+exists. The goal is to avoid duplicates and to discover issues that should be linked.
+
+1. Build search terms from the task and the step-2 investigation: key symbols, file/crate names,
+   error strings, feature names, and the affected output surface(s).
+2. Query the repo's issues — **open and closed** — for candidates. Derive `<owner>/<repo>` from
+   `gh repo view --json nameWithOwner --jq .nameWithOwner`:
+   ```ps1
+   gh search issues --repo <owner>/<repo> "<keywords>" --state all --limit 30 --json number,title,state,url
+   # try several keyword combinations; also list within the repo:
+   gh issue list --search "<keywords> in:title,body" --state all --limit 30 --json number,title,state,url
+   ```
+3. Classify each candidate found:
+   - **Duplicate** — same underlying task: same root cause (bugs) or the same requested capability
+     (features). A closed-and-fixed duplicate still counts.
+   - **Related** — a distinct task that overlaps in area, shares files/root cause, or is a
+     parent/child (dependency) of this one.
+4. **If a likely duplicate exists:** stop and inform the user with the `ask_user` tool. Show the
+   duplicate's `#number`, title, state, and URL, and ask how to proceed — **abort** (don't file),
+   **file anyway** (genuinely distinct; explain why in the body), or **comment on the existing
+   issue** instead of filing a new one. Do not create a new issue unless the user chooses to.
+5. **If related issues exist:** record each as `#number` + a one-line reason. These are carried into
+   the draft (step 5) and linked after creation (step 8):
+   - A **parent/child** (dependency) relationship is linked with the GitHub **sub-issues** API.
+   - A plain **association** is linked by mentioning `#number` in the issue body, which creates a
+     GitHub cross-reference relationship automatically.
+
+### 4. Classify the task
 
 Assign **one or more categories** from the fixed set below (these map 1:1 to GitHub labels):
 
 | Category      | Use case                                        |
 |---------------|-------------------------------------------------|
 | `bug`         | Something is broken or behaves incorrectly      |
-| `feature`     | New capability                                  |
-| `refactor`    | Restructuring without behavior change           |
-| `test`        | Adding or updating tests                        |
-| `docs`        | Documentation changes                           |
 | `chore`       | Maintenance, dependencies, cleanup              |
+| `docs`        | Documentation changes                           |
+| `feature`     | New capability                                  |
 | `performance` | Speed/memory/efficiency improvements            |
+| `refactor`    | Restructuring without behavior change           |
+| `spike`       | Investigation/exploration only — no code or docs changes; produces findings (and usually a follow-up issue) |
+| `test`        | Adding or updating tests                        |
 | `tech-debt`   | Paying down accumulated shortcuts               |
 
-Pick the categories that genuinely apply (usually one primary, occasionally a secondary such as `bug` + `tech-debt`).
+Pick the categories that genuinely apply (usually one primary, occasionally a secondary such as
+`bug` + `tech-debt`). Apply **`spike`** when the task is purely investigation/exploration whose
+deliverable is *findings* — it must not change any code or docs. A spike is typically the only
+category on such an issue; do not combine it with `bug`/`feature`/`refactor` (file a separate
+follow-up issue for the resulting work).
 
-### 4. Draft the issue and present it for acceptance
+### 5. Draft the issue and present it for acceptance
 
 1. Compose the issue **title** in Conventional Commit style: `<type>(scope): <short description>` (e.g., `fix(pager): curved table borders break at narrow widths`). Use the crate as the scope where it helps.
 2. Compose the issue **body** with these sections (omit a section only if truly not applicable):
@@ -89,7 +124,8 @@ Pick the categories that genuinely apply (usually one primary, occasionally a se
    - **Affected files & crates** — bulleted list from the subagent's `affected` + `crates`, with `file` -> `symbol` -> reason. Reference the "Where to extend" / "Architecture reality" notes in `AGENTS.md` where relevant.
    - **Proposed approach** — the subagent's `approach`, plus root cause for bugs. Call out any contract that must **not** break.
    - **Acceptance criteria** — a checklist of concrete, verifiable outcomes.
-   - **Testing requirements** — **always required.** Spell out the concrete test changes needed to add and/or validate the fix, so a future agent (or the user) can verify the change is done. Triaged issues are expected to include their tests as part of the fix — do **not** add a "tests only when explicitly requested" caveat here:
+   - **Testing requirements** — **always required** (except `spike` issues; see below). Spell out the concrete test changes needed to add and/or validate the fix, so a future agent (or the user) can verify the change is done. Triaged issues are expected to include their tests as part of the fix — do **not** add a "tests only when explicitly requested" caveat here:
+     - **`spike` (investigation only) issues are exempt:** they change no code or docs, so there are no tests. Replace this section with a **Deliverables** section instead — the questions the investigation must answer, where findings are recorded, and the expected follow-up (usually a new issue capturing the resulting work). Do not fabricate test requirements for a spike.
      - The exact test target(s) that map to the changed source (in-crate `#[cfg(test)]` module, crate `tests/*.rs`, or `tests/e2e`).
      - **Existing tests that will break** and must be updated (name them, and say how).
      - **New test cases** that add/validate the fix — proposed `#[test] fn <name>` names and the specific behavior/assertion each covers. Include a concrete **regression test code snippet** (fenced) that the future agent can drop in.
@@ -99,12 +135,16 @@ Pick the categories that genuinely apply (usually one primary, occasionally a se
    - **Out of scope** — what this task must not touch (e.g., non-goals in `AGENTS.md`).
    - **Do not** add a `Categories:` footer line to the issue body. Track the chosen categories
      separately (they are passed to the create script as `-Label` flags), not inside the body.
+   - **Related issues** — from step 3. List each as `Related to #NN — <one-line reason>`. Mentioning
+     `#NN` in the body creates a GitHub cross-reference relationship automatically, so a future agent
+     sees the connection. Use this for plain associations; keep true parent/child dependencies in the
+     next bullet.
    - **Dependencies / sub-issues** — if this task depends on, or is a child of, another issue
-     (existing or one filed in the same batch), note the parent explicitly (e.g., `Depends on #NN`)
-     so it can be linked as a **sub-issue** of that parent after creation (see step 7).
+     (existing, found in step 3, or one filed in the same batch), note the parent explicitly (e.g.,
+     `Depends on #NN`) so it can be linked as a **sub-issue** of that parent after creation (see step 8).
 3. Write the draft to `tmp/triage-issue.md` (git-ignored) so the user can edit it directly.
 
-### 5. Validate the draft with a rubber-duck agent — always
+### 6. Validate the draft with a rubber-duck agent — always
 
 **Always run this step before presenting the draft to the user.** After writing
 `tmp/triage-issue.md`, launch a **rubber-duck** agent (via the Task tool) to
@@ -124,17 +164,25 @@ ask it to check specifically that:
 Address the rubber-duck's findings by revising `tmp/triage-issue.md` before
 moving on. Only proceed once the draft holds up to review.
 
-### 6. Present the reviewed draft for acceptance
+### 7. Present the reviewed draft for acceptance
 
-Show a summary in chat including the proposed **title** and **categories/labels**,
-then **ask the user to accept, edit, or reject** using the `ask_user` tool
-(accept / edit / reject). If they choose "edit", let them edit
-`tmp/triage-issue.md` (and/or adjust categories) and wait for confirmation, then
-re-read the file.
+**Always open the draft with mdview before asking the user to accept**, so they can review the
+rendered issue:
 
-### 7. Create the GitHub issue — only if accepted
+```ps1
+mdview tmp/triage-issue.md
+```
 
-**Only run this step if the user accepted in step 6.** If rejected, delete `tmp/triage-issue.md` and stop.
+Show a summary in chat including the proposed **title**, **categories/labels**, and any
+**duplicate/related issues** surfaced in step 3 (with their `#number`s), then **ask the user to
+accept, edit, or reject** using the `ask_user` tool (accept / edit / reject). If they choose "edit",
+let them edit `tmp/triage-issue.md` (and/or adjust categories) and wait for confirmation, then
+re-read the file **and reopen it with `mdview tmp/triage-issue.md`** so they see the updated render.
+Reopen on every subsequent modification.
+
+### 8. Create the GitHub issue — only if accepted
+
+**Only run this step if the user accepted in step 7.** If rejected, delete `tmp/triage-issue.md` and stop.
 
 Use the bundled helper script — it derives the repo root, ensures each label exists (creating any that are missing), extracts the title from the first `# ` heading, writes the body to a git-ignored temp file, creates the issue assigned to `@me`, and prints the title and URL:
 
@@ -158,10 +206,20 @@ $childId = gh api repos/<owner>/<repo>/issues/<child_number> --jq ".id"
 gh api --method POST repos/<owner>/<repo>/issues/<parent_number>/sub_issues -F sub_issue_id=$childId
 ```
 
-Verify the parent's `sub_issues_summary.total` incremented. Then report the created issue URL to the
-user.
+Verify the parent's `sub_issues_summary.total` incremented.
 
-### 8. Cleanup
+**Link related (non-dependency) issues.** The `Related to #NN` mentions in the body (from step 5)
+already create GitHub cross-reference relationships on creation — no extra API call is needed. If a
+related issue was discovered *after* the body was drafted, add the link with a cross-reference
+comment instead:
+
+```ps1
+gh issue comment <new_issue_number> --body "Related to #NN — <reason>"
+```
+
+Then report the created issue URL to the user.
+
+### 9. Cleanup
 
 1. Delete `tmp/triage-issue.md` and any temp body file.
 2. Show a short summary: issue URL, title, and assigned categories/labels.
