@@ -148,6 +148,23 @@ test("m toggles codemap exactly once", async ({ page }) => {
   await expect.poll(() => actionLog(page)).toEqual(["toggle-codemap"]);
 });
 
+// Regression test for #56: the minimap was lazy-mounted visible then immediately
+// flipped hidden in the same call, so the first press netted to hidden. It must
+// now reveal on the first press.
+test("first toggle-codemap press reveals the codemap", async ({ page }) => {
+  await openFixture(page);
+  await installKeymap(page, { "toggle-codemap": M });
+
+  expect(await codemapVisible(page)).toBe(false);
+
+  await page.keyboard.press("m");
+  await expect.poll(() => actionLog(page)).toEqual(["toggle-codemap"]);
+  await expect.poll(() => codemapVisible(page)).toBe(true);
+
+  await page.keyboard.press("m");
+  await expect.poll(() => codemapVisible(page)).toBe(false);
+});
+
 test("m bound to toc does not also toggle codemap", async ({ page }) => {
   await openFixture(page);
   await installKeymap(page, { "toggle-toc": M });

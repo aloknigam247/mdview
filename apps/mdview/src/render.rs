@@ -817,6 +817,7 @@ fn wrap_page(
 
       const minimap = document.createElement('div');
       minimap.id = 'mdv-minimap';
+      minimap.classList.add('mdv-hidden');
 
       const content = document.createElement('div');
       content.id = 'mdv-minimap-content';
@@ -897,7 +898,7 @@ fn wrap_page(
       minimap.addEventListener('pointerup', endDrag);
       minimap.addEventListener('pointercancel', endDrag);
 
-      __mdvMinimap = {{ el: minimap, update, hidden: false }};
+      __mdvMinimap = {{ el: minimap, update, hidden: true }};
       return __mdvMinimap;
     }};
 
