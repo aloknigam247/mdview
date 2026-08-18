@@ -921,20 +921,22 @@ fn wrap_page(
     const raw = document.getElementById('mdv-keymap');
     let bindings = {{}};
     try {{ bindings = JSON.parse((raw && raw.textContent) || '{{}}'); }} catch (e) {{ console.warn('mdv-keymap parse:', e); }}
-    // Modifier matching is exact, Shift included. mdview-config's KeyBinding
-    // deliberately treats Shift as optional for letter chords to paper over
-    // crossterm reporting it inconsistently across platforms; the DOM has no
-    // such quirk, so porting that leniency here only made distinct chords
-    // collide (Ctrl+B matching Ctrl+Shift+B).
+    // Modifier matching is exact, Shift included, with one necessary exception:
+    // for non-letter character keys (like '?' or ':') bound without an explicit
+    // Shift, the Shift flag is ignored, because producing that glyph on many
+    // layouts inherently requires Shift. Letter chords keep exact Shift matching
+    // so distinct chords never collide (Ctrl+B must not match Ctrl+Shift+B).
     const matchBinding = (b, e) => {{
       if (!b) return false;
       if (b.ctrl !== !!e.ctrlKey) return false;
-      if (b.shift !== !!e.shiftKey) return false;
       if (b.alt !== !!e.altKey) return false;
       if (b.super !== !!e.metaKey) return false;
       if (b.kind === 'char') {{
+        const isLetter = b.key >= 'a' && b.key <= 'z';
+        if ((isLetter || b.shift) && b.shift !== !!e.shiftKey) return false;
         return (e.key || '').toLowerCase() === b.key;
       }}
+      if (b.shift !== !!e.shiftKey) return false;
       return e.key === b.key;
     }};
     window.__mdvToggleTheme = () => {{
@@ -2162,6 +2164,17 @@ mod tests {
             html.contains("id=\"mdv-keymap\""),
             "expected mdv-keymap data island"
         );
+    }
+
+    #[test]
+    fn binding_to_json_punctuation_has_no_shift() {
+        // A "?" binding must serialize with shift:false and the raw glyph so the
+        // GUI matcher can ignore the DOM Shift flag for it.
+        let b: KeyBinding = "?".parse().expect("parse");
+        let json = binding_to_json(&b);
+        assert!(json.contains("\"shift\":false"), "got: {json}");
+        assert!(json.contains("\"kind\":\"char\""), "got: {json}");
+        assert!(json.contains("\"key\":\"?\""), "got: {json}");
     }
 
     #[test]

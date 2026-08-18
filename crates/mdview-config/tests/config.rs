@@ -456,3 +456,88 @@ fn code_tab_width_not_integer_is_error() {
     assert_eq!(res.errors.len(), 1);
     assert_eq!(res.errors[0].source, ConfigErrorSource::Code);
 }
+
+#[test]
+fn punctuation_binding_without_shift_matches_shift_bearing_event() {
+    let cfg = Config::from_toml_str("[keymap]\ntoggle-toc = \"?\"\n");
+    // Typing '?' on a layout that requires Shift emits Char('?') with SHIFT.
+    assert_eq!(
+        cfg.keymap
+            .lookup(&ev(KeyCode::Char('?'), KeyModifiers::SHIFT)),
+        Some(Action::ToggleToc)
+    );
+    // On a layout where '?' is unshifted it emits Char('?') with NONE.
+    assert_eq!(
+        cfg.keymap
+            .lookup(&ev(KeyCode::Char('?'), KeyModifiers::NONE)),
+        Some(Action::ToggleToc)
+    );
+    // A different punctuation key must not match, shifted or not.
+    assert_eq!(
+        cfg.keymap
+            .lookup(&ev(KeyCode::Char('/'), KeyModifiers::NONE)),
+        None
+    );
+    assert_eq!(
+        cfg.keymap
+            .lookup(&ev(KeyCode::Char('/'), KeyModifiers::SHIFT)),
+        None
+    );
+}
+
+#[test]
+fn various_punctuation_bindings_match_regardless_of_shift() {
+    let toml = "[keymap]\nquit = \":\"\ntoggle-bionic = \"_\"\ntoggle-codemap = \";\"\ntoggle-theme = \"~\"\n";
+    let cfg = Config::from_toml_str(toml);
+    for (c, action) in [
+        (':', Action::Quit),
+        ('_', Action::ToggleBionic),
+        (';', Action::ToggleCodemap),
+        ('~', Action::ToggleTheme),
+    ] {
+        assert_eq!(
+            cfg.keymap
+                .lookup(&ev(KeyCode::Char(c), KeyModifiers::SHIFT)),
+            Some(action),
+            "{c:?} shifted"
+        );
+        assert_eq!(
+            cfg.keymap.lookup(&ev(KeyCode::Char(c), KeyModifiers::NONE)),
+            Some(action),
+            "{c:?} unshifted"
+        );
+    }
+}
+
+#[test]
+fn explicit_shift_punctuation_binding_requires_shift() {
+    let cfg = Config::from_toml_str("[keymap]\ntoggle-toc = \"Shift+?\"\n");
+    assert_eq!(
+        cfg.keymap
+            .lookup(&ev(KeyCode::Char('?'), KeyModifiers::SHIFT)),
+        Some(Action::ToggleToc)
+    );
+    assert_eq!(
+        cfg.keymap
+            .lookup(&ev(KeyCode::Char('?'), KeyModifiers::NONE)),
+        None
+    );
+}
+
+#[test]
+fn ctrl_letter_chord_does_not_match_with_extra_shift() {
+    // #18: distinct chords must not collide. Ctrl+B must never fire on Ctrl+Shift+B.
+    let cfg = Config::from_toml_str("[keymap]\ntoggle-toc = \"Ctrl+B\"\n");
+    assert_eq!(
+        cfg.keymap
+            .lookup(&ev(KeyCode::Char('b'), KeyModifiers::CONTROL)),
+        Some(Action::ToggleToc)
+    );
+    assert_eq!(
+        cfg.keymap.lookup(&ev(
+            KeyCode::Char('b'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT
+        )),
+        None
+    );
+}

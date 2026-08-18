@@ -151,14 +151,29 @@ impl KeyBinding {
             && self.key.matches_code(ev.code)
     }
 
-    // Crossterm reports SHIFT for printable upper-case chars on some platforms
-    // but not others; treat an uppercase ASCII-letter binding without an
-    // explicit Shift modifier as matching regardless of the SHIFT flag.
+    // Shift matching relaxes in two cases where the SHIFT flag is not a reliable
+    // discriminator:
+    //  - A bare uppercase-letter binding (no other modifier): crossterm reports
+    //    SHIFT for the produced glyph on some platforms but not others. Gating on
+    //    "no other modifier" keeps Ctrl/Alt/Super letter chords exact, so Ctrl+B
+    //    never matches Ctrl+Shift+B.
+    //  - A non-letter char binding without an explicit Shift: the glyph itself may
+    //    require Shift on the layout (e.g. '?'), so the SHIFT flag is ignored.
+    // Everything else compares Shift exactly.
     fn shift_matches(&self, ev: &KeyEvent) -> bool {
-        if matches!(self.key, Key::Char(c) if c.is_ascii_uppercase() && !self.shift) {
-            return true;
+        match self.key {
+            Key::Char(c)
+                if c.is_ascii_uppercase()
+                    && !self.shift
+                    && !self.ctrl
+                    && !self.alt
+                    && !self.super_ =>
+            {
+                true
+            }
+            Key::Char(c) if !c.is_ascii_alphabetic() && !self.shift => true,
+            _ => self.shift == ev.modifiers.contains(KeyModifiers::SHIFT),
         }
-        self.shift == ev.modifiers.contains(KeyModifiers::SHIFT)
     }
 }
 

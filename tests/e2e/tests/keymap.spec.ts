@@ -176,3 +176,63 @@ test("m bound to toc does not also toggle codemap", async ({ page }) => {
   await expect(page.locator("#mdv-toc")).toHaveAttribute("aria-hidden", "false");
   expect(await codemapVisible(page)).toBe(false);
 });
+
+// Regression tests for #53: a binding on a Shift-requiring punctuation key (e.g.
+// '?') must fire when that glyph is typed, even though the DOM reports
+// shiftKey: true for it. Producing '?' on many layouts inherently needs Shift, so
+// a binding without an explicit Shift must ignore the flag.
+
+const QUESTION = chord({ key: "?" });
+
+test("'?' binding toggles toc when '?' is typed", async ({ page }) => {
+  await openFixture(page);
+  await installKeymap(page, { "toggle-toc": QUESTION });
+
+  // page.keyboard.press("?") emits e.key === "?" with e.shiftKey === true on US layouts.
+  await page.keyboard.press("?");
+
+  await expect.poll(() => actionLog(page)).toEqual(["toggle-toc"]);
+  await expect(page.locator("#mdv-toc")).toHaveAttribute("aria-hidden", "false");
+});
+
+test("'?' binding matches shifted and unshifted events and rejects a different key", async ({
+  page,
+}) => {
+  await openFixture(page);
+  await installKeymap(page, { "toggle-toc": QUESTION });
+
+  // A different punctuation key must not fire the '?' binding.
+  await page.evaluate(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "/", bubbles: true }));
+  });
+  await expect.poll(() => actionLog(page)).toEqual([]);
+
+  // Unshifted '?' matches (layouts where '?' does not require Shift).
+  await page.evaluate(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "?", shiftKey: false, bubbles: true }));
+  });
+  await expect.poll(() => actionLog(page)).toEqual(["toggle-toc"]);
+
+  // Shift-bearing '?' also matches.
+  await page.evaluate(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "?", shiftKey: true, bubbles: true }));
+  });
+  await expect.poll(() => actionLog(page)).toEqual(["toggle-toc", "toggle-toc"]);
+});
+
+test("explicit Shift+'?' binding requires shiftKey", async ({ page }) => {
+  await openFixture(page);
+  await installKeymap(page, { "toggle-toc": chord({ key: "?", shift: true }) });
+
+  // Unshifted '?' must NOT fire an explicit Shift+? binding.
+  await page.evaluate(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "?", shiftKey: false, bubbles: true }));
+  });
+  await expect.poll(() => actionLog(page)).toEqual([]);
+
+  // Shift-bearing '?' fires it.
+  await page.evaluate(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "?", shiftKey: true, bubbles: true }));
+  });
+  await expect.poll(() => actionLog(page)).toEqual(["toggle-toc"]);
+});
