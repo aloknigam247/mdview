@@ -15,6 +15,7 @@ used only when rendering mermaid / drawio / plotly diagrams to the terminal.
 ### Look and feel
 Modern, sleek, **curved** — CSS border-radius in HTML, `╭╮╰╯` box-drawing for
 tables / code blocks in the terminal.
+Use `DESIGN.md` as the source of truth for GUI design tokens and component placement.
 
 ## Tech stack
 - **Rust** everywhere in the core. `comrak` for parsing. `syntect` for
