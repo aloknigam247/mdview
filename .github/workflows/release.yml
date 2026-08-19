@@ -1,0 +1,91 @@
+# Requires repository secret WINGET_TOKEN: a classic PAT with public_repo scope owned by an
+# account that has a fork of microsoft/winget-pkgs. The mdview.mdview manifest must already
+# exist in winget-pkgs; winget-releaser updates existing packages only.
+name: release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Build Windows release asset
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Build mdview
+        run: cargo build --release -p mdview --target x86_64-pc-windows-msvc
+
+      - name: Install sidecar dependencies
+        working-directory: sidecar
+        run: bun install --frozen-lockfile
+
+      - name: Build sidecar
+        working-directory: sidecar
+        run: bun build --compile .\src\index.ts --outfile ..\mdview-sidecar.exe
+
+      - name: Package portable zip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $stage = "stage"
+          $zip = "mdview-x86_64-pc-windows-msvc.zip"
+          Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item "target\x86_64-pc-windows-msvc\release\mdview.exe" $stage
+          Copy-Item "mdview-sidecar.exe" $stage
+          Compress-Archive -Path "$stage\*" -DestinationPath $zip -Force
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
+          try {
+            $entries = @($archive.Entries.FullName | Sort-Object)
+          } finally {
+            $archive.Dispose()
+          }
+          $expected = @("mdview-sidecar.exe", "mdview.exe")
+          $delta = Compare-Object $expected $entries -SyncWindow 0
+          if ($delta) {
+            throw "Unexpected zip entries: $($entries -join ', ')"
+          }
+
+      - name: Upload release asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" mdview-x86_64-pc-windows-msvc.zip --clobber
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mdview-x86_64-pc-windows-msvc
+          path: mdview-x86_64-pc-windows-msvc.zip
+
+  winget:
+    name: Submit winget update
+    needs: windows
+    if: ${{ !github.event.release.draft && !github.event.release.prerelease }}
+    runs-on: windows-latest
+    steps:
+      - name: Submit mdview to winget
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: mdview.mdview
+          installers-regex: "^mdview-x86_64-pc-windows-msvc\\.zip$"
+          token: ${{ secrets.WINGET_TOKEN }}

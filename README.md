@@ -24,19 +24,14 @@ Rust binary. Three surfaces share the same core:
 cargo install --locked --path apps/mdview
 ```
 
-### Prebuilt binaries
+### With winget on Windows
 
-Grab the latest archive from the [releases page](https://github.com/aloknigam247/mdview/releases):
+```pwsh
+winget install mdview.mdview
+```
 
-| Platform | Archive |
-|---|---|
-| Windows (x86_64) | `mdview-x86_64-pc-windows-msvc.zip` |
-| macOS (Apple Silicon) | `mdview-aarch64-apple-darwin.tar.gz` |
-| macOS (Intel) | `mdview-x86_64-apple-darwin.tar.gz` |
-| Linux (x86_64, glibc) | `mdview-x86_64-unknown-linux-gnu.tar.gz` |
-| Linux (x86_64, musl) | `mdview-x86_64-unknown-linux-musl.tar.gz` |
-
-Extract and drop `mdview` (or `mdview.exe`) somewhere on your `PATH`.
+Release publishing builds the Windows portable package and submits winget updates after the initial
+`mdview.mdview` manifest has been bootstrapped in `microsoft/winget-pkgs`.
 
 ### From source
 
