@@ -740,6 +740,34 @@ fn wrap_page(
 <article class="mdv">{body}</article>
 {lib_scripts}
 <script>
+  (() => {{
+    const listeners = window.__mdv_listeners || Object.create(null);
+    window.__mdv_listeners = listeners;
+    window.__mdv_on = (name, fn) => {{
+      if (typeof fn !== 'function') return () => {{}};
+      const bucket = listeners[name] || (listeners[name] = new Set());
+      bucket.add(fn);
+      return () => bucket.delete(fn);
+    }};
+    window.__mdv_emit = (name, detail) => {{
+      (listeners[name] || []).forEach(fn => {{
+        try {{ fn(detail); }} catch (err) {{ console.warn('mdv event:', name, err); }}
+      }});
+    }};
+    const tokenNames = [
+      '--mdv-accent', '--mdv-accent-blue', '--mdv-accent-green', '--mdv-accent-mauve',
+      '--mdv-accent-peach', '--mdv-accent-yellow', '--mdv-bg', '--mdv-border-subtle',
+      '--mdv-code-bg', '--mdv-fg', '--mdv-link', '--mdv-muted',
+    ];
+    window.__mdv_colorscheme_detail = (mode) => {{
+      const html = document.documentElement;
+      const resolvedMode = mode || (html.classList.contains('theme-dark') ? 'dark' : 'light');
+      const styles = getComputedStyle(html);
+      const colors = {{}};
+      tokenNames.forEach(name => {{ colors[name] = styles.getPropertyValue(name).trim(); }});
+      return {{ mode: resolvedMode, colors }};
+    }};
+  }})();
   window.addEventListener('DOMContentLoaded', () => {{
     // Math rendering: covers comrak's inline/block spans AND the math extension's
     // .mdv-math / .mdv-math-block (which carry the raw TeX in data-tex).
@@ -756,54 +784,131 @@ fn wrap_page(
         catch (e) {{ console.warn('katex:', e); }}
       }});
     }}
-    if (window.mermaid) {{
-      const __mdvDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const __mdvMermaidVars = __mdvDark ? {{
-        primaryColor: '#313244', primaryTextColor: '#cdd6f4', primaryBorderColor: '#cba6f7',
-        lineColor: '#a6adc8', secondaryColor: '#fab387', tertiaryColor: '#89b4fa',
-        background: '#1e1e2e', mainBkg: '#313244', secondBkg: '#45475a', tertiaryBkg: '#585b70',
-        nodeBorder: '#cba6f7', clusterBkg: '#313244', clusterBorder: '#cba6f7',
-        defaultLinkColor: '#a6adc8', titleColor: '#cdd6f4', edgeLabelBackground: '#313244',
-        actorBkg: '#313244', actorBorder: '#cba6f7', actorTextColor: '#cdd6f4',
-      }} : {{
-        primaryColor: '#ccd0da', primaryTextColor: '#4c4f69', primaryBorderColor: '#8839ef',
-        lineColor: '#6c6f85', secondaryColor: '#fe640b', tertiaryColor: '#1e66f5',
-        background: '#eff1f5', mainBkg: '#ccd0da', secondBkg: '#bcc0cc', tertiaryBkg: '#acb0be',
-        nodeBorder: '#8839ef', clusterBkg: '#ccd0da', clusterBorder: '#8839ef',
-        defaultLinkColor: '#6c6f85', titleColor: '#4c4f69', edgeLabelBackground: '#ccd0da',
-        actorBkg: '#ccd0da', actorBorder: '#8839ef', actorTextColor: '#4c4f69',
-      }};
-      mermaid.initialize({{ startOnLoad: false, theme: 'base', themeVariables: __mdvMermaidVars }});
-      mermaid.run({{ querySelector: '.mermaid' }}).catch(e => console.warn('mermaid:', e));
-    }}
-    document.querySelectorAll('.plotly-chart[data-spec]').forEach(el => {{
-      try {{
-        const spec = JSON.parse(el.getAttribute('data-spec'));
-        Plotly.newPlot(el, spec.data || [], spec.layout || {{}}, {{responsive: true}});
-      }} catch (e) {{ console.warn('plotly:', e); }}
+    const __mdvTheme = () => window.__mdv_colorscheme_detail();
+    const __mdvColor = (detail, name, fallback) => detail.colors[name] || fallback;
+    const __mdvMermaidVars = (detail) => ({{
+      primaryColor: __mdvColor(detail, '--mdv-code-bg', '#ccd0da'),
+      primaryTextColor: __mdvColor(detail, '--mdv-fg', '#4c4f69'),
+      primaryBorderColor: __mdvColor(detail, '--mdv-accent', '#8839ef'),
+      lineColor: __mdvColor(detail, '--mdv-muted', '#6c6f85'),
+      secondaryColor: __mdvColor(detail, '--mdv-accent-peach', '#fe640b'),
+      tertiaryColor: __mdvColor(detail, '--mdv-accent-blue', '#1e66f5'),
+      background: __mdvColor(detail, '--mdv-bg', '#eff1f5'),
+      mainBkg: __mdvColor(detail, '--mdv-code-bg', '#ccd0da'),
+      secondBkg: __mdvColor(detail, '--mdv-border-subtle', '#bcc0cc'),
+      tertiaryBkg: __mdvColor(detail, '--mdv-muted', '#acb0be'),
+      nodeBorder: __mdvColor(detail, '--mdv-accent', '#8839ef'),
+      clusterBkg: __mdvColor(detail, '--mdv-code-bg', '#ccd0da'),
+      clusterBorder: __mdvColor(detail, '--mdv-accent', '#8839ef'),
+      defaultLinkColor: __mdvColor(detail, '--mdv-muted', '#6c6f85'),
+      titleColor: __mdvColor(detail, '--mdv-fg', '#4c4f69'),
+      edgeLabelBackground: __mdvColor(detail, '--mdv-code-bg', '#ccd0da'),
+      actorBkg: __mdvColor(detail, '--mdv-code-bg', '#ccd0da'),
+      actorBorder: __mdvColor(detail, '--mdv-accent', '#8839ef'),
+      actorTextColor: __mdvColor(detail, '--mdv-fg', '#4c4f69'),
     }});
-    // Drawio: the extension emits <div class="drawio-viewer" data-xml-b64="...">.
-    // Rewrite each into the `class="mxgraph" data-mxgraph='{{xml:...}}'` form the
-    // real drawio viewer-static expects, then invoke GraphViewer.processElements.
-    document.querySelectorAll('.drawio-viewer[data-xml-b64]').forEach(el => {{
+    const __mdvRenderMermaid = (detail) => {{
+      if (!window.mermaid) return;
+      const nodes = Array.from(document.querySelectorAll('.mermaid'));
+      nodes.forEach(el => {{
+        if (!el.dataset.mdvSource) el.dataset.mdvSource = el.textContent || '';
+        el.removeAttribute('data-processed');
+        el.innerHTML = '';
+        el.textContent = el.dataset.mdvSource;
+      }});
+      mermaid.initialize({{ startOnLoad: false, theme: 'base', themeVariables: __mdvMermaidVars(detail) }});
+      mermaid.run({{ nodes }}).catch(e => console.warn('mermaid:', e));
+    }};
+    const __mdvClone = (value) => JSON.parse(JSON.stringify(value || {{}}));
+    const __mdvPlotlyTheme = (detail, spec) => {{
+      const data = __mdvClone(spec.data || []);
+      const layout = __mdvClone(spec.layout || {{}});
+      const fg = __mdvColor(detail, '--mdv-fg', '#4c4f69');
+      const muted = __mdvColor(detail, '--mdv-muted', '#6c6f85');
+      const grid = __mdvColor(detail, '--mdv-border-subtle', '#bcc0cc');
+      layout.paper_bgcolor = __mdvColor(detail, '--mdv-bg', '#eff1f5');
+      layout.plot_bgcolor = __mdvColor(detail, '--mdv-code-bg', '#ccd0da');
+      layout.font = Object.assign({{}}, layout.font || {{}}, {{ color: fg }});
+      ['xaxis', 'yaxis'].forEach(axis => {{
+        layout[axis] = Object.assign({{}}, layout[axis] || {{}}, {{
+          color: fg,
+          gridcolor: grid,
+          linecolor: muted,
+          tickcolor: muted,
+          zerolinecolor: muted,
+        }});
+      }});
+      data.forEach((trace, i) => {{
+        if (!trace || trace.marker) return;
+        const accents = ['--mdv-accent-blue', '--mdv-accent-green', '--mdv-accent-mauve', '--mdv-accent-peach'];
+        trace.marker = {{ color: __mdvColor(detail, accents[i % accents.length], __mdvColor(detail, '--mdv-accent', '#8839ef')) }};
+      }});
+      return {{ data, layout }};
+    }};
+    const __mdvRenderPlotly = (detail) => {{
+      if (!window.Plotly) return;
+      document.querySelectorAll('.plotly-chart[data-spec]').forEach(el => {{
+        try {{
+          if (!el.__mdvSpec) el.__mdvSpec = JSON.parse(el.getAttribute('data-spec'));
+          const themed = __mdvPlotlyTheme(detail, el.__mdvSpec);
+          const config = {{ responsive: true }};
+          if (el.__mdvPlotted && typeof Plotly.react === 'function') {{
+            Plotly.react(el, themed.data, themed.layout, config);
+          }} else {{
+            Plotly.newPlot(el, themed.data, themed.layout, config);
+            el.__mdvPlotted = true;
+          }}
+        }} catch (e) {{ console.warn('plotly:', e); }}
+      }});
+    }};
+    const __mdvDecodeB64 = (b64) => decodeURIComponent(atob(b64).split('').map(c =>
+      '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+    const __mdvDrawioXml = (xml, detail) => {{
       try {{
-        const b64 = el.getAttribute('data-xml-b64');
-        const xml = decodeURIComponent(atob(b64).split('').map(c =>
-          '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-        el.className = 'mxgraph';
-        el.removeAttribute('data-xml-b64');
-        el.setAttribute('data-mxgraph', JSON.stringify({{
-          xml, highlight: '#0000ff', lightbox: false, nav: true,
-          resize: true, toolbar: 'zoom layers tags lightbox',
-        }}));
-      }} catch (e) {{ console.warn('drawio rewrite:', e); }}
-    }});
-    if (window.GraphViewer && typeof window.GraphViewer.processElements === 'function') {{
-      try {{
-        // drawio takes a class name (no leading dot) or its default ("mxgraph")
-        window.GraphViewer.processElements('mxgraph');
-      }} catch (e) {{ console.warn('drawio:', e); }}
-    }}
+        const doc = new DOMParser().parseFromString(xml, 'text/xml');
+        doc.querySelectorAll('mxCell[vertex="1"], mxCell[edge="1"]').forEach(cell => {{
+          const style = cell.getAttribute('style') || '';
+          const parts = style.split(';').filter(part =>
+            part && !/^(fillColor|strokeColor|fontColor)=/.test(part));
+          if (cell.getAttribute('vertex') === '1') parts.push('fillColor=' + __mdvColor(detail, '--mdv-code-bg', '#ccd0da'));
+          parts.push('strokeColor=' + __mdvColor(detail, '--mdv-accent', '#8839ef'));
+          parts.push('fontColor=' + __mdvColor(detail, '--mdv-fg', '#4c4f69'));
+          cell.setAttribute('style', parts.join(';') + ';');
+        }});
+        return new XMLSerializer().serializeToString(doc);
+      }} catch (_) {{
+        return xml;
+      }}
+    }};
+    const __mdvRenderDrawio = (detail) => {{
+      document.querySelectorAll('.drawio-viewer[data-xml-b64], .mxgraph[data-mdv-drawio-xml]').forEach(el => {{
+        try {{
+          const xml = el.getAttribute('data-mdv-drawio-xml') || __mdvDecodeB64(el.getAttribute('data-xml-b64'));
+          el.setAttribute('data-mdv-drawio-xml', xml);
+          el.className = 'mxgraph';
+          el.removeAttribute('data-xml-b64');
+          el.innerHTML = '';
+          el.setAttribute('data-mxgraph', JSON.stringify({{
+            xml: __mdvDrawioXml(xml, detail),
+            background: __mdvColor(detail, '--mdv-bg', '#eff1f5'),
+            highlight: __mdvColor(detail, '--mdv-accent-blue', '#1e66f5'),
+            lightbox: false, nav: true,
+            resize: true, toolbar: 'zoom layers tags lightbox',
+          }}));
+        }} catch (e) {{ console.warn('drawio rewrite:', e); }}
+      }});
+      if (window.GraphViewer && typeof window.GraphViewer.processElements === 'function') {{
+        try {{ window.GraphViewer.processElements('mxgraph'); }}
+        catch (e) {{ console.warn('drawio:', e); }}
+      }}
+    }};
+    const __mdvRenderDiagrams = (detail) => {{
+      __mdvRenderMermaid(detail);
+      __mdvRenderPlotly(detail);
+      __mdvRenderDrawio(detail);
+    }};
+    __mdvRenderDiagrams(__mdvTheme());
+    window.__mdv_on('colorscheme', __mdvRenderDiagrams);
 
     // Codemap is hidden on load by hardcoded default (tasks.md #12/#13). The DOM
     // is NOT mounted until the user first toggles it on; once mounted, subsequent
@@ -949,6 +1054,9 @@ fn wrap_page(
       try {{ window.sessionStorage.setItem('mdv:theme', newMode); }} catch (_) {{}}
       if (window.ipc && typeof window.ipc.postMessage === 'function') {{
         try {{ window.ipc.postMessage('theme-' + newMode); }} catch (err) {{ console.warn('ipc:', err); }}
+      }}
+      if (typeof window.__mdv_emit === 'function' && typeof window.__mdv_colorscheme_detail === 'function') {{
+        window.__mdv_emit('colorscheme', window.__mdv_colorscheme_detail(newMode));
       }}
     }};
     window.__mdv_config = Object.assign(window.__mdv_config || {{}}, {{

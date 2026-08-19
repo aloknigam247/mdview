@@ -172,6 +172,20 @@ light = "catppuccin-latte"
 dark = "catppuccin-mocha"
 ```
 
+The GUI dispatches a client-side `colorscheme` event after a live theme toggle. Built-in diagram
+renderers listen through the shared bus, and other embedded client code can use the same API:
+
+```js
+const off = window.__mdv_on("colorscheme", ({ mode, colors }) => {
+  console.log(mode, colors["--mdv-bg"]);
+});
+```
+
+The event detail includes `mode` (`"light"` or `"dark"`) and mdview CSS color tokens such as
+`--mdv-bg`, `--mdv-fg`, `--mdv-accent`, `--mdv-code-bg`, `--mdv-link`, and `--mdv-muted`.
+The app emits this as `window.__mdv_emit("colorscheme", detail)`; use the emitter for app-owned
+events and `window.__mdv_on` for consumers.
+
 Inside Tauri, use the theme picker in the bottom-right corner of the window to
 cycle presets at runtime — the choice is persisted per-user.
 
