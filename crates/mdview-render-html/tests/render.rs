@@ -225,6 +225,7 @@ impl HtmlRenderer for UppercaseHeading {
             "<h1 class=\"mdv-custom\">{}</h1>",
             htmlesc::escape_html(&text.to_uppercase())
         )
+        .into()
     }
 }
 

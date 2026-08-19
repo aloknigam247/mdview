@@ -16,10 +16,6 @@ mod render;
 mod render_terminal;
 mod server;
 
-#[cfg(feature = "stubs")]
-#[allow(non_snake_case)]
-mod _stubs;
-
 use crate::cli::{Cli, Mode};
 
 fn main() -> Result<()> {

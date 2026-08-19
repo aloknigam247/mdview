@@ -1,4 +1,4 @@
-use crate::_stubs::{StyleSpec, TermChunks, Theme};
+use crate::_stubs::{StyleSpec, TermChunks, TermChunksExt, Theme};
 use crate::wrap::visible_width;
 use unicode_width::UnicodeWidthStr;
 

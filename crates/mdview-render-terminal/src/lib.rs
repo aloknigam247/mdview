@@ -10,7 +10,8 @@ pub mod wrap;
 use comrak::nodes::{AstNode, ListType, NodeValue};
 
 pub use _stubs::{
-    Registry, RenderCtx, StyleSpec, TermChunk, TermChunks, TerminalCaps, TerminalRenderer, Theme,
+    Registry, RenderCtx, StyleSpec, TermChunk, TermChunks, TermChunksExt, TerminalCaps,
+    TerminalRenderer, Theme,
 };
 
 pub fn render<'a>(root: &'a AstNode<'a>, ctx: &RenderCtx, registry: &Registry) -> TermChunks {
@@ -130,7 +131,7 @@ fn render_node<'a>(
                 Some(cb.info.as_str())
             };
             let body = cb.literal.trim_end_matches('\n').to_string();
-            let frame = r#box::code_frame(lang, &body, &ctx.theme);
+            let frame = r#box::code_frame(lang, &body, ctx.theme);
             out.extend(frame);
             out.push_plain("\n");
         }
@@ -330,7 +331,7 @@ fn render_table<'a>(
         }
     }
 
-    out.extend(r#box::table(&headers, &rows, &ctx.theme));
+    out.extend(r#box::table(&headers, &rows, ctx.theme));
     out.push_plain("\n");
 }
 
@@ -354,7 +355,7 @@ fn render_image<'a>(node: &'a AstNode<'a>, url: &str, ctx: &RenderCtx, out: &mut
                 out.push_styled(label, muted);
                 return;
             }
-            let sixel_supported = ctx.terminal_caps.sixel;
+            let sixel_supported = ctx.terminal_caps.map(|c| c.sixel).unwrap_or(false);
             if let Some(sixel) = image::encode_local_to_sixel(&path, sixel_supported) {
                 out.push_plain(sixel);
                 out.push_plain("\n");
@@ -367,7 +368,7 @@ fn render_image<'a>(node: &'a AstNode<'a>, url: &str, ctx: &RenderCtx, out: &mut
 }
 
 fn effective_width(ctx: &RenderCtx) -> usize {
-    let w = ctx.terminal_caps.width;
+    let w = ctx.terminal_caps.map(|c| c.width as usize).unwrap_or(100);
     if w == 0 {
         100
     } else {
@@ -391,5 +392,6 @@ pub fn render_str(src: &str, ctx: &RenderCtx, registry: &Registry) -> String {
     opts.extension.footnotes = true;
     let root = comrak::parse_document(&arena, src, &opts);
     let chunks = render(root, ctx, registry);
-    chunks.to_ansi_with(ctx.terminal_caps.truecolor)
+    let truecolor = ctx.terminal_caps.map(|c| c.truecolor).unwrap_or(true);
+    chunks.to_ansi_with(truecolor)
 }

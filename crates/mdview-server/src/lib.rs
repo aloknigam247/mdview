@@ -2,7 +2,7 @@
 
 mod _stubs;
 
-pub use _stubs::{Asset, Html, RenderCtx, Theme};
+pub use _stubs::{Html, RenderCtx, Theme};
 
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
@@ -14,6 +14,7 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, RwLock};
@@ -39,7 +40,27 @@ pub struct Config {
     pub initial_html: Html,
     pub theme: Theme,
     pub assets: BTreeMap<String, Asset>,
-    pub render_ctx: RenderCtx,
+}
+
+#[derive(Clone, Debug)]
+pub struct Asset {
+    pub bytes: Bytes,
+    pub content_type: &'static str,
+    pub path: String,
+}
+
+impl Asset {
+    pub fn new<P: Into<String>, B: Into<Bytes>>(
+        path: P,
+        bytes: B,
+        content_type: &'static str,
+    ) -> Self {
+        Self {
+            bytes: bytes.into(),
+            content_type,
+            path: path.into(),
+        }
+    }
 }
 
 impl Config {
@@ -77,7 +98,7 @@ pub enum LiveEvent {
 #[derive(Debug)]
 struct SharedState {
     doc: RwLock<Html>,
-    theme: RwLock<Theme>,
+    theme_css: RwLock<String>,
     assets: RwLock<BTreeMap<String, Asset>>,
     tx: broadcast::Sender<LiveEvent>,
 }
@@ -87,7 +108,7 @@ impl SharedState {
         let (tx, _) = broadcast::channel(BROADCAST_CAPACITY);
         Arc::new(Self {
             doc: RwLock::new(cfg.initial_html),
-            theme: RwLock::new(cfg.theme),
+            theme_css: RwLock::new(mdview_theme::emit_css(&cfg.theme)),
             assets: RwLock::new(cfg.assets),
             tx,
         })
@@ -113,7 +134,7 @@ impl Updater {
     }
 
     pub async fn push_theme(&self, css: String) {
-        self.state.theme.write().await.css = css.clone();
+        *self.state.theme_css.write().await = css.clone();
         let _ = self.state.tx.send(LiveEvent::Theme { css });
     }
 
@@ -227,11 +248,11 @@ async fn root_handler(State(state): State<Arc<SharedState>>) -> Response {
 }
 
 async fn theme_handler(State(state): State<Arc<SharedState>>) -> Response {
-    let theme = state.theme.read().await;
+    let theme_css = state.theme_css.read().await;
     (
         StatusCode::OK,
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
-        theme.css.clone(),
+        theme_css.clone(),
     )
         .into_response()
 }

@@ -75,5 +75,3 @@ impl MdViewExtension for FrontmatterExt {
         Some(card_term::render(&value, width))
     }
 }
-
-// TODO: add a config toggle for `frontmatter.show_card`.

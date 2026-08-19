@@ -7,10 +7,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let html = Html::new(
         "<main id=\"mdv-root\"><h1>mdview demo</h1><p>Live preview server online.</p></main>",
     );
-    let theme = Theme::new(
-        "demo",
-        "body{font-family:ui-sans-serif,system-ui;max-width:48rem;margin:2rem auto;line-height:1.7;} h1{border-radius:12px;padding:.25rem .5rem;background:#f1f5f9;}",
-    );
+    let theme = Theme::default_dark();
     let cfg = Config::new().with_html(html).with_theme(theme);
     let handle = serve(cfg).await?;
     println!("mdview-server listening on http://{}", handle.addr());

@@ -10,8 +10,7 @@ name = "mdview"
 path = "src/main.rs"
 
 [features]
-default = ["stubs", "gui"]
-stubs = []
+default = ["gui"]
 gui = ["dep:wry", "dep:tao"]
 
 [dependencies]
@@ -28,7 +27,10 @@ mdview-ext-highlight = { path = "../../crates/mdview-ext-highlight" }
 mdview-ext-math = { path = "../../crates/mdview-ext-math" }
 mdview-ext-mermaid = { path = "../../crates/mdview-ext-mermaid" }
 mdview-ext-plotly = { path = "../../crates/mdview-ext-plotly" }
+mdview-nvim = { path = "../../crates/mdview-nvim" }
+mdview-pager = { path = "../../crates/mdview-pager" }
 mdview-render-html = { path = "../../crates/mdview-render-html" }
+mdview-render-terminal = { path = "../../crates/mdview-render-terminal" }
 mdview-theme = { path = "../../crates/mdview-theme" }
 notify = "6"
 tokio = { version = "1", features = ["full"] }
@@ -56,6 +58,7 @@ libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
+walkdir = "2"
 
 [build-dependencies]
 anyhow = "1"

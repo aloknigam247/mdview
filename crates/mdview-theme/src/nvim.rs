@@ -3,7 +3,7 @@ use crate::themes::{dark, light};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct NvimHl {
     pub fg: Option<u32>,
     pub bg: Option<u32>,

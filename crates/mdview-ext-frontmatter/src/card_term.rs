@@ -99,12 +99,12 @@ pub fn render(value: &Value, width: usize) -> TermChunks {
 
     let mut out = TermChunks::new();
     let muted = StyleSpec {
-        color: Some("#6b7280".to_string()),
+        fg: Some("#6b7280".to_string()),
         ..Default::default()
     };
     let title_style = StyleSpec {
         bold: true,
-        color: Some("#111827".to_string()),
+        fg: Some("#111827".to_string()),
         ..Default::default()
     };
 
@@ -213,5 +213,3 @@ fn wrap_to(s: &str, width: usize) -> Vec<String> {
 fn visible_len(s: &str) -> usize {
     s.chars().count()
 }
-
-// TODO: collapse via keymap action

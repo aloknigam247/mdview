@@ -1,8 +1,6 @@
 //! Terminal / nvim pipelines.
 //!
-//! These orchestrate the read → parse → render → output path. Real parsing /
-//! rendering / paging live in sibling crates; the `stubs` feature supplies
-//! minimal replacements so this binary can build and test in isolation.
+//! These orchestrate the read → parse → render → output path.
 
 use anyhow::{Context, Result};
 use std::path::Path;
@@ -10,9 +8,6 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use crate::cli::Cli;
-
-#[cfg(feature = "stubs")]
-use crate::_stubs as backend;
 
 fn format_window_title(file: Option<&std::path::Path>) -> String {
     match file {
@@ -55,7 +50,12 @@ fn render_once(file: &Path, cli: &Cli) -> Result<()> {
         let mut lock = stdout.lock();
         lock.write_all(ansi.as_bytes())?;
     } else {
-        backend::write_to_pager(&ansi)?;
+        let (tx, rx) = mpsc::channel();
+        tx.send(vec![mdview_render_terminal::TermChunk::plain(ansi)])
+            .context("sending terminal render to pager")?;
+        drop(tx);
+        let pager_theme = mdview_theme::find("dark").expect("dark theme is built in");
+        mdview_pager::run(rx, pager_theme)?;
     }
     Ok(())
 }
@@ -87,7 +87,8 @@ pub async fn run_nvim(cli: &Cli) -> Result<()> {
         .nvim_socket
         .as_ref()
         .context("nvim mode requires --nvim-socket")?;
-    backend::nvim_listen_stub(sock).await
+    let _events = mdview_nvim::listen(sock).await?;
+    Ok(())
 }
 
 pub async fn run_tauri_child(cli: &Cli) -> Result<()> {

@@ -6,6 +6,8 @@ publish = false
 
 [dependencies]
 comrak = "0.29"
+mdview-core = { path = "../mdview-core" }
+mdview-theme = { path = "../mdview-theme" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 tracing = "0.1"

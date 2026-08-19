@@ -7,7 +7,7 @@ use tokio_tungstenite::tungstenite::Message;
 fn cfg() -> Config {
     Config::new()
         .with_html(Html::new("<p>hello</p>"))
-        .with_theme(Theme::new("demo", "body{color:#111}"))
+        .with_theme(Theme::default_dark())
         .with_assets([Asset::new(
             "pixel.txt",
             bytes::Bytes::from_static(b"ok"),
@@ -37,7 +37,7 @@ async fn serves_theme_and_assets() {
         .text()
         .await
         .unwrap();
-    assert!(theme_body.contains("color:#111"));
+    assert!(theme_body.contains("--mdv-fg"));
 
     let asset_url = format!("http://{}/assets/pixel.txt", handle.addr());
     let asset_body = reqwest::get(&asset_url)

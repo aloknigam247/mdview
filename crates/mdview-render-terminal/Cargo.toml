@@ -6,8 +6,10 @@ license = "MIT"
 description = "Terminal (ANSI) renderer for mdview"
 
 [dependencies]
-comrak = "0.28"
+comrak = { workspace = true }
+mdview-core = { path = "../mdview-core" }
 mdview-sixel = { path = "../mdview-sixel" }
+mdview-theme = { path = "../mdview-theme" }
 textwrap = "0.16"
 thiserror = "1"
 tracing = "0.1"

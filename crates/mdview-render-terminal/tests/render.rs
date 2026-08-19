@@ -1,16 +1,24 @@
 use mdview_render_terminal::r#box::{code_frame, table};
-use mdview_render_terminal::{render_str, Registry, RenderCtx, TerminalCaps, Theme};
+use mdview_render_terminal::{render_str, Registry, RenderCtx, TermChunksExt, TerminalCaps, Theme};
 
-fn ctx() -> RenderCtx {
+fn theme() -> &'static Theme {
+    use std::sync::OnceLock;
+
+    static THEME: OnceLock<Theme> = OnceLock::new();
+    THEME.get_or_init(Theme::default_dark)
+}
+
+fn ctx() -> RenderCtx<'static> {
     RenderCtx {
-        theme: Theme::default_dark(),
+        theme: theme(),
         source_dir: None,
-        terminal_caps: TerminalCaps {
+        terminal_caps: Some(TerminalCaps {
             width: 60,
             height: 40,
             truecolor: true,
             sixel: false,
-        },
+        }),
+        ..RenderCtx::new(theme())
     }
 }
 
@@ -115,14 +123,15 @@ fn image_without_sixel_support_emits_placeholder() {
     let img = tmp.join("y.png");
     std::fs::write(&img, b"fakepng").unwrap();
     let c = RenderCtx {
-        theme: Theme::default_dark(),
+        theme: theme(),
         source_dir: Some(tmp),
-        terminal_caps: TerminalCaps {
+        terminal_caps: Some(TerminalCaps {
             width: 60,
             height: 40,
             truecolor: true,
             sixel: false,
-        },
+        }),
+        ..RenderCtx::new(theme())
     };
     let out = render_str("![diagram](y.png)", &c, &Registry::new());
     assert!(
@@ -239,6 +248,10 @@ fn registry_override_replaces_default() {
 
     struct AllCaps;
     impl TerminalRenderer for AllCaps {
+        fn name(&self) -> &'static str {
+            "all_caps"
+        }
+
         fn render_terminal<'a>(
             &self,
             node: &'a AstNode<'a>,
@@ -255,7 +268,7 @@ fn registry_override_replaces_default() {
     }
 
     let mut registry = Registry::new();
-    registry.register_terminal(Box::new(AllCaps));
+    registry.register(Box::new(AllCaps));
     let out = render_str("# original", &ctx(), &registry);
     assert!(out.contains("OVERRIDE"));
     assert!(!out.contains("original"));
