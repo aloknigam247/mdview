@@ -1,5 +1,5 @@
 use crate::_stubs::{Radii, StyleSpec, Theme, Typography};
-use crate::themes::{dark, light};
+use crate::themes::{catppuccin_latte, catppuccin_mocha};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -21,7 +21,11 @@ pub fn theme_from_nvim_highlights(colorscheme: &str, hl: &BTreeMap<String, NvimH
         .bg
         .map(is_dark_rgb)
         .unwrap_or_else(|| looks_dark(colorscheme));
-    let fallback = if is_dark { dark::get() } else { light::get() };
+    let fallback = if is_dark {
+        catppuccin_mocha::get()
+    } else {
+        catppuccin_latte::get()
+    };
     let fb = |k: &str| fallback.colors.get(k).cloned().unwrap_or_default();
 
     let fg_hex = normal.fg.map(hex).unwrap_or_else(|| fb("fg"));

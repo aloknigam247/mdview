@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn rejects_theme_flag() {
-        assert!(Cli::try_parse_from(["mdview", "--theme", "dracula", "x.md"]).is_err());
+        assert!(Cli::try_parse_from(["mdview", "--theme", "catppuccin-mocha", "x.md"]).is_err());
     }
 
     #[test]
