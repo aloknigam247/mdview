@@ -11,10 +11,8 @@ expectations for patches, and the test matrix every change must pass.
 2. **Fork + branch** from `main`. Use short, descriptive branch names:
    `feat/callout-extension`, `fix/sixel-probe-timeout`.
 3. **Stay within your crate.** Each crate under `crates/` owns a disjoint
-   directory. If you need a type from a sibling that doesn't yet exist,
-   add a minimal `src/_stubs.rs` with a
-   `// TODO: replace with mdview_<sibling> after integration` marker rather
-   than reaching across crate boundaries.
+   directory. If you need a type from a sibling, depend on that sibling crate
+   and import the real type rather than duplicating it locally.
 4. **Open a pull request** against `main`. Fill out the PR template; link
    the issue; attach screenshots for any HTML-surface change.
 

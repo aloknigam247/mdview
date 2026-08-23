@@ -83,9 +83,8 @@ synthesises a `Theme` at runtime and caches it by colorscheme name.
 - Never reinvent: prefer `comrak`, `syntect`, `latex2mathml`, `resvg`,
   `ratatui`, `crossterm`, `axum`, `sixel-rs`.
 - Each crate must pass `cargo test` in isolation. If a crate needs a type
-  from a sibling that doesn't exist in the worktree, add a local
-  `src/_stubs.rs` with a minimal definition and
-  `// TODO: replace with mdview_<sibling> after integration`.
+  from a sibling, depend on that sibling crate and import the real type. Do
+  not duplicate sibling types behind local stubs.
 
 ## Where to extend
 - **Bundle a new language syntax (not in `load_defaults_newlines`)** →
