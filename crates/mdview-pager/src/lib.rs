@@ -16,12 +16,12 @@ use std::io::{self};
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
 
-use crossterm::cursor::{MoveTo, Show};
+use crossterm::cursor::Show;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
-use crossterm::{execute, queue};
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -301,12 +301,7 @@ fn event_loop<B: ratatui::backend::Backend + io::Write>(
 ) -> Result<(), PagerError> {
     loop {
         match rx.try_recv() {
-            Ok(chunks) => {
-                if let Some(name) = &chunks.source_name {
-                    pager.filename = name.clone();
-                }
-                pager.set_chunks(chunks);
-            }
+            Ok(chunks) => pager.set_chunks(chunks),
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => {}
         }
@@ -354,19 +349,11 @@ fn draw_sixels<B: ratatui::backend::Backend + io::Write>(
 ) -> Result<(), PagerError> {
     let mut row: isize = -(pager.scroll as isize);
     let mut out = terminal.backend_mut();
-    for chunk in &pager.chunks.chunks {
-        match chunk {
-            TermChunk::Ansi(s) => {
-                let lines = s.matches('\n').count() + 1;
-                row += lines as isize;
-            }
-            TermChunk::Sixel { payload, rows } => {
-                if row >= 0 && row < pager.viewport_rows as isize {
-                    queue!(out, MoveTo(0, row as u16))?;
-                    out.write_all(payload.as_bytes())?;
-                }
-                row += *rows as isize;
-            }
+    for chunk in &pager.chunks {
+        let lines = chunk.text.matches('\n').count() + 1;
+        row += lines as isize;
+        if row >= pager.viewport_rows as isize {
+            break;
         }
     }
     std::io::Write::flush(&mut out)?;
@@ -539,10 +526,7 @@ mod tests {
     use super::*;
 
     fn chunks_from(s: &str) -> TermChunks {
-        TermChunks {
-            chunks: vec![TermChunk::Ansi(s.into())],
-            source_name: Some("test.md".into()),
-        }
+        vec![TermChunk::plain(s)]
     }
 
     #[test]

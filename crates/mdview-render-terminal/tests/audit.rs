@@ -19,20 +19,28 @@ fn strip_ansi(s: &str) -> String {
     out
 }
 
-fn ctx_with_width(width: usize) -> RenderCtx {
+fn theme() -> &'static Theme {
+    use std::sync::OnceLock;
+
+    static THEME: OnceLock<Theme> = OnceLock::new();
+    THEME.get_or_init(Theme::default_dark)
+}
+
+fn ctx_with_width(width: usize) -> RenderCtx<'static> {
     RenderCtx {
-        theme: Theme::default_dark(),
+        theme: theme(),
         source_dir: None,
-        terminal_caps: TerminalCaps {
-            width,
+        terminal_caps: Some(TerminalCaps {
+            width: width as u16,
             height: 40,
             truecolor: true,
             sixel: false,
-        },
+        }),
+        ..RenderCtx::new(theme())
     }
 }
 
-fn ctx() -> RenderCtx {
+fn ctx() -> RenderCtx<'static> {
     ctx_with_width(80)
 }
 

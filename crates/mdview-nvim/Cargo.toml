@@ -8,6 +8,7 @@ description = "Neovim bridge for mdview (named-pipe / Unix-socket server + theme
 [dependencies]
 dirs = "5"
 futures-core = "0.3"
+mdview-theme = { path = "../mdview-theme" }
 rmpv = { version = "1", features = ["with-serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

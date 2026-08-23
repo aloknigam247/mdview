@@ -8,6 +8,9 @@ description = "Embedded axum + tokio-tungstenite server (loopback) for mdview li
 [dependencies]
 axum = { version = "0.7", features = ["ws"] }
 bytes = "1"
+mdview-core = { path = "../mdview-core" }
+mdview-render-html = { path = "../mdview-render-html" }
+mdview-theme = { path = "../mdview-theme" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"

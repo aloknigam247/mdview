@@ -34,7 +34,7 @@ fn main() -> ExitCode {
             continue;
         }
         let expected = fs::read_to_string(&expected_path).expect("read expected");
-        if expected != html {
+        if expected != html.as_str() {
             mismatches.push(name);
         }
     }

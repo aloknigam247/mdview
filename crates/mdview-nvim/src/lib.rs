@@ -293,11 +293,11 @@ mod tests {
         hl.insert(
             "Normal".to_string(),
             NvimHl {
-                fg: Some("#ffffff".to_string()),
-                bg: Some("#000000".to_string()),
-                bold: None,
-                italic: None,
-                underline: None,
+                fg: Some(0xffffff),
+                bg: Some(0x000000),
+                bold: false,
+                italic: false,
+                underline: false,
             },
         );
         Message::Theme {
@@ -372,11 +372,11 @@ mod tests {
         hl.insert(
             "Normal".to_string(),
             NvimHl {
-                fg: Some("#112233".to_string()),
-                bg: Some("#445566".to_string()),
-                bold: None,
-                italic: None,
-                underline: None,
+                fg: Some(0x112233),
+                bg: Some(0x445566),
+                bold: false,
+                italic: false,
+                underline: false,
             },
         );
 
@@ -393,11 +393,11 @@ mod tests {
         hl2.insert(
             "Normal".to_string(),
             NvimHl {
-                fg: Some("#deadbe".to_string()),
-                bg: Some("#efbead".to_string()),
-                bold: None,
-                italic: None,
-                underline: None,
+                fg: Some(0xdeadbe),
+                bg: Some(0xefbead),
+                bold: false,
+                italic: false,
+                underline: false,
             },
         );
         let t2 = resolve_theme_in(dir, colorscheme, version, &hl2, false)
@@ -417,11 +417,11 @@ mod tests {
         hl.insert(
             "Normal".to_string(),
             NvimHl {
-                fg: Some("#111111".to_string()),
-                bg: Some("#222222".to_string()),
-                bold: None,
-                italic: None,
-                underline: None,
+                fg: Some(0x111111),
+                bg: Some(0x222222),
+                bold: false,
+                italic: false,
+                underline: false,
             },
         );
         let t1 = resolve_theme_in(dir, colorscheme, version, &hl, false)
@@ -432,11 +432,11 @@ mod tests {
         hl2.insert(
             "Normal".to_string(),
             NvimHl {
-                fg: Some("#aaaaaa".to_string()),
-                bg: Some("#bbbbbb".to_string()),
-                bold: None,
-                italic: None,
-                underline: None,
+                fg: Some(0xaaaaaa),
+                bg: Some(0xbbbbbb),
+                bold: false,
+                italic: false,
+                underline: false,
             },
         );
         let t2 = resolve_theme_in(dir, colorscheme, version, &hl2, true)
@@ -454,11 +454,11 @@ mod tests {
         hl.insert(
             "Normal".to_string(),
             NvimHl {
-                fg: Some("#eeeeee".to_string()),
-                bg: Some("#111111".to_string()),
-                bold: None,
-                italic: None,
-                underline: None,
+                fg: Some(0xeeeeee),
+                bg: Some(0x111111),
+                bold: false,
+                italic: false,
+                underline: false,
             },
         );
         let theme = resolve_theme_in(tmp.path(), "expected_colors", "1", &hl, false)

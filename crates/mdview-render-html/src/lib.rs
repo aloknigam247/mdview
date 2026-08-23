@@ -5,9 +5,9 @@ pub mod htmlesc;
 pub mod image;
 
 pub use _stubs::{
-    mdview_theme as theme_mod, Asset, AstNode, Html, HtmlRenderer, Radii, Registry, RenderCtx,
-    StyleSpec, Theme, Typography,
+    Asset, AstNode, Html, HtmlRenderer, Radii, Registry, RenderCtx, StyleSpec, Theme, Typography,
 };
+use mdview_theme as theme_mod;
 
 use comrak::nodes::{NodeLink, NodeValue};
 use comrak::{format_html, parse_document, Arena, ComrakOptions};
@@ -54,9 +54,9 @@ pub fn render<'a>(root: &'a AstNode<'a>, ctx: &RenderCtx, registry: &Registry) -
     } else {
         ""
     };
-    format!(
+    Html::new(format!(
         "<!doctype html>\n<html><head><meta charset=utf-8><title>{title}</title><style>{css}{base}</style></head><body class=\"mdv\">{body}{live}</body></html>"
-    )
+    ))
 }
 
 /// Parse markdown and render HTML in one step. Convenience for demos/tests.
@@ -140,7 +140,7 @@ fn render_body<'a>(
     let mut out = String::from("<article class=\"mdv-doc\">");
     for child in root.children() {
         if let Some(override_html) = override_for(child, ctx, registry) {
-            out.push_str(&override_html);
+            out.push_str(override_html.as_str());
         } else if let Some(fig) = standalone_image_figure(child) {
             out.push_str(&fig);
         } else {
@@ -267,7 +267,7 @@ fn extract_sentinel_label(tag: &str) -> String {
     String::from("image")
 }
 
-fn override_for<'a>(node: &'a AstNode<'a>, ctx: &RenderCtx, registry: &Registry) -> Option<String> {
+fn override_for<'a>(node: &'a AstNode<'a>, ctx: &RenderCtx, registry: &Registry) -> Option<Html> {
     let kind = node_kind(node);
     for r in registry.html_renderers() {
         let types = r.node_types();

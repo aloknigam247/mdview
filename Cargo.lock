@@ -492,27 +492,6 @@ checksum = "75984efb6ed102a0d42db99afb6c1948f0380d1d91808d5529916e6c08b49d8d"
 
 [[package]]
 name = "comrak"
-version = "0.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c93ab3577cca16b4a1d80a88c2e0cd8b6e969e51696f0bbb0d1dcb0157109832"
-dependencies = [
- "caseless",
- "clap",
- "derive_builder",
- "entities",
- "memchr",
- "once_cell",
- "regex",
- "shell-words",
- "slug",
- "syntect",
- "typed-arena",
- "unicode_categories",
- "xdg",
-]
-
-[[package]]
-name = "comrak"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8c32ff8b21372fab0e9ecc4e42536055702dc5faa418362bffd1544f9d12637"
@@ -2187,7 +2166,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "comrak 0.29.0",
+ "comrak",
  "ico",
  "image",
  "libc",
@@ -2200,7 +2179,10 @@ dependencies = [
  "mdview-ext-math",
  "mdview-ext-mermaid",
  "mdview-ext-plotly",
+ "mdview-nvim",
+ "mdview-pager",
  "mdview-render-html",
+ "mdview-render-terminal",
  "mdview-theme",
  "notify",
  "resvg",
@@ -2233,7 +2215,7 @@ dependencies = [
 name = "mdview-core"
 version = "0.1.0"
 dependencies = [
- "comrak 0.29.0",
+ "comrak",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -2243,7 +2225,7 @@ dependencies = [
 name = "mdview-ext-d2"
 version = "0.1.0"
 dependencies = [
- "comrak 0.29.0",
+ "comrak",
  "mdview-core",
  "tempfile",
  "which",
@@ -2254,7 +2236,7 @@ name = "mdview-ext-drawio"
 version = "0.1.0"
 dependencies = [
  "base64",
- "comrak 0.29.0",
+ "comrak",
  "mdview-core",
  "serde_json",
  "thiserror 1.0.69",
@@ -2266,7 +2248,7 @@ dependencies = [
 name = "mdview-ext-frontmatter"
 version = "0.1.0"
 dependencies = [
- "comrak 0.29.0",
+ "comrak",
  "mdview-core",
  "mdview-theme",
  "serde",
@@ -2279,7 +2261,7 @@ dependencies = [
 name = "mdview-ext-highlight"
 version = "0.1.0"
 dependencies = [
- "comrak 0.29.0",
+ "comrak",
  "mdview-core",
  "once_cell",
  "syntect",
@@ -2291,7 +2273,7 @@ dependencies = [
 name = "mdview-ext-math"
 version = "0.1.0"
 dependencies = [
- "comrak 0.29.0",
+ "comrak",
  "latex2mathml",
  "mdview-core",
  "reqwest",
@@ -2303,7 +2285,7 @@ dependencies = [
 name = "mdview-ext-mermaid"
 version = "0.1.0"
 dependencies = [
- "comrak 0.29.0",
+ "comrak",
  "mdview-core",
  "serde",
  "serde_json",
@@ -2316,7 +2298,7 @@ dependencies = [
 name = "mdview-ext-plotly"
 version = "0.1.0"
 dependencies = [
- "comrak 0.29.0",
+ "comrak",
  "mdview-core",
  "serde_json",
  "thiserror 1.0.69",
@@ -2330,6 +2312,7 @@ version = "0.1.0"
 dependencies = [
  "dirs 5.0.1",
  "futures-core",
+ "mdview-theme",
  "rmpv",
  "serde",
  "serde_json",
@@ -2346,6 +2329,8 @@ dependencies = [
  "crossterm",
  "dirs 5.0.1",
  "mdview-config",
+ "mdview-render-terminal",
+ "mdview-theme",
  "ratatui",
  "serde",
  "thiserror 1.0.69",
@@ -2356,7 +2341,9 @@ dependencies = [
 name = "mdview-render-html"
 version = "0.1.0"
 dependencies = [
- "comrak 0.29.0",
+ "comrak",
+ "mdview-core",
+ "mdview-theme",
  "serde",
  "thiserror 1.0.69",
  "tracing",
@@ -2367,9 +2354,11 @@ dependencies = [
 name = "mdview-render-terminal"
 version = "0.1.0"
 dependencies = [
- "comrak 0.28.0",
+ "comrak",
  "image",
+ "mdview-core",
  "mdview-sixel",
+ "mdview-theme",
  "textwrap",
  "thiserror 1.0.69",
  "tracing",
@@ -2383,6 +2372,9 @@ dependencies = [
  "axum",
  "bytes",
  "futures-util",
+ "mdview-core",
+ "mdview-render-html",
+ "mdview-theme",
  "reqwest",
  "serde",
  "serde_json",
@@ -2412,6 +2404,7 @@ name = "mdview-theme"
 version = "0.1.0"
 dependencies = [
  "dirs 5.0.1",
+ "mdview-core",
  "serde",
  "serde_json",
  "tempfile",

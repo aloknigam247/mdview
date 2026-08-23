@@ -1,4 +1,4 @@
-use crate::_stubs::{TermChunk, TermChunks};
+use crate::_stubs::TermChunks;
 
 /// A match located within the flattened plaintext of the scrollback.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,8 +14,7 @@ pub struct Match {
 /// Search index over the rendered plaintext of a chunk stream.
 #[derive(Debug, Clone, Default)]
 pub struct SearchIndex {
-    /// Plaintext lines with ANSI escapes stripped. Sixel chunks become a
-    /// single placeholder line.
+    /// Plaintext lines with ANSI escapes stripped.
     pub lines: Vec<String>,
 }
 
@@ -23,24 +22,12 @@ impl SearchIndex {
     pub fn build(chunks: &TermChunks) -> Self {
         let mut lines: Vec<String> = Vec::new();
         let mut current = String::new();
-        for chunk in &chunks.chunks {
-            match chunk {
-                TermChunk::Ansi(s) => {
-                    for ch in strip_ansi(s).chars() {
-                        if ch == '\n' {
-                            lines.push(std::mem::take(&mut current));
-                        } else {
-                            current.push(ch);
-                        }
-                    }
-                }
-                TermChunk::Sixel { rows, .. } => {
-                    if !current.is_empty() {
-                        lines.push(std::mem::take(&mut current));
-                    }
-                    for _ in 0..(*rows).max(1) {
-                        lines.push(String::new());
-                    }
+        for chunk in chunks {
+            for ch in strip_ansi(&chunk.text).chars() {
+                if ch == '\n' {
+                    lines.push(std::mem::take(&mut current));
+                } else {
+                    current.push(ch);
                 }
             }
         }

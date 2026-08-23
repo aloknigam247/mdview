@@ -13,6 +13,10 @@ impl Html {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.0.into_bytes()
+    }
 }
 
 impl From<String> for Html {
@@ -24,6 +28,26 @@ impl From<String> for Html {
 impl From<&str> for Html {
     fn from(s: &str) -> Self {
         Self(s.to_string())
+    }
+}
+
+impl std::fmt::Display for Html {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::ops::Deref for Html {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<[u8]> for Html {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_bytes()
     }
 }
 
@@ -56,11 +80,59 @@ pub struct Asset {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct StyleSpec {
-    pub background: Option<String>,
+    pub bg: Option<String>,
     pub bold: bool,
-    pub color: Option<String>,
+    pub fg: Option<String>,
     pub italic: bool,
     pub underline: bool,
+}
+
+impl StyleSpec {
+    pub fn bold() -> Self {
+        Self {
+            bold: true,
+            ..Default::default()
+        }
+    }
+
+    pub fn fg(color: &str) -> Self {
+        Self {
+            fg: Some(color.to_string()),
+            ..Default::default()
+        }
+    }
+
+    pub fn italic() -> Self {
+        Self {
+            italic: true,
+            ..Default::default()
+        }
+    }
+
+    pub fn with_bg(mut self, color: &str) -> Self {
+        self.bg = Some(color.to_string());
+        self
+    }
+
+    pub fn with_bold(mut self) -> Self {
+        self.bold = true;
+        self
+    }
+
+    pub fn with_fg(mut self, color: &str) -> Self {
+        self.fg = Some(color.to_string());
+        self
+    }
+
+    pub fn with_italic(mut self) -> Self {
+        self.italic = true;
+        self
+    }
+
+    pub fn with_underline(mut self) -> Self {
+        self.underline = true;
+        self
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -97,13 +169,60 @@ impl Default for Typography {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Theme {
     pub colors: BTreeMap<String, String>,
     pub name: String,
     pub radii: Radii,
     pub styles: BTreeMap<String, StyleSpec>,
     pub typography: Typography,
+}
+
+impl Theme {
+    pub fn default_dark() -> Self {
+        let mut colors = BTreeMap::new();
+        colors.insert("accent".into(), "#89b4fa".into());
+        colors.insert("bg".into(), "#1e1e2e".into());
+        colors.insert("code.bg".into(), "#313244".into());
+        colors.insert("fg".into(), "#e6e6e6".into());
+        colors.insert("link".into(), "#74c7ec".into());
+        colors.insert("muted".into(), "#6c7086".into());
+
+        let mut styles = BTreeMap::new();
+        styles.insert("blockquote".into(), StyleSpec::fg("#6c7086").with_italic());
+        styles.insert(
+            "code.inline".into(),
+            StyleSpec::fg("#f9e2af").with_bg("#313244"),
+        );
+        styles.insert("emph".into(), StyleSpec::italic());
+        styles.insert("heading".into(), StyleSpec::fg("#89b4fa").with_bold());
+        styles.insert("link".into(), StyleSpec::fg("#74c7ec").with_underline());
+        styles.insert("muted".into(), StyleSpec::fg("#6c7086"));
+        styles.insert("strong".into(), StyleSpec::bold());
+        styles.insert("table.header".into(), StyleSpec::fg("#89b4fa").with_bold());
+
+        Self {
+            colors,
+            name: "default-dark".into(),
+            radii: Radii::default(),
+            styles,
+            typography: Typography::default(),
+        }
+    }
+
+    pub fn color(&self, key: &str) -> Option<&str> {
+        self.colors.get(key).map(String::as_str)
+    }
+
+    pub fn style(&self, key: &str) -> StyleSpec {
+        self.styles.get(key).cloned().unwrap_or_default()
+    }
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        Self::default_dark()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -148,6 +267,15 @@ impl<'a> RenderCtx<'a> {
 
     pub fn resolve_asset(&self, path: &str) -> String {
         (self.asset_resolver)(path)
+    }
+}
+
+impl Default for RenderCtx<'static> {
+    fn default() -> Self {
+        use std::sync::OnceLock;
+
+        static THEME: OnceLock<Theme> = OnceLock::new();
+        Self::new(THEME.get_or_init(Theme::default))
     }
 }
 
