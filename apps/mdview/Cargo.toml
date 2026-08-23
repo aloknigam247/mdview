@@ -17,6 +17,7 @@ gui = ["dep:wry", "dep:tao"]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 comrak = { workspace = true }
+crossterm = "0.28"
 image = { version = "0.25", default-features = false, features = ["png"] }
 mdview-config = { path = "../../crates/mdview-config" }
 mdview-core = { path = "../../crates/mdview-core" }

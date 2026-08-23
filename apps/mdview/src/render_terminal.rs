@@ -1,7 +1,7 @@
 use anyhow::Result;
 use comrak::nodes::{AstNode, ListType, NodeValue, TableAlignment};
 use comrak::Arena;
-use mdview_core::{parse, Registry, RenderCtx, TermChunks, Theme};
+use mdview_core::{parse, Registry, RenderCtx, TermChunks, TerminalCaps, Theme};
 use std::path::Path;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
@@ -17,6 +17,15 @@ pub fn render_ansi_with_source(
     src: &str,
     source_dir: Option<&Path>,
     tab_width: u8,
+) -> Result<String> {
+    render_ansi_with_source_and_width(src, source_dir, tab_width, terminal_width())
+}
+
+fn render_ansi_with_source_and_width(
+    src: &str,
+    source_dir: Option<&Path>,
+    tab_width: u8,
+    width: usize,
 ) -> Result<String> {
     let mut registry = Registry::new();
     for ext in builtin_extensions() {
@@ -34,6 +43,10 @@ pub fn render_ansi_with_source(
     let mut ctx = RenderCtx::new(&theme);
     ctx.source_dir = source_dir.map(|p| p.to_path_buf());
     ctx.tab_width = tab_width;
+    ctx.terminal_caps = Some(TerminalCaps {
+        width: width.min(u16::MAX as usize) as u16,
+        ..TerminalCaps::default()
+    });
 
     let mut out = String::new();
     for ext in registry.terminal_renderers() {
@@ -174,36 +187,149 @@ fn render_code_block<'a>(
     let tab_spaces: String = " ".repeat(tab_width as usize);
     let body = body.replace('\t', &tab_spaces);
 
-    let width = 60usize;
-    let label = if lang.is_empty() {
-        "".to_string()
-    } else {
-        format!("─ {} ", lang)
-    };
+    let outer_width = ctx
+        .terminal_caps
+        .map(|caps| caps.width as usize)
+        .unwrap_or(DEFAULT_TERMINAL_WIDTH)
+        .max(MIN_CODE_FRAME_WIDTH);
+    let inner_width = outer_width.saturating_sub(4).max(1);
+    let label = code_frame_label(&lang, outer_width);
+    let label_width = code_visible_width(&label);
     let top = format!(
         "╭{label}{}╮",
-        "─".repeat(width.saturating_sub(label.chars().count() + 2))
+        "─".repeat(outer_width.saturating_sub(label_width + 2))
     );
-    let bot = format!("╰{}╯", "─".repeat(width.saturating_sub(2)));
+    let bot = format!("╰{}╯", "─".repeat(outer_width.saturating_sub(2)));
 
     out.push_str(MUTED);
     out.push_str(&top);
     out.push_str(RESET);
     out.push('\n');
-    for line in body.split('\n') {
-        if line.is_empty() && body.ends_with('\n') {
-            continue;
+    for line in code_body_lines(&body) {
+        for wrapped in wrap_ansi_code_line(line, inner_width) {
+            out.push_str(MUTED);
+            out.push_str("│ ");
+            out.push_str(RESET);
+            out.push_str(&wrapped);
+            out.push_str(RESET);
+            out.push_str(&" ".repeat(inner_width.saturating_sub(code_visible_width(&wrapped))));
+            out.push_str(MUTED);
+            out.push_str(" │");
+            out.push_str(RESET);
+            out.push('\n');
         }
-        out.push_str(MUTED);
-        out.push_str("│ ");
-        out.push_str(RESET);
-        out.push_str(line);
-        out.push('\n');
     }
     out.push_str(MUTED);
     out.push_str(&bot);
     out.push_str(RESET);
     out.push('\n');
+}
+
+fn code_body_lines(body: &str) -> Vec<&str> {
+    let mut lines: Vec<_> = body.split('\n').collect();
+    while matches!(lines.last(), Some(line) if line.is_empty() || code_visible_width(line) == 0) {
+        lines.pop();
+    }
+    if lines.is_empty() {
+        lines.push("");
+    }
+    lines
+}
+
+fn code_frame_label(lang: &str, outer_width: usize) -> String {
+    if lang.is_empty() {
+        return String::new();
+    }
+    let label = format!("─ {lang} ");
+    if code_visible_width(&label) <= outer_width.saturating_sub(2) {
+        label
+    } else {
+        String::new()
+    }
+}
+
+fn terminal_width() -> usize {
+    crossterm::terminal::size()
+        .map(|(width, _)| width as usize)
+        .unwrap_or(DEFAULT_TERMINAL_WIDTH)
+}
+
+fn code_visible_width(s: &str) -> usize {
+    let mut in_esc = false;
+    let mut w = 0usize;
+    for ch in s.chars() {
+        if in_esc {
+            if ch == 'm' {
+                in_esc = false;
+            }
+            continue;
+        }
+        if ch == '\x1b' {
+            in_esc = true;
+            continue;
+        }
+        w += 1;
+    }
+    w
+}
+
+fn update_active_sgr(active: &mut String, sequence: &str) {
+    if !sequence.ends_with('m') {
+        return;
+    }
+    if sequence == RESET || sequence.contains("[0") {
+        active.clear();
+    } else {
+        active.push_str(sequence);
+    }
+}
+
+fn wrap_ansi_code_line(line: &str, width: usize) -> Vec<String> {
+    let width = width.max(1);
+    let mut active_sgr = String::new();
+    let mut chars = line.chars().peekable();
+    let mut current = String::new();
+    let mut current_width = 0usize;
+    let mut rows = Vec::new();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\x1b' {
+            let sequence = read_ansi_sequence(&mut chars);
+            current.push('\x1b');
+            current.push_str(&sequence);
+            update_active_sgr(&mut active_sgr, &format!("\x1b{sequence}"));
+            continue;
+        }
+
+        let char_width = ch.width().unwrap_or(0);
+        if char_width > 0 && current_width > 0 && current_width + char_width > width {
+            rows.push(current);
+            current = active_sgr.clone();
+            current_width = 0;
+        }
+        current.push(ch);
+        current_width += char_width;
+    }
+
+    rows.push(current);
+    rows
+}
+
+fn read_ansi_sequence<I>(chars: &mut std::iter::Peekable<I>) -> String
+where
+    I: Iterator<Item = char>,
+{
+    let mut sequence = String::new();
+    if chars.peek() != Some(&'[') {
+        return sequence;
+    }
+    for ch in chars.by_ref() {
+        sequence.push(ch);
+        if ch.is_ascii_alphabetic() {
+            break;
+        }
+    }
+    sequence
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -455,7 +581,7 @@ fn visible_width(s: &str) -> usize {
     let mut visible = String::with_capacity(s.len());
     for ch in s.chars() {
         if in_esc {
-            if ch == 'm' {
+            if ch.is_ascii_alphabetic() {
                 in_esc = false;
             }
             continue;
@@ -481,6 +607,9 @@ fn visible_width(s: &str) -> usize {
         })
         .sum()
 }
+
+const DEFAULT_TERMINAL_WIDTH: usize = 80;
+const MIN_CODE_FRAME_WIDTH: usize = 12;
 
 // ANSI SGR sequences (truecolor + attr combos).
 const RESET: &str = "\x1b[0m";
@@ -595,6 +724,98 @@ mod tests {
     }
 
     #[test]
+    fn fenced_code_rows_have_right_border_at_fixed_width() {
+        let width = 24usize;
+        let out = render_ansi_with_source_and_width(
+            "```rust\nlet message = \"abcdefghijklmnopqrstuvwxyz\";\n```\n",
+            None,
+            4,
+            width,
+        )
+        .unwrap();
+        let rows = code_frame_rows(&out);
+
+        assert!(rows.len() > 3, "long code line should wrap: {out:?}");
+        for (idx, row) in rows.iter().enumerate() {
+            assert_eq!(code_visible_width(row), width, "row {idx} width: {row:?}");
+            let visible = strip_ansi_for_test(row);
+            let first = visible.chars().next().unwrap();
+            let last = visible.chars().last().unwrap();
+            match idx {
+                0 => assert_eq!((first, last), ('╭', '╮'), "top row: {visible:?}"),
+                n if n + 1 == rows.len() => {
+                    assert_eq!((first, last), ('╰', '╯'), "bottom row: {visible:?}");
+                }
+                _ => assert_eq!((first, last), ('│', '│'), "body row: {visible:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn fenced_code_soft_wraps_unbroken_tokens_inside_border() {
+        let width = 20usize;
+        let out = render_ansi_with_source_and_width(
+            "```\nabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\n```\n",
+            None,
+            4,
+            width,
+        )
+        .unwrap();
+        let body_rows: Vec<_> = code_frame_rows(&out)
+            .into_iter()
+            .filter(|row| strip_ansi_for_test(row).starts_with('│'))
+            .collect();
+
+        assert!(
+            body_rows.len() >= 3,
+            "unbroken token should hard-wrap: {out:?}"
+        );
+        for row in body_rows {
+            let visible = strip_ansi_for_test(row);
+            assert_eq!(code_visible_width(row), width, "wrapped row width: {row:?}");
+            assert!(visible.starts_with('│'), "missing left border: {visible:?}");
+            assert!(visible.ends_with('│'), "missing right border: {visible:?}");
+        }
+    }
+
+    #[test]
+    fn highlighted_fenced_code_reopens_body_sgr_on_wrapped_rows() {
+        let width = 24usize;
+        let out = render_ansi_with_source_and_width(
+            "```rust\nlet message = \"abcdefghijklmnopqrstuvwxyz\";\n```\n",
+            None,
+            4,
+            width,
+        )
+        .unwrap();
+        let body_rows: Vec<_> = code_frame_rows(&out)
+            .into_iter()
+            .filter(|row| strip_ansi_for_test(row).starts_with('│'))
+            .collect();
+
+        assert!(
+            body_rows.len() >= 2,
+            "highlighted line should wrap: {out:?}"
+        );
+        let body_sgr = first_non_frame_sgr(body_rows[0]).expect("syntect body SGR");
+        assert_ne!(
+            body_sgr, MUTED,
+            "test must pin body styling, not frame styling"
+        );
+
+        for row in body_rows.iter().skip(1).filter(|row| {
+            strip_ansi_for_test(row)
+                .chars()
+                .any(|c| c.is_alphanumeric())
+        }) {
+            assert!(
+                row.contains(&body_sgr),
+                "continuation row did not reopen body SGR {body_sgr:?}: {row:?}"
+            );
+        }
+    }
+
+    #[test]
     fn code_block_expands_tabs() {
         let src = "```\n\tindented\n```\n";
         let out = render_ansi_with_source(src, None, 4).unwrap();
@@ -631,22 +852,57 @@ mod tests {
             .sum()
     }
 
-    fn strip_ansi_for_test(s: &str) -> String {
-        let mut in_esc = false;
-        let mut o = String::new();
-        for ch in s.chars() {
-            if in_esc {
-                if ch == 'm' {
-                    in_esc = false;
+    fn ansi_sgrs_for_test(input: &str) -> Vec<String> {
+        let mut sgrs = Vec::new();
+        let mut chars = input.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch != '\x1b' || chars.next() != Some('[') {
+                continue;
+            }
+            let mut sgr = String::from("\x1b[");
+            for next in chars.by_ref() {
+                sgr.push(next);
+                if next == 'm' {
+                    sgrs.push(sgr);
+                    break;
                 }
-                continue;
+                if next.is_ascii_alphabetic() {
+                    break;
+                }
             }
-            if ch == '\x1b' {
-                in_esc = true;
-                continue;
-            }
-            o.push(ch);
         }
-        o
+        sgrs
+    }
+
+    fn code_frame_rows(out: &str) -> Vec<&str> {
+        out.lines()
+            .filter(|line| {
+                let visible = strip_ansi_for_test(line);
+                visible.starts_with('╭') || visible.starts_with('│') || visible.starts_with('╰')
+            })
+            .collect()
+    }
+
+    fn first_non_frame_sgr(input: &str) -> Option<String> {
+        ansi_sgrs_for_test(input)
+            .into_iter()
+            .find(|sgr| sgr != MUTED && sgr != RESET)
+    }
+
+    fn strip_ansi_for_test(input: &str) -> String {
+        let mut out = String::new();
+        let mut chars = input.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch == '\x1b' && chars.next() == Some('[') {
+                for next in chars.by_ref() {
+                    if next.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            } else {
+                out.push(ch);
+            }
+        }
+        out
     }
 }
