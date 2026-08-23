@@ -58,7 +58,6 @@ libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
-walkdir = "2"
 
 [build-dependencies]
 anyhow = "1"
