@@ -1,15 +1,8 @@
 use crate::_stubs::Theme;
-use crate::themes::{catppuccin_latte, catppuccin_mocha, dark, dracula, light, solarized};
+use crate::themes::{catppuccin_latte, catppuccin_mocha};
 
 pub fn builtin_themes() -> Vec<&'static Theme> {
-    vec![
-        catppuccin_latte::get(),
-        catppuccin_mocha::get(),
-        dark::get(),
-        dracula::get(),
-        light::get(),
-        solarized::get(),
-    ]
+    vec![catppuccin_latte::get(), catppuccin_mocha::get()]
 }
 
 pub fn find(name: &str) -> Option<&'static Theme> {

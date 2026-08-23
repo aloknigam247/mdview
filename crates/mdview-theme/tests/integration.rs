@@ -32,7 +32,7 @@ fn all_presets_have_required_keys() {
         "table.header",
     ];
     let themes = builtin_themes();
-    assert_eq!(themes.len(), 6);
+    assert_eq!(themes.len(), 2);
     for t in themes {
         for k in expected_colors {
             assert!(t.colors.contains_key(k), "{} missing color {k}", t.name);
@@ -62,13 +62,22 @@ fn presets_are_alphabetical() {
 
 #[test]
 fn find_returns_known_theme() {
-    assert!(find("dracula").is_some());
+    assert!(find("catppuccin-mocha").is_some());
     assert!(find("nonsuch").is_none());
 }
 
 #[test]
+fn only_catppuccin_presets_remain() {
+    let names: Vec<&str> = builtin_themes().iter().map(|t| t.name.as_str()).collect();
+    assert_eq!(names, vec!["catppuccin-latte", "catppuccin-mocha"]);
+    for gone in ["dark", "dracula", "light", "solarized"] {
+        assert!(find(gone).is_none(), "{gone} should be removed");
+    }
+}
+
+#[test]
 fn css_contains_radii_and_custom_properties() {
-    let t = find("light").unwrap();
+    let t = find("catppuccin-latte").unwrap();
     let css = emit_css(t);
     assert!(!css.is_empty());
     assert!(css.contains(":root"));
@@ -83,7 +92,7 @@ fn css_contains_radii_and_custom_properties() {
 
 #[test]
 fn ansi_emits_truecolor_sgr() {
-    let t = find("dark").unwrap();
+    let t = find("catppuccin-mocha").unwrap();
     let s = style_for(t, "heading.1");
     assert!(s.prefix.starts_with("\x1b["));
     assert!(s.prefix.contains("38;2;"));
@@ -93,7 +102,7 @@ fn ansi_emits_truecolor_sgr() {
 
 #[test]
 fn ansi_256_fallback() {
-    let t = find("dark").unwrap();
+    let t = find("catppuccin-mocha").unwrap();
     let s = style_for_depth(t, "link", ColorDepth::Palette256);
     assert!(s.prefix.contains("38;5;"));
     assert!(!s.prefix.contains("38;2;"));
@@ -101,7 +110,7 @@ fn ansi_256_fallback() {
 
 #[test]
 fn ansi_unknown_key_is_empty() {
-    let t = find("light").unwrap();
+    let t = find("catppuccin-latte").unwrap();
     let s = style_for(t, "does.not.exist");
     assert_eq!(s.prefix, "");
     assert_eq!(s.suffix, "");
@@ -182,8 +191,8 @@ fn cache_round_trip() {
     let tmp = tempfile::tempdir().unwrap();
     cache::set_cache_dir_for_tests(tmp.path().to_path_buf());
 
-    let original = find("solarized").unwrap().clone();
-    let key = cache::cache_key("solarized", "0.10.0");
+    let original = find("catppuccin-mocha").unwrap().clone();
+    let key = cache::cache_key("catppuccin-mocha", "0.10.0");
 
     assert!(cache::load(&key).is_none());
     cache::store(&key, &original).unwrap();
