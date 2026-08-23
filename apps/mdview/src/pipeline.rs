@@ -54,7 +54,15 @@ fn render_once(file: &Path, cli: &Cli) -> Result<()> {
         tx.send(vec![mdview_render_terminal::TermChunk::plain(ansi)])
             .context("sending terminal render to pager")?;
         drop(tx);
-        let pager_theme = mdview_theme::find("dark").expect("dark theme is built in");
+        let theme_name = if config.theme.mode.resolve_is_light() {
+            &config.theme.light
+        } else {
+            &config.theme.dark
+        };
+        let pager_theme = mdview_theme::find(theme_name)
+            .or_else(|| mdview_theme::find("catppuccin-mocha"))
+            .or_else(|| mdview_theme::presets::builtin_themes().into_iter().next())
+            .expect("at least one built-in theme");
         mdview_pager::run(rx, pager_theme)?;
     }
     Ok(())
