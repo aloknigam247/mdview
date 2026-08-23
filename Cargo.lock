@@ -2191,6 +2191,8 @@ dependencies = [
  "tiny-skia",
  "tokio",
  "tracing",
+ "unicode-segmentation",
+ "unicode-width 0.2.2",
  "urlencoding",
  "usvg",
  "windows 0.58.0",

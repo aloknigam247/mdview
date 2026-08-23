@@ -3,6 +3,8 @@ use comrak::nodes::{AstNode, ListType, NodeValue, TableAlignment};
 use comrak::Arena;
 use mdview_core::{parse, Registry, RenderCtx, TermChunks, Theme};
 use std::path::Path;
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthChar;
 
 use crate::builtins::builtin_extensions;
 
@@ -450,7 +452,7 @@ fn write_chunks(chunks: &TermChunks, out: &mut String) {
 
 fn visible_width(s: &str) -> usize {
     let mut in_esc = false;
-    let mut w = 0usize;
+    let mut visible = String::with_capacity(s.len());
     for ch in s.chars() {
         if in_esc {
             if ch == 'm' {
@@ -462,9 +464,22 @@ fn visible_width(s: &str) -> usize {
             in_esc = true;
             continue;
         }
-        w += 1;
+        visible.push(ch);
     }
-    w
+    visible
+        .graphemes(true)
+        .map(|g| {
+            if g.chars()
+                .any(|c| UnicodeWidthChar::width(c).unwrap_or(0) >= 2)
+            {
+                2
+            } else {
+                g.chars()
+                    .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
+                    .sum()
+            }
+        })
+        .sum()
 }
 
 // ANSI SGR sequences (truecolor + attr combos).
@@ -503,6 +518,39 @@ mod tests {
         assert!(out.contains('╮'));
         assert!(out.contains('╰'));
         assert!(out.contains('╯'));
+    }
+
+    #[test]
+    fn table_aligns_borders_for_wide_and_zwj_cells() {
+        let src = "| a | b |\n|---|---|\n| 🦀 | 中 |\n| x | 👨‍👩‍👧‍👦 |\n";
+        let out = render_ansi(src).unwrap();
+        let lines: Vec<String> = out
+            .lines()
+            .map(strip_ansi_for_test)
+            .filter(|l| l.contains('╭') || l.contains('│') || l.contains('├') || l.contains('╰'))
+            .collect();
+        assert_eq!(lines.len(), 6, "expected 6 table lines: {lines:#?}");
+
+        let expected_w = display_width_for_test(&lines[0]);
+        assert!(
+            lines
+                .iter()
+                .all(|l| display_width_for_test(l) == expected_w),
+            "all table lines must share one display width: {lines:#?}"
+        );
+
+        assert_eq!(border_columns_for_test(&lines[0], '╭'), vec![0]);
+        assert_eq!(border_columns_for_test(&lines[0], '┬'), vec![5]);
+        assert_eq!(border_columns_for_test(&lines[0], '╮'), vec![10]);
+        assert_eq!(border_columns_for_test(&lines[1], '│'), vec![0, 5, 10]);
+        assert_eq!(border_columns_for_test(&lines[2], '├'), vec![0]);
+        assert_eq!(border_columns_for_test(&lines[2], '┼'), vec![5]);
+        assert_eq!(border_columns_for_test(&lines[2], '┤'), vec![10]);
+        assert_eq!(border_columns_for_test(&lines[3], '│'), vec![0, 5, 10]);
+        assert_eq!(border_columns_for_test(&lines[4], '│'), vec![0, 5, 10]);
+        assert_eq!(border_columns_for_test(&lines[5], '╰'), vec![0]);
+        assert_eq!(border_columns_for_test(&lines[5], '┴'), vec![5]);
+        assert_eq!(border_columns_for_test(&lines[5], '╯'), vec![10]);
     }
 
     #[test]
@@ -553,5 +601,52 @@ mod tests {
         assert!(out.contains("    indented"), "got: {out}");
         let out2 = render_ansi_with_source(src, None, 2).unwrap();
         assert!(out2.contains("  indented"), "got: {out2}");
+    }
+
+    fn border_columns_for_test(line: &str, border: char) -> Vec<usize> {
+        let mut cols = Vec::new();
+        let mut col = 0usize;
+        for g in line.graphemes(true) {
+            if g.chars().next() == Some(border) && g.chars().count() == 1 {
+                cols.push(col);
+            }
+            col += display_width_for_test(g);
+        }
+        cols
+    }
+
+    fn display_width_for_test(s: &str) -> usize {
+        s.graphemes(true)
+            .map(|g| {
+                if g.chars()
+                    .any(|c| UnicodeWidthChar::width(c).unwrap_or(0) >= 2)
+                {
+                    2
+                } else {
+                    g.chars()
+                        .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
+                        .sum()
+                }
+            })
+            .sum()
+    }
+
+    fn strip_ansi_for_test(s: &str) -> String {
+        let mut in_esc = false;
+        let mut o = String::new();
+        for ch in s.chars() {
+            if in_esc {
+                if ch == 'm' {
+                    in_esc = false;
+                }
+                continue;
+            }
+            if ch == '\x1b' {
+                in_esc = true;
+                continue;
+            }
+            o.push(ch);
+        }
+        o
     }
 }
