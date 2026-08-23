@@ -84,7 +84,29 @@ fn validate_file(file: &std::path::Path) -> std::result::Result<(), i32> {
             );
             Err(2)
         }
-        Ok(_) => Ok(()),
+        Ok(_) => {
+            let bytes = match std::fs::read(file) {
+                Ok(bytes) => bytes,
+                Err(e) if e.kind() == ErrorKind::PermissionDenied => {
+                    let _ = writeln!(err, "mdview: permission denied: {}", file.display());
+                    return Err(13);
+                }
+                Err(e) => {
+                    let _ = writeln!(err, "mdview: cannot read {}: {}", file.display(), e);
+                    return Err(1);
+                }
+            };
+            if is_binary_input(&bytes) {
+                let _ = writeln!(
+                    err,
+                    "mdview: {} is not a text/markdown file",
+                    file.display()
+                );
+                Err(2)
+            } else {
+                Ok(())
+            }
+        }
         Err(e) if e.kind() == ErrorKind::NotFound => {
             let _ = writeln!(err, "mdview: file not found: {}", file.display());
             Err(2)
@@ -98,6 +120,10 @@ fn validate_file(file: &std::path::Path) -> std::result::Result<(), i32> {
             Err(1)
         }
     }
+}
+
+fn is_binary_input(bytes: &[u8]) -> bool {
+    bytes.contains(&0) || std::str::from_utf8(bytes).is_err()
 }
 
 fn runtime() -> Result<tokio::runtime::Runtime> {
@@ -115,4 +141,16 @@ fn run_tauri(args: &Cli) -> Result<()> {
         }
     }
     runtime()?.block_on(pipeline::run_tauri_child(args))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn binary_input_detection_rejects_nul_and_invalid_utf8() {
+        assert!(is_binary_input(b"MZ\0\0binary"));
+        assert!(is_binary_input(&[0xff, 0xfe, 0xfd]));
+        assert!(!is_binary_input(b"# Title\n\nNormal markdown text.\n"));
+    }
 }
