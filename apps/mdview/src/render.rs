@@ -851,12 +851,29 @@ fn wrap_page(
         try {{
           if (!el.__mdvSpec) el.__mdvSpec = JSON.parse(el.getAttribute('data-spec'));
           const themed = __mdvPlotlyTheme(detail, el.__mdvSpec);
-          const config = {{ responsive: true }};
-          if (el.__mdvPlotted && typeof Plotly.react === 'function') {{
-            Plotly.react(el, themed.data, themed.layout, config);
+          if (Array.isArray(el.data)) {{
+            const relayout = {{
+              paper_bgcolor: themed.layout.paper_bgcolor,
+              plot_bgcolor: themed.layout.plot_bgcolor,
+              'font.color': themed.layout.font && themed.layout.font.color,
+            }};
+            ['xaxis', 'yaxis'].forEach(axis => {{
+              const a = themed.layout[axis];
+              if (!a) return;
+              relayout[axis + '.color'] = a.color;
+              relayout[axis + '.gridcolor'] = a.gridcolor;
+              relayout[axis + '.linecolor'] = a.linecolor;
+              relayout[axis + '.tickcolor'] = a.tickcolor;
+              relayout[axis + '.zerolinecolor'] = a.zerolinecolor;
+            }});
+            Plotly.relayout(el, relayout);
+            themed.data.forEach((trace, i) => {{
+              if (trace && trace.marker && trace.marker.color != null) {{
+                Plotly.restyle(el, {{ 'marker.color': trace.marker.color }}, [i]);
+              }}
+            }});
           }} else {{
-            Plotly.newPlot(el, themed.data, themed.layout, config);
-            el.__mdvPlotted = true;
+            Plotly.newPlot(el, themed.data, themed.layout, {{ responsive: true, displaylogo: false }});
           }}
         }} catch (e) {{ console.warn('plotly:', e); }}
       }});
