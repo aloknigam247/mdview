@@ -526,6 +526,24 @@ fn wrap_page(
     max-width: none !important;
     width: calc(var(--mdv-mermaid-width) * var(--mdv-zoom, 1));
   }}
+  html.mdv-zoomed article.mdv img[style*="--mdv-img-width"] {{
+    height: calc(var(--mdv-img-height) * var(--mdv-zoom, 1));
+    max-width: none;
+    width: calc(var(--mdv-img-width) * var(--mdv-zoom, 1));
+  }}
+  html.mdv-zoomed article.mdv .plotly-chart[style*="--mdv-plotly-width"] {{
+    height: calc(var(--mdv-plotly-height) * var(--mdv-zoom, 1));
+    max-width: none;
+    width: calc(var(--mdv-plotly-width) * var(--mdv-zoom, 1));
+  }}
+  article.mdv .mxgraph > svg[style*="--mdv-drawio-width"] {{
+    display: block;
+    height: calc(var(--mdv-drawio-height) * var(--mdv-zoom, 1)) !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    min-width: 0 !important;
+    width: calc(var(--mdv-drawio-width) * var(--mdv-zoom, 1)) !important;
+  }}
   /* Keep display math aligned to the content area rather than centering across
      the full page width (which would push it offscreen when long content
      has stretched the body). */
@@ -792,6 +810,16 @@ fn wrap_page(
     }}
     const __mdvTheme = () => window.__mdv_colorscheme_detail();
     const __mdvColor = (detail, name, fallback) => detail.colors[name] || fallback;
+    const __mdvZoomLevel = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mdv-zoom')) || 1;
+    const __mdvCaptureBase = (el, prefix) => {{
+      const scaled = el.style.getPropertyValue('--' + prefix + '-width') ? __mdvZoomLevel() : 1;
+      const rect = el.getBoundingClientRect();
+      const w = rect.width / scaled, h = rect.height / scaled;
+      if (w > 0 && h > 0) {{
+        el.style.setProperty('--' + prefix + '-width', w + 'px');
+        el.style.setProperty('--' + prefix + '-height', h + 'px');
+      }}
+    }};
     const __mdvMermaidVars = (detail) => ({{
       primaryColor: __mdvColor(detail, '--mdv-code-bg', '#ccd0da'),
       primaryTextColor: __mdvColor(detail, '--mdv-fg', '#4c4f69'),
@@ -888,7 +916,9 @@ fn wrap_page(
               }}
             }});
           }} else {{
-            Plotly.newPlot(el, themed.data, themed.layout, {{ responsive: true, displaylogo: false }});
+            Plotly.newPlot(el, themed.data, themed.layout, {{ responsive: true, displaylogo: false }})
+              .then(() => __mdvCaptureBase(el, 'mdv-plotly'))
+              .catch(e => console.warn('plotly:', e));
           }}
         }} catch (e) {{ console.warn('plotly:', e); }}
       }});
@@ -933,6 +963,16 @@ fn wrap_page(
         try {{ window.GraphViewer.processElements('mxgraph'); }}
         catch (e) {{ console.warn('drawio:', e); }}
       }}
+      requestAnimationFrame(() => {{
+        document.querySelectorAll('.mxgraph > svg').forEach(svg => {{
+          __mdvCaptureBase(svg, 'mdv-drawio');
+          if (!svg.getAttribute('viewBox')) {{
+            const w = parseFloat(svg.style.getPropertyValue('--mdv-drawio-width'));
+            const h = parseFloat(svg.style.getPropertyValue('--mdv-drawio-height'));
+            if (w > 0 && h > 0) svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+          }}
+        }});
+      }});
     }};
     const __mdvRenderDiagrams = (detail) => {{
       __mdvRenderMermaid(detail);
@@ -941,6 +981,28 @@ fn wrap_page(
     }};
     __mdvRenderDiagrams(__mdvTheme());
     window.__mdv_on('colorscheme', __mdvRenderDiagrams);
+    const __mdvInitImages = () => {{
+      document.querySelectorAll('article.mdv img').forEach(img => {{
+        const capture = () => {{ if (img.naturalWidth > 0) __mdvCaptureBase(img, 'mdv-img'); }};
+        if (img.complete && img.naturalWidth > 0) capture();
+        else img.addEventListener('load', capture, {{ once: true }});
+      }});
+    }};
+    __mdvInitImages();
+    let __mdvPlotlyResizeRaf = 0;
+    const __mdvResizePlotly = () => {{
+      if (__mdvPlotlyResizeRaf) return;
+      __mdvPlotlyResizeRaf = requestAnimationFrame(() => {{
+        __mdvPlotlyResizeRaf = 0;
+        if (!window.Plotly || !Plotly.Plots || typeof Plotly.Plots.resize !== 'function') return;
+        document.querySelectorAll('.plotly-chart').forEach(el => {{
+          if (Array.isArray(el.data)) {{
+            try {{ Plotly.Plots.resize(el); }} catch (e) {{ console.warn('plotly resize:', e); }}
+          }}
+        }});
+      }});
+    }};
+    window.__mdv_on('zoom', __mdvResizePlotly);
 
     // Codemap is hidden on load by hardcoded default (tasks.md #12/#13). The DOM
     // is NOT mounted until the user first toggles it on; once mounted, subsequent
@@ -1134,11 +1196,18 @@ fn wrap_page(
     const html = document.documentElement;
     let zoom = 1.0;
     const MIN = 0.5, MAX = 3.0, STEP = 0.1;
+    const setZoom = (next) => {{
+      const clamped = Math.max(MIN, Math.min(MAX, Number(next) || 1));
+      if (Math.abs(clamped - zoom) < 0.001) return;
+      zoom = clamped;
+      html.style.setProperty('--mdv-zoom', zoom.toFixed(1));
+      html.classList.toggle('mdv-zoomed', Math.abs(zoom - 1) > 0.001);
+      if (typeof window.__mdv_emit === 'function') window.__mdv_emit('zoom', {{ scale: zoom }});
+    }};
     window.addEventListener('wheel', (e) => {{
       if (!e.ctrlKey) return;
       e.preventDefault();
-      zoom = Math.max(MIN, Math.min(MAX, zoom + (e.deltaY < 0 ? STEP : -STEP)));
-      html.style.setProperty('--mdv-zoom', zoom.toFixed(1));
+      setZoom(zoom + (e.deltaY < 0 ? STEP : -STEP));
     }}, {{ passive: false }});
   }})();
 </script>
@@ -1724,6 +1793,37 @@ mod tests {
     fn mermaid_fenced_becomes_mermaid_div() {
         let html = render_page("```mermaid\ngraph TD; A-->B;\n```\n", "t").expect("render");
         assert!(html.contains("class=\"mermaid\""), "html: {html}");
+    }
+
+    #[test]
+    fn zoom_scales_media_crisply_via_geometry() {
+        let html = render_page("# Hi\n\n![alt](x.png)\n", "t").expect("render");
+        assert!(
+            html.contains("window.__mdv_emit('zoom', { scale: zoom })"),
+            "zoom event emission missing"
+        );
+        assert!(
+            html.contains("html.classList.toggle('mdv-zoomed'"),
+            "mdv-zoomed gating missing"
+        );
+        for prop in [
+            "--mdv-img-width",
+            "--mdv-plotly-width",
+            "--mdv-drawio-width",
+        ] {
+            assert!(
+                html.contains(&format!("calc(var({prop}) * var(--mdv-zoom, 1))")),
+                "geometry calc rule missing for {prop}"
+            );
+        }
+        assert!(
+            html.contains("Plotly.Plots.resize(el)"),
+            "plotly re-layout on zoom missing"
+        );
+        assert!(
+            !html.contains("mdv-zoom-frame") && !html.contains("setupMdvZoomMedia"),
+            "transform-based zoom machinery must not be present"
+        );
     }
 
     #[test]
