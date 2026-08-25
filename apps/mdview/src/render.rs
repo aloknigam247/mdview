@@ -520,6 +520,12 @@ fn wrap_page(
   article.mdv .mermaid, article.mdv .drawio-viewer, article.mdv .mxgraph {{
     max-width: calc(100vw - 64px); overflow-x: auto;
   }}
+  article.mdv .mermaid svg {{
+    display: block;
+    height: calc(var(--mdv-mermaid-height) * var(--mdv-zoom, 1));
+    max-width: none !important;
+    width: calc(var(--mdv-mermaid-width) * var(--mdv-zoom, 1));
+  }}
   /* Keep display math aligned to the content area rather than centering across
      the full page width (which would push it offscreen when long content
      has stretched the body). */
@@ -817,7 +823,16 @@ fn wrap_page(
         el.textContent = el.dataset.mdvSource;
       }});
       mermaid.initialize({{ startOnLoad: false, theme: 'base', themeVariables: __mdvMermaidVars(detail) }});
-      mermaid.run({{ nodes }}).catch(e => console.warn('mermaid:', e));
+      mermaid.run({{ nodes }}).then(() => {{
+        document.querySelectorAll('.mermaid svg').forEach(svg => {{
+          const viewBox = svg.viewBox && svg.viewBox.baseVal;
+          const rect = svg.getBoundingClientRect();
+          const width = viewBox && viewBox.width ? viewBox.width : rect.width;
+          const height = viewBox && viewBox.height ? viewBox.height : rect.height;
+          if (width > 0) svg.style.setProperty('--mdv-mermaid-width', width + 'px');
+          if (height > 0) svg.style.setProperty('--mdv-mermaid-height', height + 'px');
+        }});
+      }}).catch(e => console.warn('mermaid:', e));
     }};
     const __mdvClone = (value) => JSON.parse(JSON.stringify(value || {{}}));
     const __mdvPlotlyTheme = (detail, spec) => {{
