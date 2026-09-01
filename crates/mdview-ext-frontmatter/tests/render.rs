@@ -81,6 +81,29 @@ fn html_card_emits_draft_badge_when_true() {
 }
 
 #[test]
+fn html_card_css_uses_em_so_it_follows_body_zoom() {
+    let ext = setup();
+    let theme = Theme::default();
+    let ctx = RenderCtx::new(&theme);
+    let html = ext.pre_render_html(&ctx).expect("card").0;
+
+    let start = html.find("<style>").expect("style open") + "<style>".len();
+    let end = html.find("</style>").expect("style close");
+    let css = &html[start..end];
+
+    // GUI zoom scales only `body { font-size: calc(16px * --mdv-zoom) }`; the card
+    // must size in `em` (inherits that) rather than root-relative `rem`.
+    assert!(
+        !css.contains("rem"),
+        "card CSS must not use rem units: {css}"
+    );
+    assert!(
+        css.contains("font-size:1.5em"),
+        "title must be sized in em: {css}"
+    );
+}
+
+#[test]
 fn html_card_suppresses_title_row_when_missing() {
     let ext = FrontmatterExt::new();
     let mut s = "---\nsubtitle: only sub\n---\nbody".to_string();
