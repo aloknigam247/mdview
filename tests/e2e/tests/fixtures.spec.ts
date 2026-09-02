@@ -16,6 +16,7 @@ const FIXTURES: FixtureExpectation[] = [
     headings: ["Code"],
     selectors: [
       "pre code",
+      "code.mdv-code-inline[data-lang='rust']",
       "pre.mdv-code[data-lang='jsonc'] .mdv-tok-string",
       "pre.mdv-code[data-lang='http'] .mdv-tok-keyword",
       "pre.mdv-code[data-lang='http'] .mdv-tok-constant",
@@ -85,6 +86,29 @@ for (const fixture of FIXTURES) {
     await screenshotAndAssertSize(page, fixture.name);
   });
 }
+
+test("inline hashbang code is highlighted in the code fixture", async ({ page }) => {
+  const response = await page.goto("/fixtures/code.md");
+  expect(response?.ok(), "GET /fixtures/code.md should be 2xx").toBeTruthy();
+  await page.waitForLoadState("networkidle");
+
+  const inline = page.locator("code.mdv-code-inline[data-lang='rust']").first();
+  await expect(inline).toBeVisible({ timeout: 10_000 });
+
+  // A highlighted token must have a color distinct from a plain inline-code chip.
+  const kwColor = await inline
+    .locator(".mdv-tok-type, .mdv-tok-keyword")
+    .first()
+    .evaluate((el) => getComputedStyle(el).color);
+  const plainColor = await page
+    .locator(":not(pre) > code:not(.mdv-code-inline)")
+    .first()
+    .evaluate((el) => getComputedStyle(el).color);
+  expect(kwColor).not.toBe(plainColor);
+
+  // The marker must not leak into the rendered text.
+  await expect(inline).not.toContainText("#!rust");
+});
 
 test("server health probe", async ({ request }) => {
   const res = await request.get("/");
