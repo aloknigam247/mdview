@@ -101,6 +101,59 @@ impl Highlight {
             _ => None,
         }
     }
+
+    pub fn render_inline_html_literal(literal: &str, _ctx: &RenderCtx<'_>) -> Option<Html> {
+        let (lang, code) = parse_inline_hashbang(literal)?;
+        let syntax = syntax_for_strict(lang)?;
+        let mut parse_state = ParseState::new(syntax);
+        let mut scope_stack = ScopeStack::new();
+        let ops = parse_state
+            .parse_line(code, &SYNTAX_SET)
+            .unwrap_or_default();
+        let (html, _delta) =
+            line_tokens_to_classed_spans(code, &ops, ClassStyle::Spaced, &mut scope_stack)
+                .unwrap_or_else(|_| (html_escape(code), 0));
+        let inner = balanced_line_html(&html);
+        Some(Html(format!(
+            "<code class=\"mdv-code-inline\" data-lang=\"{}\">{inner}</code>",
+            html_escape(lang)
+        )))
+    }
+
+    pub fn render_inline_terminal_literal(literal: &str, ctx: &RenderCtx<'_>) -> Option<String> {
+        let (lang, code) = parse_inline_hashbang(literal)?;
+        let syntax = syntax_for_strict(lang)?;
+        let theme = Self::theme_for(ctx.theme.name.as_str());
+        let mut h = HighlightLines::new(syntax, theme);
+        let ranges = h.highlight_line(code, &SYNTAX_SET).ok()?;
+        Some(as_24_bit_terminal_escaped(&ranges[..], false))
+    }
+}
+
+fn parse_inline_hashbang(literal: &str) -> Option<(&str, &str)> {
+    let rest = literal.strip_prefix("#!")?;
+    let sp = rest.find(' ')?;
+    let lang = &rest[..sp];
+    if lang.is_empty() {
+        return None;
+    }
+    let code = &rest[sp + 1..];
+    if code.is_empty() {
+        return None;
+    }
+    Some((lang, code))
+}
+
+fn syntax_for_strict(lang: &str) -> Option<&'static SyntaxReference> {
+    let ss: &'static SyntaxSet = &SYNTAX_SET;
+    if let Some(name) = canonical_lang(lang) {
+        if let Some(syn) = ss.find_syntax_by_name(name) {
+            return Some(syn);
+        }
+    }
+    ss.find_syntax_by_token(lang)
+        .or_else(|| ss.find_syntax_by_name(lang))
+        .or_else(|| ss.find_syntax_by_extension(lang))
 }
 
 impl MdViewExtension for Highlight {
@@ -742,5 +795,79 @@ mod tests {
             !html.contains("hl-line\">    </span>"),
             "closing brace should not be separated from its indentation: {html}"
         );
+    }
+
+    fn strip_ansi(s: &str) -> String {
+        let mut out = String::new();
+        let mut in_esc = false;
+        for ch in s.chars() {
+            if in_esc {
+                if ch.is_ascii_alphabetic() {
+                    in_esc = false;
+                }
+                continue;
+            }
+            if ch == '\x1b' {
+                in_esc = true;
+                continue;
+            }
+            out.push(ch);
+        }
+        out
+    }
+
+    #[test]
+    fn inline_hashbang_parse_extracts_language_and_source() {
+        assert_eq!(
+            parse_inline_hashbang("#!rust let x = 1;"),
+            Some(("rust", "let x = 1;"))
+        );
+    }
+
+    #[test]
+    fn inline_hashbang_html_highlights_rust_exactly() {
+        let theme = make_theme("light");
+        let ctx = RenderCtx::new(&theme);
+        let html = Highlight::render_inline_html_literal("#!rust let x = 1;", &ctx)
+            .expect("inline highlight");
+        assert_eq!(
+            html.0,
+            "<code class=\"mdv-code-inline\" data-lang=\"rust\">\
+             <span class=\"mdv-tok\">\
+             <span class=\"mdv-tok mdv-tok-type\">let</span> x \
+             <span class=\"mdv-tok mdv-tok-keyword\">=</span> \
+             <span class=\"mdv-tok mdv-tok-constant\">1</span>\
+             <span class=\"mdv-tok\">;</span></span></code>"
+        );
+    }
+
+    #[test]
+    fn inline_hashbang_terminal_highlights_rust_and_strips_marker() {
+        let theme = make_theme("light");
+        let ctx = RenderCtx::new(&theme);
+        let ansi = Highlight::render_inline_terminal_literal("#!rust let x = 1;", &ctx)
+            .expect("inline terminal highlight");
+        assert!(
+            ansi.contains("\x1b[38;2;"),
+            "expected syntect truecolor ANSI: {ansi:?}"
+        );
+        assert_eq!(strip_ansi(&ansi), "let x = 1;", "{ansi:?}");
+        assert!(!ansi.contains("#!rust"), "{ansi:?}");
+    }
+
+    #[test]
+    fn inline_hashbang_unknown_lang_returns_none() {
+        let theme = make_theme("light");
+        let ctx = RenderCtx::new(&theme);
+        assert!(Highlight::render_inline_html_literal("#!nope let x = 1;", &ctx).is_none());
+        assert!(Highlight::render_inline_terminal_literal("#!nope let x = 1;", &ctx).is_none());
+    }
+
+    #[test]
+    fn inline_plain_code_returns_none() {
+        let theme = make_theme("light");
+        let ctx = RenderCtx::new(&theme);
+        assert!(parse_inline_hashbang("let x = 1;").is_none());
+        assert!(Highlight::render_inline_html_literal("let x = 1;", &ctx).is_none());
     }
 }

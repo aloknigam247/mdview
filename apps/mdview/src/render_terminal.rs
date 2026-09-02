@@ -2,6 +2,7 @@ use anyhow::Result;
 use comrak::nodes::{AstNode, ListType, NodeValue, TableAlignment};
 use comrak::Arena;
 use mdview_core::{parse, Registry, RenderCtx, TermChunks, TerminalCaps, Theme};
+use mdview_ext_highlight::Highlight;
 use std::path::Path;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
@@ -95,12 +96,12 @@ fn render_block<'a>(
             out.push_str(BOLD_ACCENT);
             out.push_str(&prefix);
             out.push(' ');
-            render_inlines(node, out);
+            render_inlines(node, None, out);
             out.push_str(RESET);
             out.push('\n');
         }
         NodeValue::Paragraph => {
-            render_inlines(node, out);
+            render_inlines(node, Some(ctx), out);
             out.push('\n');
         }
         NodeValue::BlockQuote => {
@@ -151,7 +152,7 @@ fn render_block<'a>(
         }
         _ => {
             // Fallback: try inlines, then children
-            render_inlines(node, out);
+            render_inlines(node, None, out);
             if node.children().next().is_some() {
                 for c in node.children() {
                     render_block(c, ctx, registry, out, depth, tab_width);
@@ -394,7 +395,7 @@ fn render_table<'a>(node: &'a AstNode<'a>, out: &mut String) {
             row.children()
                 .map(|cell| {
                     let mut s = String::new();
-                    render_inlines(cell, &mut s);
+                    render_inlines(cell, None, &mut s);
                     s
                 })
                 .collect()
@@ -475,40 +476,45 @@ fn corners(left: &str, sep: &str, right: &str, widths: &[usize]) -> String {
     s
 }
 
-fn render_inlines<'a>(node: &'a AstNode<'a>, out: &mut String) {
+fn render_inlines<'a>(node: &'a AstNode<'a>, ctx: Option<&RenderCtx<'_>>, out: &mut String) {
     for c in node.children() {
-        render_inline(c, out);
+        render_inline(c, ctx, out);
     }
 }
 
-fn render_inline<'a>(node: &'a AstNode<'a>, out: &mut String) {
+fn render_inline<'a>(node: &'a AstNode<'a>, ctx: Option<&RenderCtx<'_>>, out: &mut String) {
     let data = node.data.borrow();
     match &data.value {
         NodeValue::Text(t) => out.push_str(t),
         NodeValue::SoftBreak | NodeValue::LineBreak => out.push('\n'),
         NodeValue::Code(c) => {
+            let highlighted =
+                ctx.and_then(|ctx| Highlight::render_inline_terminal_literal(&c.literal, ctx));
             out.push_str(CODE_BG);
             out.push(' ');
-            out.push_str(&c.literal);
+            match highlighted {
+                Some(ansi) => out.push_str(&ansi),
+                None => out.push_str(&c.literal),
+            }
             out.push(' ');
             out.push_str(RESET);
         }
         NodeValue::Emph => {
             out.push_str(ITALIC);
             drop(data);
-            render_inlines(node, out);
+            render_inlines(node, ctx, out);
             out.push_str(RESET);
         }
         NodeValue::Strong => {
             out.push_str(BOLD);
             drop(data);
-            render_inlines(node, out);
+            render_inlines(node, ctx, out);
             out.push_str(RESET);
         }
         NodeValue::Strikethrough => {
             out.push_str(STRIKE);
             drop(data);
-            render_inlines(node, out);
+            render_inlines(node, ctx, out);
             out.push_str(RESET);
         }
         NodeValue::Link(l) => {
@@ -516,7 +522,7 @@ fn render_inline<'a>(node: &'a AstNode<'a>, out: &mut String) {
             drop(data);
             out.push_str(UNDERLINE);
             out.push_str(LINK);
-            render_inlines(node, out);
+            render_inlines(node, None, out);
             out.push_str(RESET);
             out.push_str(MUTED);
             out.push_str(" (");
@@ -554,7 +560,7 @@ fn render_inline<'a>(node: &'a AstNode<'a>, out: &mut String) {
         }
         _ => {
             drop(data);
-            render_inlines(node, out);
+            render_inlines(node, ctx, out);
         }
     }
 }
@@ -626,6 +632,49 @@ const BOLD_ACCENT: &str = "\x1b[1m\x1b[38;2;108;124;255m";
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn strip_ansi(s: &str) -> String {
+        let mut out = String::new();
+        let mut in_esc = false;
+        for ch in s.chars() {
+            if in_esc {
+                if ch.is_ascii_alphabetic() {
+                    in_esc = false;
+                }
+                continue;
+            }
+            if ch == '\x1b' {
+                in_esc = true;
+                continue;
+            }
+            out.push(ch);
+        }
+        out
+    }
+
+    #[test]
+    fn inline_code_hashbang_highlights_in_terminal() {
+        let out = render_ansi("Use `#!rust let x = 1;` now.\n").unwrap();
+        assert!(
+            out.contains("\x1b[38;2;"),
+            "expected syntect truecolor ANSI: {out:?}"
+        );
+        assert!(strip_ansi(&out).contains("let x = 1;"), "{out:?}");
+        assert!(!out.contains("#!rust"), "{out:?}");
+    }
+
+    #[test]
+    fn inline_code_without_hashbang_keeps_existing_terminal_style() {
+        let out = render_ansi("Use `let x = 1;` now.\n").unwrap();
+        assert!(out.contains(CODE_BG), "{out:?}");
+        assert!(out.contains("let x = 1;"), "{out:?}");
+    }
+
+    #[test]
+    fn inline_code_in_link_text_not_highlighted_terminal() {
+        let out = render_ansi("See [`#!rust let x = 1;`](https://e.x) now.\n").unwrap();
+        assert!(out.contains("#!rust let x = 1;"), "{out:?}");
+    }
 
     #[test]
     fn heading_is_bold_accented() {

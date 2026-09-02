@@ -2,6 +2,8 @@
 
 Inline: the function `fn main()` prints to stdout.
 
+Inline hashbang: `#!rust let x = 1;` highlights an inline Rust snippet.
+
 ## Rust
 
 ```rust

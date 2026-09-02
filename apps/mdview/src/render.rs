@@ -8,6 +8,7 @@ use mdview_config::{
     TocConfig,
 };
 use mdview_core::{parse, Registry, RenderCtx, Theme};
+use mdview_ext_highlight::Highlight;
 use std::path::{Path, PathBuf};
 
 use crate::builtins::builtin_extensions;
@@ -190,6 +191,8 @@ pub fn render_page_full(
     ctx.source_dir = source_dir.map(|p| p.to_path_buf());
     ctx.tab_width = code.tab_width;
 
+    highlight_inline_hashbang(ast, &ctx, false);
+
     let mut opts = comrak::ComrakOptions::default();
     opts.extension.strikethrough = true;
     opts.extension.tasklist = true;
@@ -253,6 +256,33 @@ fn rewrite_image_urls<'a>(root: &'a AstNode<'a>, source_dir: Option<&Path>) {
                 link.url = u;
             }
         }
+    }
+}
+
+fn highlight_inline_hashbang<'a>(node: &'a AstNode<'a>, ctx: &RenderCtx<'_>, in_paragraph: bool) {
+    let (is_link, is_paragraph, code_literal) = {
+        let data = node.data.borrow();
+        match &data.value {
+            NodeValue::Link(_) => (true, false, None),
+            NodeValue::Paragraph => (false, true, None),
+            NodeValue::Code(c) => (false, false, Some(c.literal.clone())),
+            _ => (false, false, None),
+        }
+    };
+    if is_link {
+        return;
+    }
+    let in_paragraph = in_paragraph || is_paragraph;
+    if in_paragraph {
+        if let Some(literal) = code_literal {
+            if let Some(html) = Highlight::render_inline_html_literal(&literal, ctx) {
+                node.data.borrow_mut().value = NodeValue::HtmlInline(html.0);
+                return;
+            }
+        }
+    }
+    for child in node.children() {
+        highlight_inline_hashbang(child, ctx, in_paragraph);
     }
 }
 
@@ -561,13 +591,13 @@ fn wrap_page(
     padding-left: var(--mdv-code-padding, 1em);
     padding-right: var(--mdv-code-padding, 1em);
   }}
-  .mdv-code .mdv-tok            {{ color: inherit; }}
-  .mdv-code .mdv-tok-comment    {{ color: var(--mdv-muted, var(--muted)); font-style: italic; }}
-  .mdv-code .mdv-tok-constant   {{ color: var(--mdv-accent-peach, var(--accent)); }}
-  .mdv-code .mdv-tok-function   {{ color: var(--mdv-accent-blue, var(--accent)); }}
-  .mdv-code .mdv-tok-keyword    {{ color: var(--mdv-accent-mauve, var(--accent)); font-weight: bold; }}
-  .mdv-code .mdv-tok-string     {{ color: var(--mdv-accent-green, var(--accent)); }}
-  .mdv-code .mdv-tok-type       {{ color: var(--mdv-accent-yellow, var(--accent)); }}
+  .mdv-code .mdv-tok, .mdv-code-inline .mdv-tok            {{ color: inherit; }}
+  .mdv-code .mdv-tok-comment, .mdv-code-inline .mdv-tok-comment    {{ color: var(--mdv-muted, var(--muted)); font-style: italic; }}
+  .mdv-code .mdv-tok-constant, .mdv-code-inline .mdv-tok-constant   {{ color: var(--mdv-accent-peach, var(--accent)); }}
+  .mdv-code .mdv-tok-function, .mdv-code-inline .mdv-tok-function   {{ color: var(--mdv-accent-blue, var(--accent)); }}
+  .mdv-code .mdv-tok-keyword, .mdv-code-inline .mdv-tok-keyword    {{ color: var(--mdv-accent-mauve, var(--accent)); font-weight: bold; }}
+  .mdv-code .mdv-tok-string, .mdv-code-inline .mdv-tok-string     {{ color: var(--mdv-accent-green, var(--accent)); }}
+  .mdv-code .mdv-tok-type, .mdv-code-inline .mdv-tok-type       {{ color: var(--mdv-accent-yellow, var(--accent)); }}
   .mdv-toc {{
     background: color-mix(in srgb, var(--bg) 92%, transparent);
     border: 1px solid var(--border);
@@ -1774,6 +1804,42 @@ fn html_escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inline_code_hashbang_highlights_in_gui() {
+        let html = render_page("Use `#!rust let x = 1;` now.\n", "t").expect("render");
+        assert!(
+            html.contains("<code class=\"mdv-code-inline\" data-lang=\"rust\">"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<span class=\"mdv-tok mdv-tok-type\">let</span>"),
+            "{html}"
+        );
+        assert!(!html.contains("#!rust"), "{html}");
+    }
+
+    #[test]
+    fn inline_code_without_hashbang_keeps_existing_html() {
+        let html = render_page("Use `let x = 1;` now.\n", "t").expect("render");
+        assert!(html.contains("<code>let x = 1;</code>"), "{html}");
+        assert!(!html.contains("<code class=\"mdv-code-inline\""), "{html}");
+    }
+
+    #[test]
+    fn inline_code_unknown_lang_left_untouched() {
+        let html = render_page("Use `#!nope let x = 1;` now.\n", "t").expect("render");
+        assert!(html.contains("<code>#!nope let x = 1;</code>"), "{html}");
+        assert!(!html.contains("<code class=\"mdv-code-inline\""), "{html}");
+    }
+
+    #[test]
+    fn inline_code_in_link_text_not_highlighted() {
+        let html =
+            render_page("See [`#!rust let x = 1;`](https://e.x) now.\n", "t").expect("render");
+        assert!(!html.contains("<code class=\"mdv-code-inline\""), "{html}");
+        assert!(html.contains("#!rust let x = 1;"), "{html}");
+    }
 
     #[test]
     fn renders_heading() {
