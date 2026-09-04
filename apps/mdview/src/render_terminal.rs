@@ -690,6 +690,17 @@ mod tests {
     }
 
     #[test]
+    fn nested_list_code_block_terminal_hl_lines() {
+        let src = "- x\n\n    ```rust hl_lines=\"2\"\n    let a = 1;\n    let b = 2;\n    ```\n";
+        let out = render_ansi(src).expect("render");
+        assert_eq!(
+            out.matches('\u{258e}').count(),
+            1,
+            "expected one hl bar in nested terminal block"
+        );
+    }
+
+    #[test]
     fn rounded_table_borders() {
         let out = render_ansi("| a | b |\n|---|---|\n| 1 | 2 |\n").unwrap();
         assert!(out.contains('╭'));

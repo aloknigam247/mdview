@@ -207,6 +207,11 @@ pub fn render_page_full(
     opts.render.unsafe_ = true;
     registry.apply_parser_opts(&mut opts);
 
+    // Detect diagram features from live CodeBlock info strings before the pre-render pass rewrites
+    // nested CodeBlock nodes to HtmlInline; otherwise nested diagrams would not inject their library.
+    let features = Features::detect(ast);
+    pre_render_nested_code_blocks(ast, &registry, &ctx);
+
     let mut body = String::new();
     for ext in registry.html_renderers() {
         if let Some(html) = ext.pre_render_html(&ctx) {
@@ -234,7 +239,6 @@ pub fn render_page_full(
     }
 
     let body = add_img_lazy_attrs(body);
-    let features = Features::detect(ast);
     Ok(wrap_page(
         &body,
         title,
@@ -283,6 +287,38 @@ fn highlight_inline_hashbang<'a>(node: &'a AstNode<'a>, ctx: &RenderCtx<'_>, in_
     }
     for child in node.children() {
         highlight_inline_hashbang(child, ctx, in_paragraph);
+    }
+}
+
+// The top-level dispatch loop in `render_page_full` only runs extensions over direct children of the
+// document root, so a fenced code block nested in a list/blockquote never reaches an extension and
+// falls back to comrak's plain output (no syntect, no hl_lines). Pre-render each nested fenced
+// CodeBlock into HtmlInline here so `format_html` emits the extension output verbatim in place.
+// Direct children of the root are left untouched for the existing dispatch loop.
+fn pre_render_nested_code_blocks<'a>(
+    root: &'a AstNode<'a>,
+    registry: &Registry,
+    ctx: &RenderCtx<'_>,
+) {
+    for node in root.descendants() {
+        let is_nested_fenced = {
+            let data = node.data.borrow();
+            matches!(&data.value, NodeValue::CodeBlock(cb) if cb.fenced)
+                && node.parent().is_some_and(|p| !p.same_node(root))
+        };
+        if !is_nested_fenced {
+            continue;
+        }
+        let mut rendered = None;
+        for ext in registry.html_renderers() {
+            if let Some(html) = ext.render_html(node, ctx) {
+                rendered = Some(html.0);
+                break;
+            }
+        }
+        if let Some(html) = rendered {
+            node.data.borrow_mut().value = NodeValue::HtmlInline(html);
+        }
     }
 }
 
@@ -1896,6 +1932,73 @@ mod tests {
     fn code_block_goes_through_highlight_extension() {
         let html = render_page("```rust\nfn main(){}\n```\n", "t").expect("render");
         assert!(html.contains("mdv-code") || html.contains("language-rust"));
+    }
+
+    #[test]
+    fn nested_list_code_block_gets_hl_lines_mark() {
+        let src = "- item\n\n    ```rust hl_lines=\"2\"\n    let a = 1;\n    let b = 2;\n    ```\n";
+        let html = render_page(src, "t").expect("render");
+        assert!(
+            html.contains("<pre class=\"mdv-code\""),
+            "nested block not highlighted: {html}"
+        );
+        assert!(
+            !html.contains("<pre><code class=\"language-rust\">"),
+            "nested block fell back to comrak default: {html}"
+        );
+        assert_eq!(
+            html.matches("hl-line hl-line--mark").count(),
+            1,
+            "expected exactly one marked line in nested block: {html}"
+        );
+    }
+
+    #[test]
+    fn nested_blockquote_code_block_gets_hl_lines_mark() {
+        let src = "> ```rust hl_lines=\"2\"\n> let a = 1;\n> let b = 2;\n> ```\n";
+        let html = render_page(src, "t").expect("render");
+        assert!(
+            html.contains("<pre class=\"mdv-code\""),
+            "nested block not highlighted: {html}"
+        );
+        assert!(
+            !html.contains("<pre><code class=\"language-rust\">"),
+            "nested block fell back to comrak default: {html}"
+        );
+        assert_eq!(
+            html.matches("hl-line hl-line--mark").count(),
+            1,
+            "expected exactly one marked line in nested block: {html}"
+        );
+    }
+
+    #[test]
+    fn nested_list_mermaid_uses_selective_extension() {
+        let src = "- item\n\n    ```mermaid\n    graph TD; A-->B;\n    ```\n";
+        let html = render_page(src, "t").expect("render");
+        assert!(
+            html.contains("class=\"mermaid\""),
+            "nested mermaid not handled by ext: {html}"
+        );
+        assert!(
+            html.contains("mermaid.min.js"),
+            "nested mermaid client library not injected: {html}"
+        );
+    }
+
+    #[test]
+    fn top_level_code_block_stays_a_code_block() {
+        let src = "```rust hl_lines=\"1\"\nlet a = 1;\n```\n";
+        let html = render_page(src, "t").expect("render");
+        assert!(
+            html.contains("<pre class=\"mdv-code\""),
+            "top-level block not highlighted: {html}"
+        );
+        assert_eq!(
+            html.matches("hl-line hl-line--mark").count(),
+            1,
+            "expected exactly one marked line in top-level block: {html}"
+        );
     }
 
     #[test]
