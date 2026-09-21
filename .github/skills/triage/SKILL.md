@@ -11,6 +11,8 @@ Turn a rough task, bug, or idea into a **well-formed GitHub issue** that a *diff
 
 - **Discuss first, create last.** Never run `gh issue create` until the user has reviewed the drafted issue and explicitly accepted it.
 - **The issue is for another agent, at another time.** Write it as a self-contained task: enough context, file references, and acceptance criteria that an agent with zero conversation history can pick it up and implement it.
+- **Anchor to stable identifiers, not coordinates.** An issue is implemented at an unknown later time against a changed tree. Reference symbols, string literals, config keys, and search patterns — never line numbers, occurrence counts, or verbatim multi-line snapshots that the codebase will invalidate. A frozen inventory goes stale *and* misleads: the implementing agent trusts it as exhaustive and skips rediscovering occurrences added after the issue was filed. The issue points the way; the implementing agent re-discovers the exact scope.
+- **Match detail to task type.** For a narrow **bug**, the exact offending lines *are* the deliverable — a tight snippet of the actual defect is worth freezing. For **features / refactors / renames / broad sweeps**, staleness dominates: give a discovery recipe (search patterns + stable anchors) and the contract/invariant rules, not an enumerated file list.
 - **Ask for missing details.** Do not guess when scope, expected behavior, or acceptance criteria are ambiguous.
 - **Check what already exists.** Search the repo's open and closed issues before filing — surface duplicates to the user, and link genuinely related issues rather than creating disconnected ones.
 
@@ -46,7 +48,9 @@ The subagent prompt must include:
 
 The subagent is responsible for:
 1. Reading the root `AGENTS.md` for crate layout, conventions, contracts, and the "Architecture reality" / "Where to extend" guidance.
-2. Using grep/glob/view to locate the **specific files, crates, structs, traits, and functions** that must change or be added. **Capture short verbatim code snippets** (with `file:line` refs) of the current relevant code — for bugs the exact offending lines, for features/refactors the code that will be extended or replaced — so the drafted issue can embed them.
+2. Using grep/glob/view to locate the work. **Scale the output to the task type** (see the "Match detail to task type" principle):
+   - **Narrow bug:** capture the exact offending lines as a short verbatim snippet with a `file:line` ref — the defect *is* the deliverable and won't move much.
+   - **Feature / refactor / rename / broad sweep:** do **not** enumerate every hit. Identify the **distinct surfaces/categories** the work touches, give **one representative entry point** per surface (as a stable anchor — a symbol, string literal, or config key), and record the **grep/glob patterns** that locate the rest. Prefer "find the remaining refs via `<pattern>`" over a frozen file list or an occurrence count.
 3. Identifying the **crate(s)** involved (e.g., `mdview-core`, `mdview-theme`, `mdview-ext-*`, `mdview-render-*`, `apps/mdview`, `sidecar/`).
 4. Confirming the **root cause** (for bugs) by tracing the actual code — not guessing. Remember the app is plain `wry` + `tao` (not Tauri), and most GUI features live as embedded JS/CSS in `apps/mdview/src/render.rs`.
 5. Sketching a **proposed approach** consistent with existing patterns (`MdViewExtension` trait, `Theme` contract, `canonical_lang` arms, preset registration, etc.) and **without breaking the plugin or theme contracts**.
@@ -54,13 +58,17 @@ The subagent is responsible for:
 7. Flagging any ambiguity or missing information the user still needs to resolve.
 
 The subagent must **return a structured report** containing:
-- `affected` — list of `{file, symbol, why}` entries (files/crates/structs/functions to change or add)
-- `codeSnippets` — short verbatim excerpts of the current relevant code, each with a `file:line` reference and the language for fencing (for bugs, the exact offending lines; otherwise the code to be extended/replaced)
+- `surfaces` — the distinct categories of change the task touches (for a narrow bug this is usually one); for each, a short reason and its contract/invariant rules if any
+- `affected` — representative entry points as `{file, symbol, why}`. For bugs, the specific site(s). For features/refactors/renames, **one canonical example per surface**, not an exhaustive inventory
+- `searchStrategy` — the grep/glob patterns and stable anchors (symbol names, string literals, config keys, `canonical_lang` arms) that let the implementing agent **re-discover the full scope** later. This replaces a frozen file enumeration
+- `codeSnippet` — for a **narrow bug only**, a short verbatim excerpt of the offending lines with a `file:line` ref and language for fencing. Omit for features/refactors/renames (reference the pattern, not the lines)
 - `crates` — the crate(s) involved
 - `rootCause` — for bugs, the confirmed root cause with file:line references (or "n/a")
 - `approach` — the proposed implementation approach
 - `testing` — test files/impact, the exact `cargo test` selector(s), and a concrete **regression test snippet** whose assertions pin *this specific* fixed behavior (see Testing requirements below)
 - `openQuestions` — anything still unclear
+
+Reference stable anchors (symbols, string literals, config keys), **never line numbers or occurrence counts** in the enumerated scope — the issue is implemented later against a moved tree.
 
 If the subagent returns `openQuestions`, resolve them with the user (via `ask_user`) before drafting the issue.
 
@@ -120,14 +128,14 @@ follow-up issue for the resulting work).
 1. Compose the issue **title** in Conventional Commit style: `<type>(scope): <short description>` (e.g., `fix(pager): curved table borders break at narrow widths`). Use the crate as the scope where it helps.
 2. Compose the issue **body** with these sections (omit a section only if truly not applicable):
    - **Summary** — one or two sentences.
-   - **Context / Background** — why this matters; the reported symptom or motivation; the affected output surface(s). **Embed the relevant current code** as a fenced snippet (from the subagent's `codeSnippets`) with a `file:line` caption whenever feasible, so the future agent sees exactly what code the task refers to.
-   - **Affected files & crates** — bulleted list from the subagent's `affected` + `crates`, with `file` -> `symbol` -> reason. Reference the "Where to extend" / "Architecture reality" notes in `AGENTS.md` where relevant.
+   - **Context / Background** — why this matters; the reported symptom or motivation; the affected output surface(s). **For a narrow bug**, embed the offending code as a fenced snippet (from the subagent's `codeSnippet`) with a `file:line` caption so the future agent sees exactly what code the task refers to. **For a feature/refactor/rename**, describe the *pattern* and the surfaces involved — do not paste a frozen multi-line snapshot or an occurrence count that the tree will invalidate.
+   - **Affected surfaces & crates** — for a narrow bug, the specific `file` -> `symbol` -> reason sites. For a feature/refactor/rename, the **surfaces/categories** (from the subagent's `surfaces`) with **one representative entry point each** plus the **discovery command** that finds the rest (from `searchStrategy`). Prefix this section with a standing note to the implementing agent: *"This is a starting map, not an exhaustive inventory — re-run the discovery searches below and treat their output as authoritative; occurrences may have been added since this issue was filed."* Reference the "Where to extend" / "Architecture reality" notes in `AGENTS.md` where relevant.
    - **Proposed approach** — the subagent's `approach`, plus root cause for bugs. Call out any contract that must **not** break.
    - **Acceptance criteria** — a checklist of concrete, verifiable outcomes.
    - **Testing requirements** — **always required** (except `spike` issues; see below). Spell out the concrete test changes needed to add and/or validate the fix, so a future agent (or the user) can verify the change is done. Triaged issues are expected to include their tests as part of the fix — do **not** add a "tests only when explicitly requested" caveat here:
      - **`spike` (investigation only) issues are exempt:** they change no code or docs, so there are no tests. Replace this section with a **Deliverables** section instead — the questions the investigation must answer, where findings are recorded, and the expected follow-up (usually a new issue capturing the resulting work). Do not fabricate test requirements for a spike.
      - The exact test target(s) that map to the changed source (in-crate `#[cfg(test)]` module, crate `tests/*.rs`, or `tests/e2e`).
-     - **Existing tests that will break** and must be updated (name them, and say how).
+     - **Existing tests that will break** and must be updated — name the test target and function, and say how. Reference tests by name, not line number.
      - **New test cases** that add/validate the fix — proposed `#[test] fn <name>` names and the specific behavior/assertion each covers. Include a concrete **regression test code snippet** (fenced) that the future agent can drop in.
      - **Pin the fix, not incidental state.** Each new test's assertions must fail today (before the fix) and pass only once *this specific* change is made, and must target the fixed behavior narrowly — assert the exact output/value that changes, not a broad snapshot or unrelated surrounding state — so the test verifies the fix is done and does not silently pass (or break) because of unrelated future changes. Prefer a focused assertion on the changed symbol over a whole-document snapshot.
      - **GUI-affecting changes need a visual/DOM check.** When the change alters the wry webview output, add or extend a `tests/e2e` Playwright test that asserts the rendered DOM (selector visible) and, where the change is visual, a computed-style assertion (e.g. token color differs from plain text) plus the existing full-page screenshot size check — string-only HTML assertions are not sufficient to prove it renders.
@@ -154,6 +162,9 @@ ask it to check specifically that:
 
 - The technical claims (file paths, symbols, triggers, root cause) are accurate
   and not fabricated.
+- For a feature/refactor/rename, the scope is expressed as a **discovery recipe
+  (search patterns + stable anchors)**, not a frozen file/line inventory or
+  occurrence count that will go stale before the issue is implemented.
 - The **testing requirements actually pin *this* fix** — the proposed
   assertions would fail before the change and pass only after it, and target the
   changed behavior narrowly rather than a broad snapshot or unrelated state.
