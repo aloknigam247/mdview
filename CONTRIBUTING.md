@@ -155,10 +155,9 @@ gh workflow run semantic-release.yml --repo aloknigam247/mdview --ref main
 
 ### Release credentials
 
-A repository owner must add `RELEASE_PLEASE_TOKEN` under **Settings > Secrets
+A repository owner must add `RELEASE_TOKEN` under **Settings > Secrets
 and variables > Actions**. Use a fine-grained PAT scoped only to
-`aloknigam247/mdview`, with **Contents** read/write. The existing secret name is
-retained even though release-please is no longer used. No Issues or Pull requests
+`aloknigam247/mdview`, with **Contents** read/write. No Issues or Pull requests
 permission is needed by this version-only workflow.
 Choose an expiry, track its owner and expiry, rotate before expiration, and
 revoke replaced tokens. Never put the token in chat, a token file, or source
