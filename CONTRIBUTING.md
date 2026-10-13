@@ -103,75 +103,81 @@ bun build --compile ./src/index.ts --outfile ./mdview-sidecar
 mdview has one product version: `workspace.package.version` in root
 `Cargo.toml`. All 17 Cargo packages inherit that version and `publish = false`;
 none is published to a crate registry. Do not hand-bump member versions.
-The bot keeps `version.txt`, local-package versions in `Cargo.lock`, and
-`.release-please-manifest.json` synchronized with the root Cargo version.
-`version.txt` is a mirror, not a second Cargo version authority.
+The bot keeps local-package versions in `Cargo.lock` synchronized with the
+root Cargo version. No separate version file or release manifest is needed.
 
-`release-please-config.json` uses the `simple` strategy for root package `"."`,
-with built-in TOML extra-file updates for the Cargo version and lockfile.
-The native Rust strategy does not support this virtual workspace's inherited
-versions. Root scope covers all repository code surfaces, including Rust,
-Lua, and TypeScript. Each product release has one root `CHANGELOG.md` entry,
-one `vX.Y.Z` tag, and one published (not draft) GitHub Release.
+`.github/release/release.config.cjs` configures semantic-release for `main`.
+It calculates the next version from Git tags and conventional commits across
+the repository, including Rust, Lua, and TypeScript. With no existing version
+tag, the first automatic version is `1.0.0`. The checked-in `0.1.0` baseline
+changes when that first versioning run commits its updates.
 
-Bootstrap starts with `initial-version: "0.1.0"`, an empty `{}` release
-manifest, and a blank `CHANGELOG.md`. Installing the workflow does not tag or
-publish anything. The first bot PR supplies the real historical `0.1.0`
-changelog, its heading, and the manifest's `"."` version entry.
+Standard SemVer applies: `feat:` bumps minor; `fix:` and `perf:` bump patch;
+breaking changes (`!` or a `BREAKING CHANGE:` footer) bump major. For example,
+from `1.2.3`, those changes produce `1.3.0`, `1.2.4`, and `2.0.0` respectively.
+Qualifying revert commits bump patch and appear under "Reverted".
+Non-breaking `docs:`, `chore:`, and `refactor:` commits alone do not trigger
+version updates or changelog entries.
 
-After bootstrap, conventional `feat:` commits bump minor; `fix:` and `perf:`
-commits bump patch. Breaking changes (`!` or a `BREAKING CHANGE:` footer) bump minor
-while on `0.x` (`bump-minor-pre-major: true`), then major on `1.x` and later.
-`bump-patch-for-minor-pre-major: false` keeps pre-1.0 features as minor bumps.
-Only `feat:`, `fix:`, `perf:`, and breaking changes appear in the changelog
-and trigger releases. Other non-breaking types, including `docs:`, `chore:`,
-and `refactor:`, do neither.
+The standard plugins generate `CHANGELOG.md`, commit version files directly
+to `main`, and create `vX.Y.Z` Git tags. The npm and GitHub publishing plugins
+are explicitly excluded: no release PR, GitHub Release, registry upload, or
+binary publication is created.
 
-### Daily release PR
+`scripts/set_version.py` only writes the version supplied by semantic-release;
+it does not calculate bumps, merge PRs, or manage tags. It preserves member
+inheritance and third-party lockfile entries, and fails if the workspace or
+lockfile layout would make the update ambiguous.
 
-`.github/workflows/release-please.yml` runs only in `aloknigam247/mdview` on
-`main`, daily at 00:00 IST (`30 18 * * *` UTC) or by manual dispatch. It does
-not run on pushes or pull requests, and does not install or run tests.
+### Daily version updates
+
+`.github/workflows/semantic-release.yml` runs on `main`, daily at 00:00 IST
+(`30 18 * * *` UTC) or by manual dispatch. It does not run on pushes or pull
+requests, and does not install or run tests.
 GitHub schedules can be delayed; this is not an exact-time guarantee.
-Release jobs are serialized without canceling an in-progress run.
+Version jobs are serialized without canceling an in-progress run.
 
-Each daily/manual run publishes any unreleased, merged bot release PR and
-creates or refreshes one pending release PR for releasable commits. Review its
-version, changelog, and metadata changes. Confirm that the root Cargo version,
-all local-package versions in `Cargo.lock`, `version.txt`, and the release
-manifest's `"."` entry agree with the new changelog version. Registry and git
-dependency versions must remain unchanged. A generic updater can warn rather
-than fail when a version field is missing, so inspect these locations before
-merging. Leave the PR open to accumulate changes, and merge only when ready to
-ship. The next daily run publishes the
-merged release; an ordinary PR or an unmerged release PR cannot publish.
-For earlier publication or recovery, dispatch on `main`:
+The workflow installs the locked Node versioning tools from `.github/release`;
+these are CI tooling, not application or test dependencies. Cargo file updates
+use Python's standard library, without a Rust toolchain installation or build.
+Only `Cargo.toml`, `Cargo.lock`, and `CHANGELOG.md` are included
+in generated `chore(version): ... [skip ci]` commits.
+If there are no qualifying commits since the last version tag, no version
+commit or tag is created. Do not delete or move version tags.
+The tool's generic "Published release" log message refers to a completed
+version/tag cycle here, not a GitHub Release or registry publication.
+
+For an earlier version update, dispatch on `main`:
 
 ```sh
-gh workflow run release-please.yml --repo aloknigam247/mdview --ref main
+gh workflow run semantic-release.yml --repo aloknigam247/mdview --ref main
 ```
 
 ### Release credentials
 
 A repository owner must add `RELEASE_PLEASE_TOKEN` under **Settings > Secrets
 and variables > Actions**. Use a fine-grained PAT scoped only to
-`aloknigam247/mdview`, with **Contents**, **Issues** (for labels), and **Pull
-requests** read/write, following the
-[official action guidance](https://github.com/googleapis/release-please-action/blob/5c625bfb5d1ff62eadeeb3772007f7f66fdcf071/README.md#workflow-permissions).
+`aloknigam247/mdview`, with **Contents** read/write. The existing secret name is
+retained even though release-please is no longer used. No Issues or Pull requests
+permission is needed by this version-only workflow.
 Choose an expiry, track its owner and expiry, rotate before expiration, and
 revoke replaced tokens. Never put the token in chat, a token file, or source
 control. The workflow does not provision credentials or change repository
 permissions.
 
-Only the release job receives this PAT; the default workflow token has no
-permissions. A missing secret fails explicitly before the action runs, with
+Only the version job receives this PAT; the default workflow token has read-only
+Contents permission for checkout, and checkout does not persist credentials.
+A missing secret fails explicitly before versioning runs, with
 no `GITHUB_TOKEN` fallback.
-An expired, revoked, or under-scoped PAT fails the action; replace the secret
-and rerun on `main`. The default `GITHUB_TOKEN` suppresses downstream workflow
-events, so a PAT is needed for downstream workflows and the `release.published`
-contract for [#47](https://github.com/aloknigam247/mdview/issues/47).
-Binary packaging and winget publishing belong to #47, not this workflow;
-there are no registry-publish commands or registry tokens here.
+An expired, revoked, or under-scoped PAT fails the workflow; replace the secret
+and rerun on `main`. The token's identity must be permitted to push directly to
+`main`. The repository's PR-only ruleset grants administrators that exception;
+force-push, deletion, and linear-history protections remain separate and enforced.
+Normal non-force pushes are used; no branch protections are changed by the job.
+
+This workflow does not emit `release.published`. Binary packaging, GitHub Releases,
+and winget publishing remain outside it. There are no registry-publish commands
+or registry tokens.
 
 ## Pull request checklist
 
