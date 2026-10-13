@@ -1,8 +1,8 @@
 [package]
 name = "mdview-render-html"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
-publish = false
+publish.workspace = true
 
 [dependencies]
 comrak = "0.29"

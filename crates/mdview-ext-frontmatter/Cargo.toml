@@ -1,6 +1,7 @@
 [package]
 name = "mdview-ext-frontmatter"
-version = "0.1.0"
+publish.workspace = true
+version.workspace = true
 edition = "2021"
 license = "MIT"
 description = "Frontmatter (YAML) extension for mdview: parses, strips, and renders a hero card."

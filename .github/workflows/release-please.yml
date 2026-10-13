@@ -1,0 +1,39 @@
+name: Release please
+
+on:
+  schedule:
+    - cron: '30 18 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    if: >-
+      ${{ github.repository == 'aloknigam247/mdview' &&
+          github.ref == 'refs/heads/main' &&
+          (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-please-${{ github.repository }}-main
+      cancel-in-progress: false
+    steps:
+      - name: Require release token
+        env:
+          RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          if [[ -z "$RELEASE_PLEASE_TOKEN" ]]; then
+            echo "::error::Set the repository secret RELEASE_PLEASE_TOKEN to a repository-scoped PAT. There is no GITHUB_TOKEN fallback."
+            exit 1
+          fi
+      - name: Reconcile release PR and publish merged release
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4 (package 4.4.1)
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: main
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}

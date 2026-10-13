@@ -1,6 +1,7 @@
 [package]
 name = "mdview-pager"
-version = "0.1.0"
+publish.workspace = true
+version.workspace = true
 edition = "2021"
 description = "ratatui + crossterm pager for mdview terminal output"
 license = "MIT"
