@@ -111,8 +111,9 @@ The bot keeps `version.txt`, local-package versions in `Cargo.lock`, and
 with built-in TOML extra-file updates for the Cargo version and lockfile.
 The native Rust strategy does not support this virtual workspace's inherited
 versions. Root scope covers all repository code surfaces, including Rust,
-Lua, and TypeScript. Each product release has one root `CHANGELOG.md` entry,
-one `vX.Y.Z` tag, and one published (not draft) GitHub Release.
+Lua, and TypeScript. Each version update has one root `CHANGELOG.md` entry
+and one lightweight `vX.Y.Z` Git tag. GitHub Release creation and binary
+publishing are disabled.
 
 Bootstrap starts with `initial-version: "0.1.0"`, an empty `{}` release
 manifest, and a blank `CHANGELOG.md`. Installing the workflow does not tag or
@@ -124,28 +125,40 @@ commits bump patch. Breaking changes (`!` or a `BREAKING CHANGE:` footer) bump m
 while on `0.x` (`bump-minor-pre-major: true`), then major on `1.x` and later.
 `bump-patch-for-minor-pre-major: false` keeps pre-1.0 features as minor bumps.
 Only `feat:`, `fix:`, `perf:`, and breaking changes appear in the changelog
-and trigger releases. Other non-breaking types, including `docs:`, `chore:`,
+and trigger version updates. Other non-breaking types, including `docs:`, `chore:`,
 and `refactor:`, do neither.
 
-### Daily release PR
+### Daily version PR
 
 `.github/workflows/release-please.yml` runs only in `aloknigam247/mdview` on
 `main`, daily at 00:00 IST (`30 18 * * *` UTC) or by manual dispatch. It does
 not run on pushes or pull requests, and does not install or run tests.
 GitHub schedules can be delayed; this is not an exact-time guarantee.
-Release jobs are serialized without canceling an in-progress run.
+Version jobs are serialized without canceling an in-progress run.
 
-Each daily/manual run publishes any unreleased, merged bot release PR and
-creates or refreshes one pending release PR for releasable commits. Review its
-version, changelog, and metadata changes. Confirm that the root Cargo version,
-all local-package versions in `Cargo.lock`, `version.txt`, and the release
-manifest's `"."` entry agree with the new changelog version. Registry and git
-dependency versions must remain unchanged. A generic updater can warn rather
-than fail when a version field is missing, so inspect these locations before
-merging. Leave the PR open to accumulate changes, and merge only when ready to
-ship. The next daily run publishes the
-merged release; an ordinary PR or an unmerged release PR cannot publish.
-For earlier publication or recovery, dispatch on `main`:
+Each daily/manual run creates or refreshes a version PR and enables squash
+auto-merge for it. Only same-repository PRs from
+`release-please--branches--main` to `main`, with the expected title, pending
+label, and version-only file changes, are eligible. Ordinary feature PRs are
+never auto-merged by this workflow.
+
+`scripts/version_pr.py` checks that the Cargo version, local lockfile versions,
+`version.txt`, manifest, and changelog agree. Other Cargo metadata, including
+registry and git dependencies, must remain unchanged. The merge is pinned to
+the checked PR head and respects GitHub merge requirements; no admin bypass
+is used. This is operational merge safety, not a test suite or test job.
+
+After merging, the helper creates the version tag at the actual merge commit
+and marks the PR `autorelease: tagged`. That label means a Git tag exists,
+not that a GitHub Release was published. An existing tag pointing elsewhere
+is never moved. Each run first finishes pending tags from earlier merges, so
+an interrupted run or a delayed auto-merge cannot block future version PRs.
+If merge requirements are pending, the next run records the tag after the PR
+has merged.
+
+The helper uses Python's standard library and the GitHub CLI already installed
+on the runner; it installs no test dependencies or Rust toolchain. For an
+earlier version update or recovery, dispatch on `main`:
 
 ```sh
 gh workflow run release-please.yml --repo aloknigam247/mdview --ref main
@@ -163,15 +176,17 @@ revoke replaced tokens. Never put the token in chat, a token file, or source
 control. The workflow does not provision credentials or change repository
 permissions.
 
-Only the release job receives this PAT; the default workflow token has no
-permissions. A missing secret fails explicitly before the action runs, with
+Only the version job receives this PAT; the default workflow token has read-only
+Contents permission for checkout, and checkout does not persist credentials.
+A missing secret fails explicitly before the release-please action runs, with
 no `GITHUB_TOKEN` fallback.
 An expired, revoked, or under-scoped PAT fails the action; replace the secret
 and rerun on `main`. The default `GITHUB_TOKEN` suppresses downstream workflow
-events, so a PAT is needed for downstream workflows and the `release.published`
-contract for [#47](https://github.com/aloknigam247/mdview/issues/47).
-Binary packaging and winget publishing belong to #47, not this workflow;
-there are no registry-publish commands or registry tokens here.
+events, so a PAT is used for the PR, merge, tag, and label operations.
+GitHub Release publication is explicitly disabled in both the action and its
+configuration; this workflow does not emit `release.published`.
+Binary packaging, GitHub Releases, and winget publishing remain outside this
+version-only workflow. There are no registry-publish commands or registry tokens.
 
 ## Pull request checklist
 

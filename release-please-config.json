@@ -32,5 +32,6 @@
     }
   },
   "prerelease": false,
-  "pull-request-title-pattern": "chore(release): release ${version}"
+  "pull-request-title-pattern": "chore(release): release ${version}",
+  "skip-github-release": true
 }
