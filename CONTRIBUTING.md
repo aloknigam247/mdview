@@ -119,11 +119,13 @@ manifest, and a blank `CHANGELOG.md`. Installing the workflow does not tag or
 publish anything. The first bot PR supplies the real historical `0.1.0`
 changelog, its heading, and the manifest's `"."` version entry.
 
-After bootstrap, conventional `feat:` commits bump minor and `fix:` commits
-bump patch. Breaking changes (`!` or a `BREAKING CHANGE:` footer) bump minor
+After bootstrap, conventional `feat:` commits bump minor; `fix:` and `perf:`
+commits bump patch. Breaking changes (`!` or a `BREAKING CHANGE:` footer) bump minor
 while on `0.x` (`bump-minor-pre-major: true`), then major on `1.x` and later.
 `bump-patch-for-minor-pre-major: false` keeps pre-1.0 features as minor bumps.
-Non-breaking `docs:` or `chore:` commits alone do not trigger a release.
+Only `feat:`, `fix:`, `perf:`, and breaking changes appear in the changelog
+and trigger releases. Other non-breaking types, including `docs:`, `chore:`,
+and `refactor:`, do neither.
 
 ### Daily release PR
 
@@ -135,8 +137,13 @@ Release jobs are serialized without canceling an in-progress run.
 
 Each daily/manual run publishes any unreleased, merged bot release PR and
 creates or refreshes one pending release PR for releasable commits. Review its
-version, changelog, and metadata changes. Leave it open to accumulate
-changes, and merge only when ready to ship. The next daily run publishes the
+version, changelog, and metadata changes. Confirm that the root Cargo version,
+all local-package versions in `Cargo.lock`, `version.txt`, and the release
+manifest's `"."` entry agree with the new changelog version. Registry and git
+dependency versions must remain unchanged. A generic updater can warn rather
+than fail when a version field is missing, so inspect these locations before
+merging. Leave the PR open to accumulate changes, and merge only when ready to
+ship. The next daily run publishes the
 merged release; an ordinary PR or an unmerged release PR cannot publish.
 For earlier publication or recovery, dispatch on `main`:
 
