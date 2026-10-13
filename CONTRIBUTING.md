@@ -131,9 +131,9 @@ lockfile layout would make the update ambiguous.
 
 ### Daily version updates
 
-`.github/workflows/semantic-release.yml` runs only in `aloknigam247/mdview` on
-`main`, daily at 00:00 IST (`30 18 * * *` UTC) or by manual dispatch. It does
-not run on pushes or pull requests, and does not install or run tests.
+`.github/workflows/semantic-release.yml` runs on `main`, daily at 00:00 IST
+(`30 18 * * *` UTC) or by manual dispatch. It does not run on pushes or pull
+requests, and does not install or run tests.
 GitHub schedules can be delayed; this is not an exact-time guarantee.
 Version jobs are serialized without canceling an in-progress run.
 
