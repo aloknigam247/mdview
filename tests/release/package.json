@@ -1,0 +1,11 @@
+{
+  "name": "mdview-release-tests",
+  "private": true,
+  "scripts": {
+    "test": "node --test release.test.cjs"
+  },
+  "devDependencies": {
+    "@iarna/toml": "2.2.5",
+    "release-please": "17.3.0"
+  }
+}

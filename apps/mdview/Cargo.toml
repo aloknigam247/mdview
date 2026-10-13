@@ -1,6 +1,7 @@
 [package]
 name = "mdview"
-version = "0.1.0"
+publish.workspace = true
+version.workspace = true
 edition = "2021"
 description = "mdview — lightweight Rust markdown renderer (Tauri desktop + terminal + Neovim live preview)"
 license = "MIT"

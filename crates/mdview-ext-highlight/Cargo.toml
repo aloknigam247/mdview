@@ -1,8 +1,8 @@
 [package]
 name = "mdview-ext-highlight"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
-publish = false
+publish.workspace = true
 
 [dependencies]
 comrak = { version = "0.29", default-features = false }

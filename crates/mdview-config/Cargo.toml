@@ -1,6 +1,7 @@
 [package]
 name = "mdview-config"
-version = "0.1.0"
+publish.workspace = true
+version.workspace = true
 edition = "2021"
 description = "User-facing TOML configuration for mdview (keymap + future options)"
 license = "MIT"

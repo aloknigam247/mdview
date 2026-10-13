@@ -1,10 +1,10 @@
 [package]
 name = "mdview-ext-mermaid"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "Mermaid diagram extension for mdview"
 license = "MIT"
-publish = false
+publish.workspace = true
 
 [dependencies]
 comrak = { workspace = true }

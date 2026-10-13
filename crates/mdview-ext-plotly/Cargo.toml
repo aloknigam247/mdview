@@ -1,6 +1,7 @@
 [package]
 name = "mdview-ext-plotly"
-version = "0.1.0"
+publish.workspace = true
+version.workspace = true
 edition = "2021"
 license = "MIT"
 description = "Plotly fenced-code extension for mdview"
