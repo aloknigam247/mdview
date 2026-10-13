@@ -127,15 +127,15 @@ Non-breaking `docs:` or `chore:` commits alone do not trigger a release.
 
 ### Daily release PR
 
-`.github/workflows/release-please.yml` validates pull requests and pushes to
-`main`, but neither event can publish a release. Release automation runs only
-in `aloknigam247/mdview` on `main`, daily at 00:00 IST (`30 18 * * *` UTC) or
-by manual dispatch. GitHub schedules can be delayed; this is not an exact-time
-guarantee. Release jobs are serialized without canceling an in-progress run.
+`.github/workflows/release-please.yml` runs only in `aloknigam247/mdview` on
+`main`, daily at 00:00 IST (`30 18 * * *` UTC) or by manual dispatch. It does
+not run on pushes or pull requests, and does not install or run tests.
+GitHub schedules can be delayed; this is not an exact-time guarantee.
+Release jobs are serialized without canceling an in-progress run.
 
 Each daily/manual run publishes any unreleased, merged bot release PR and
 creates or refreshes one pending release PR for releasable commits. Review its
-version, changelog, metadata changes, and checks. Leave it open to accumulate
+version, changelog, and metadata changes. Leave it open to accumulate
 changes, and merge only when ready to ship. The next daily run publishes the
 merged release; an ordinary PR or an unmerged release PR cannot publish.
 For earlier publication or recovery, dispatch on `main`:
@@ -156,33 +156,15 @@ revoke replaced tokens. Never put the token in chat, a token file, or source
 control. The workflow does not provision credentials or change repository
 permissions.
 
-Only the release job receives this PAT; validation has no secrets or write
-permissions, and checkout does not persist credentials. A missing secret
-fails explicitly before the action runs, with no `GITHUB_TOKEN` fallback.
+Only the release job receives this PAT; the default workflow token has no
+permissions. A missing secret fails explicitly before the action runs, with
+no `GITHUB_TOKEN` fallback.
 An expired, revoked, or under-scoped PAT fails the action; replace the secret
 and rerun on `main`. The default `GITHUB_TOKEN` suppresses downstream workflow
-events, so a PAT is needed for bot PR checks and the `release.published`
+events, so a PAT is needed for downstream workflows and the `release.published`
 contract for [#47](https://github.com/aloknigam247/mdview/issues/47).
 Binary packaging and winget publishing belong to #47, not this workflow;
 there are no registry-publish commands or registry tokens here.
-
-### Release checks
-
-The release job depends only on locked release tests and actionlint, not the
-Rust build matrix. The required Rust checks above remain contributor gates.
-With Node.js 22, stable Rust/Cargo, and actionlint 1.7.12 installed, run the
-same release checks locally (PowerShell):
-
-```powershell
-npm --prefix tests\release ci --ignore-scripts
-npm --prefix tests\release test
-actionlint .github\workflows\release-please.yml
-```
-
-Tests exercise the pinned release-please library with stubbed, read-only
-GitHub I/O; unexpected network calls or writes fail. They do not publish
-anything. Actual GitHub PR creation, merge, publication, and downstream event
-delivery remain deferred; local checks are not proof of that remote chain.
 
 ## Pull request checklist
 
