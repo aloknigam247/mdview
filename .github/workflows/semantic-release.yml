@@ -21,12 +21,12 @@ jobs:
       group: release-please-${{ github.repository }}-main
       cancel-in-progress: false
     env:
-      GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+      GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
     steps:
       - name: Require versioning token
         run: |
           if [[ -z "$GH_TOKEN" ]]; then
-            echo "::error::Set the repository secret RELEASE_PLEASE_TOKEN to a PAT that can push version commits and tags."
+            echo "::error::Set the repository secret RELEASE_TOKEN to a PAT that can push version commits and tags."
             exit 1
           fi
       - name: Check out main and version history
