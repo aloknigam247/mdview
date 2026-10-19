@@ -1013,7 +1013,7 @@ fn wrap_page(
         try {{
           const xml = el.getAttribute('data-mdv-drawio-xml') || __mdvDecodeB64(el.getAttribute('data-xml-b64'));
           el.setAttribute('data-mdv-drawio-xml', xml);
-          el.className = 'mxgraph';
+          el.classList.add('mxgraph');
           el.removeAttribute('data-xml-b64');
           el.innerHTML = '';
           el.setAttribute('data-mxgraph', JSON.stringify({{
@@ -2288,6 +2288,23 @@ mod tests {
     fn head_includes_plotly() {
         let html = render_page("```plotly\n{\"data\":[]}\n```\n", "t").expect("render");
         assert!(html.contains("plotly-2.35.2.min.js"), "html: {html}");
+    }
+
+    #[test]
+    fn drawio_bootstrap_preserves_viewer_class() {
+        let html = render_page("```drawio\n<mxfile/>\n```\n", "t").expect("render");
+        assert!(
+            html.contains("class=\"drawio-viewer\""),
+            "drawio placeholder should use the app-level class: {html}"
+        );
+        assert!(
+            html.contains("el.classList.add('mxgraph')"),
+            "drawio bootstrap should add the viewer class: {html}"
+        );
+        assert!(
+            !html.contains("el.className = 'mxgraph'"),
+            "drawio bootstrap must not replace the app-level class: {html}"
+        );
     }
 
     #[test]

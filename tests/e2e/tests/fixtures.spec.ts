@@ -25,12 +25,18 @@ const FIXTURES: FixtureExpectation[] = [
   {
     name: "drawio",
     headings: ["Draw.io"],
-    selectors: [".drawio-viewer > *"],
+    selectors: [".drawio-viewer.mxgraph > svg"],
   },
   {
     name: "everything",
     headings: ["Everything"],
-    selectors: [".mermaid svg", ".katex", ".plotly-chart .svg-container", ".drawio-viewer > *", "pre code"],
+    selectors: [
+      ".drawio-viewer.mxgraph > svg",
+      ".katex",
+      ".mermaid svg",
+      ".plotly-chart .svg-container",
+      "pre code",
+    ],
   },
   {
     name: "gfm",
@@ -81,6 +87,22 @@ for (const fixture of FIXTURES) {
           `expected ${selector} on ${fixture.name}`,
         ).toBeVisible({ timeout: 15_000 });
       }
+    }
+
+    if (fixture.name === "drawio") {
+      const drawioState = await page.locator(".drawio-viewer.mxgraph").first().evaluate((element) => ({
+        config: element.getAttribute("data-mxgraph"),
+        viewerReady:
+          typeof (
+            window as unknown as {
+              GraphViewer?: { processElements?: unknown };
+            }
+          ).GraphViewer?.processElements === "function",
+      }));
+      const config = JSON.parse(drawioState.config ?? "null") as { xml?: string } | null;
+
+      expect(drawioState.viewerReady, "draw.io viewer API should be available").toBe(true);
+      expect(config?.xml, "draw.io viewer config should contain the source XML").toContain("<mxfile");
     }
 
     await screenshotAndAssertSize(page, fixture.name);
