@@ -1,3 +1,9 @@
+## [1.0.1](https://github.com/aloknigam247/mdview/compare/v1.0.0...v1.0.1) (2026-10-19)
+
+### Fixed
+
+* **drawio:** preserve viewer container class ([8544ea2](https://github.com/aloknigam247/mdview/commit/8544ea2dfa22b9daf260d0d52ac03e58f6c4ad64)), closes [#6](https://github.com/aloknigam247/mdview/issues/6)
+
 ## 1.0.0 (2026-10-13)
 
 ### Added
