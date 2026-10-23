@@ -13,7 +13,10 @@ Turn a rough task, bug, or idea into a **well-formed GitHub issue** that a *diff
   the whole plan, including every parent and child draft.
 - **The issue is for another agent, at another time.** Write it as a self-contained task: enough context, file references, and acceptance criteria that an agent with zero conversation history can pick it up and implement it.
 - **Anchor to stable identifiers, not coordinates.** An issue is implemented at an unknown later time against a changed tree. Reference symbols, string literals, config keys, and search patterns — never line numbers, occurrence counts, or verbatim multi-line snapshots that the codebase will invalidate. A frozen inventory goes stale *and* misleads: the implementing agent trusts it as exhaustive and skips rediscovering occurrences added after the issue was filed. The issue points the way; the implementing agent re-discovers the exact scope.
-- **Match detail to task type.** For a narrow **bug**, the exact offending lines *are* the deliverable — a tight snippet of the actual defect is worth freezing. For **features / refactors / renames / broad sweeps**, staleness dominates: give a discovery recipe (search patterns + stable anchors) and the contract/invariant rules, not an enumerated file list.
+- **Match detail to task type.** For a narrow **bug**, the exact offending lines are diagnostic evidence — a tight
+  snippet of the actual defect is worth freezing. For **features / refactors / renames / broad sweeps**, staleness
+  dominates: give a discovery recipe (search patterns + stable anchors) and the contract/invariant rules, not an
+  enumerated file list.
 - **Ask for missing details.** Do not guess when scope, expected behavior, or acceptance criteria are ambiguous.
 - **Check what already exists.** Search the repo's open and closed issues before filing — surface duplicates to the user, and link genuinely related issues rather than creating disconnected ones.
 
@@ -50,7 +53,8 @@ The subagent prompt must include:
 The subagent is responsible for:
 1. Reading the root `AGENTS.md` for crate layout, conventions, contracts, and the "Architecture reality" / "Where to extend" guidance.
 2. Using grep/glob/view to locate the work. **Scale the output to the task type** (see the "Match detail to task type" principle):
-   - **Narrow bug:** capture the exact offending lines as a short verbatim snippet with a `file:line` ref — the defect *is* the deliverable and won't move much.
+   - **Narrow bug:** capture the exact offending lines as a short verbatim snippet with a `file:line` ref — use this as
+     diagnostic evidence for the fix.
    - **Feature / refactor / rename / broad sweep:** do **not** enumerate every hit. Identify the **distinct surfaces/categories** the work touches, give **one representative entry point** per surface (as a stable anchor — a symbol, string literal, or config key), and record the **grep/glob patterns** that locate the rest. Prefer "find the remaining refs via `<pattern>`" over a frozen file list or an occurrence count.
 3. Identifying the **crate(s)** involved (e.g., `mdview-core`, `mdview-theme`, `mdview-ext-*`, `mdview-render-*`, `apps/mdview`, `sidecar/`).
 4. Confirming the **root cause** (for bugs) by tracing the actual code — not guessing. Remember the app is plain `wry` + `tao` (not Tauri), and most GUI features live as embedded JS/CSS in `apps/mdview/src/render.rs`.
@@ -66,11 +70,15 @@ The subagent must **return a structured report** containing:
 - `crates` — the crate(s) involved
 - `rootCause` — for bugs, the confirmed root cause with file:line references (or "n/a")
 - `approach` — the proposed implementation approach
-- `slices` — when needed, proposed bounded implementation children, coverage, dependencies, and each child's source
+- `slices` — when needed, proposed complete functional children, coverage, dependencies, and each child's source
   complexity/rationale; reassess nested slices using step 4
 - `sourceComplexity` — low, medium, high, or unresolved, with production-code evidence using step 4's rules
 - `testing` — test files/impact, the exact `cargo test` selector(s), and a concrete **regression test snippet** whose assertions pin *this specific* fixed behavior (see Testing requirements below)
 - `openQuestions` — anything still unclear
+- `deliverable` — for the task and each proposed implementation leaf, the usable outcome, named consumer/use, and
+  completion demonstration required by step 4
+- `mergeProposals` — any necessary task combinations, combined outcome, revised source complexity/rationale, and
+  tradeoff under step 4; these are proposals, not approvals
 
 Reference stable anchors (symbols, string literals, config keys), **never line numbers or occurrence counts** in the enumerated scope — the issue is implemented later against a moved tree.
 
@@ -137,9 +145,24 @@ because it is large. Pure docs, tests, and spikes are not high source complexity
 - **Low:** a localized, well-understood behavioral change.
 - **Medium:** one coherent bounded outcome across a small connected set of components, with clear contracts and
   manageable invariants.
-- **Above medium:** never file as a single implementation task. Draft a **tracking-only parent**, explicitly not an
-  implementation assignment, and non-overlapping, independently verifiable low/medium children. Reassess every child
-  recursively; any higher-complexity child becomes another tracking-only parent.
+- **High:** broad or tightly coupled source changes with substantial interface, state/lifecycle, or invariant
+  complexity.
+
+**Deliverable-first decomposition.** Low/medium source complexity is the default for implementation leaves. Each leaf
+must produce a concrete, independently usable or demonstrable outcome, naming its consumer/use and completion
+demonstration: user behavior or an actually consumable API, CLI, library, or artifact. Documentation and research
+findings remain legitimate deliverables for those task types. Prerequisites are allowed, but no leaf may end as unused
+schema, scaffolding, or transport awaiting a later integration issue to become useful. Passing tests/build alone is not
+the feature deliverable. Avoid artificial file/layer/test splits.
+
+Prefer smaller complete functional slices. For split plans, use **tracking-only parents**, explicitly not implementation
+assignments, and non-overlapping children; reassess every child recursively under this policy. If no useful low/medium
+decomposition is possible, propose merging the necessary tasks. Explain exactly which tasks combine, the usable outcome,
+honest revised source complexity and production-code rationale, and the tradeoff. Use `ask_user` to approve the
+**specific merge and any complexity increase before adopting it or filing**. A higher-complexity implementation leaf
+is allowed only for that approved merge; record the approval, actual rating, rationale, and approved scope in its draft.
+Never downgrade its rating to fit the default or treat approval as a blanket high-complexity exception. If declined,
+seek another complete outcome or leave the split unresolved; clarify unresolved design with the user.
 
 Do not use line/file-count or time quotas. If uncertainty prevents a bounded estimate, investigate or clarify with the
 user rather than treating unknown as low. Preserve full request coverage and real dependencies, allowing independent
@@ -154,10 +177,12 @@ duplicating them. Parent containment and blocked-by dependencies remain separate
    - **Context / Background** — why this matters; the reported symptom or motivation; the affected output surface(s). **For a narrow bug**, embed the offending code as a fenced snippet (from the subagent's `codeSnippet`) with a `file:line` caption so the future agent sees exactly what code the task refers to. **For a feature/refactor/rename**, describe the *pattern* and the surfaces involved — do not paste a frozen multi-line snapshot or an occurrence count that the tree will invalidate.
    - **Affected surfaces & crates** — for a narrow bug, the specific `file` -> `symbol` -> reason sites. For a feature/refactor/rename, the **surfaces/categories** (from the subagent's `surfaces`) with **one representative entry point each** plus the **discovery command** that finds the rest (from `searchStrategy`). Prefix this section with a standing note to the implementing agent: *"This is a starting map, not an exhaustive inventory — re-run the discovery searches below and treat their output as authoritative; occurrences may have been added since this issue was filed."* Reference the "Where to extend" / "Architecture reality" notes in `AGENTS.md` where relevant.
    - **Proposed approach** — the subagent's `approach`, plus root cause for bugs. Call out any contract that must **not** break.
-   - **Source complexity** — each implementation leaf records `low` or `medium` and a concise production-code reason
-     from step 4. A tracking-only parent instead states that it is not an implementation assignment and records scope,
-     completion criteria, child coverage, and dependencies; its validation is the linked children's validation.
-   - **Acceptance criteria** — a checklist of concrete, verifiable outcomes.
+   - **Source complexity** — each implementation leaf records its actual rating and concise production-code rationale
+     under step 4. Carry any `mergeProposals` and their approval status into the draft, including the specifically
+     approved scope. A tracking-only parent instead states that it is not an implementation assignment and records
+     scope, completion criteria, child coverage, and dependencies; its validation is the linked children's validation.
+   - **Acceptance criteria** — a checklist of concrete, verifiable outcomes. Include each leaf's investigation
+     `deliverable`: named consumer/use and completion demonstration under step 4.
    - **Testing requirements** — **always required** for implementation leaves (except `spike` issues; see below). Spell out the concrete test changes needed to add and/or validate the fix, so a future agent (or the user) can verify the change is done. Triaged issues are expected to include their tests as part of the fix — do **not** add a "tests only when explicitly requested" caveat here:
      - **`spike` (investigation only) issues are exempt:** they change no code or docs, so there are no tests. Replace this section with a **Deliverables** section instead — the questions the investigation must answer, where findings are recorded, and the expected follow-up (usually a new issue capturing the resulting work). Do not fabricate test requirements for a spike.
      - The exact test target(s) that map to the changed source (in-crate `#[cfg(test)]` module, crate `tests/*.rs`, or `tests/e2e`).
@@ -199,7 +224,9 @@ ask it to check specifically that:
 - The acceptance criteria are concrete and verifiable, and the scope boundaries
   (out-of-scope, contracts that must not break) are correct.
 - Nothing important is missing and nothing contradicts `AGENTS.md`.
-- Every implementation leaf is bounded low/medium source complexity, not high/unresolved or sized by testing effort.
+- Every implementation leaf meets step 4's deliverable and source-complexity policy. Reject missing usable outcomes or
+  consumer/demo details, unused prerequisites awaiting later integration, testing-derived sizing, unresolved design,
+  and higher-complexity leaves without the specific merge approval and recorded scope/rationale.
 - The whole hierarchy covers the request without gaps/overlap, preserves real dependencies, and includes every
   required native parent link, category label, and `sub-issue` label.
 
