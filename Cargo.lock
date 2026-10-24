@@ -2162,7 +2162,7 @@ checksum = "0e7465ac9959cc2b1404e8e2367b43684a6d13790fe23056cc8c6c5a6b7bcb94"
 
 [[package]]
 name = "mdview"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -2204,7 +2204,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-config"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "crossterm",
  "serde",
@@ -2216,7 +2216,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-core"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "comrak",
  "serde",
@@ -2226,7 +2226,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-ext-d2"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "comrak",
  "mdview-core",
@@ -2236,7 +2236,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-ext-drawio"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "base64",
  "comrak",
@@ -2249,7 +2249,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-ext-frontmatter"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "comrak",
  "mdview-core",
@@ -2262,7 +2262,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-ext-highlight"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "comrak",
  "mdview-core",
@@ -2274,7 +2274,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-ext-math"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "comrak",
  "latex2mathml",
@@ -2286,7 +2286,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-ext-mermaid"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "comrak",
  "mdview-core",
@@ -2299,7 +2299,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-ext-plotly"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "comrak",
  "mdview-core",
@@ -2311,7 +2311,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-nvim"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "dirs 5.0.1",
  "futures-core",
@@ -2327,7 +2327,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-pager"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "crossterm",
  "dirs 5.0.1",
@@ -2342,7 +2342,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-render-html"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "comrak",
  "mdview-core",
@@ -2355,7 +2355,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-render-terminal"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "comrak",
  "image",
@@ -2370,7 +2370,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-server"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "axum",
  "bytes",
@@ -2389,7 +2389,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-sixel"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "base64",
  "color_quant",
@@ -2404,7 +2404,7 @@ dependencies = [
 
 [[package]]
 name = "mdview-theme"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "dirs 5.0.1",
  "mdview-core",

@@ -1,3 +1,9 @@
+## [1.0.2](https://github.com/aloknigam247/mdview/compare/v1.0.1...v1.0.2) (2026-10-24)
+
+### Fixed
+
+* **ai:** bound triage source complexity ([#89](https://github.com/aloknigam247/mdview/issues/89)) ([5b1a416](https://github.com/aloknigam247/mdview/commit/5b1a416654e89ca338bba1886b019d912599125e))
+
 ## [1.0.1](https://github.com/aloknigam247/mdview/compare/v1.0.0...v1.0.1) (2026-10-19)
 
 ### Fixed
