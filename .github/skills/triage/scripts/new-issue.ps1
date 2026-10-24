@@ -6,10 +6,11 @@
 #
 # Usage (run from anywhere inside the repo):
 #   pwsh -NoProfile -ExecutionPolicy Bypass `
-#     -File .github/skills/triage/scripts/new-issue.ps1 `
-#     -Draft tmp/triage-issue.md -Label bug,tech-debt
+#     -File .github\skills\triage\scripts\new-issue.ps1 `
+#     -Complexity low -Draft tmp\triage-issue.md -Label bug,tech-debt
 
 param(
+    [Parameter(Mandatory)][ValidateSet("high", "low", "medium")][string]$Complexity,
     [Parameter(Mandatory)][string]$Draft,    # path to draft md (first '# ' line = title)
     [Parameter(Mandatory)][string[]]$Label,  # category labels, comma-separated
     [ValidateRange(1, [int]::MaxValue)][int]$Parent
@@ -22,6 +23,13 @@ $ErrorActionPreference = "Stop"
 # Re-split so both that and native array invocation yield one label per element.
 $Label = $Label -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ }
 if (-not $Label) { throw "no labels supplied" }
+foreach ($l in $Label) {
+    if ($l -match "^complexity\s*:\s*(.*)$" -and $Matches[1] -ne $Complexity) {
+        throw "complexity label '$l' conflicts with -Complexity $Complexity"
+    }
+}
+$Label = @($Label | Where-Object { $_ -notmatch "^complexity\s*:" }) +
+    "complexity: $($Complexity.ToLowerInvariant())"
 if ($PSBoundParameters.ContainsKey("Parent") -and $Label -cnotcontains "sub-issue") {
     $Label += "sub-issue"
 }
@@ -53,9 +61,12 @@ $parentArgs = @()
 foreach ($l in $Label) { $labelArgs += @("--label", $l) }
 if ($PSBoundParameters.ContainsKey("Parent")) { $parentArgs = @("--parent", "$Parent") }
 
-$url = gh issue create --title "$title" --body-file "$body" @labelArgs @parentArgs --assignee "@me"
-$createExit = $LASTEXITCODE
-Remove-Item $body -ErrorAction SilentlyContinue
+try {
+    $url = gh issue create --title "$title" --body-file "$body" @labelArgs @parentArgs --assignee "@me"
+    $createExit = $LASTEXITCODE
+} finally {
+    Remove-Item $body -ErrorAction SilentlyContinue
+}
 if ($createExit -ne 0 -or -not $url) {
     throw "gh issue create failed (exit $createExit); inspect GitHub before retrying: creation may be partial. $url"
 }

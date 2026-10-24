@@ -134,19 +134,25 @@ Pick the categories that genuinely apply (usually one primary, occasionally a se
 `bug` + `tech-debt`). Apply **`spike`** when the task is purely investigation/exploration whose
 deliverable is *findings* — it must not change any code or docs. A spike is typically the only
 category on such an issue; do not combine it with `bug`/`feature`/`refactor` (file a separate
-follow-up issue for the resulting work).
+follow-up issue for the resulting work). Category restrictions do not exclude metadata labels such as source complexity
+or `sub-issue`.
 
-Assess **source implementation complexity** from actual production code: behavioral scope, component coupling,
-interfaces, state/lifecycle changes, migrations/invariants, and unresolved design. Exclude test additions/updates,
-fixtures, harnesses, matrix breadth, coverage, test runtime, and test-writing effort.
+Assess **source implementation complexity** from production code, scripts, shipped configuration, and build behavior:
+behavioral scope, component coupling, interfaces, state/lifecycle changes, migrations/invariants, and unresolved design.
+Exclude test additions/updates, fixtures, harnesses, matrix breadth, coverage, test runtime, and test-writing effort.
 Keep required tests and validation attached to each implementation slice; do not omit them or split off test-only work
-because it is large. Pure docs, tests, and spikes are not high source complexity merely because they are extensive.
+because it is large. Issues with no production changes, including docs, research, and test-only work, have **low source
+complexity** regardless of effort.
 
 - **Low:** a localized, well-understood behavioral change.
 - **Medium:** one coherent bounded outcome across a small connected set of components, with clear contracts and
   manageable invariants.
 - **High:** broad or tightly coupled source changes with substantial interface, state/lifecycle, or invariant
   complexity.
+
+Give every issue exactly one canonical label matching its rating: `complexity: low`, `complexity: medium`, or
+`complexity: high`. Rate tracking-only parents by their aggregate requested source scope, not coordination cost or a sum
+of child ratings.
 
 **Deliverable-first decomposition.** Low/medium source complexity is the default for implementation leaves. Each leaf
 must produce a concrete, independently usable or demonstrable outcome, naming its consumer/use and completion
@@ -165,9 +171,9 @@ Never downgrade its rating to fit the default or treat approval as a blanket hig
 seek another complete outcome or leave the split unresolved; clarify unresolved design with the user.
 
 Do not use line/file-count or time quotas. If uncertainty prevents a bounded estimate, investigate or clarify with the
-user rather than treating unknown as low. Preserve full request coverage and real dependencies, allowing independent
-children to run in parallel. Repeat step 3 for **each proposed child** and reuse suitable existing issues instead of
-duplicating them. Parent containment and blocked-by dependencies remain separate.
+user rather than treating unknown as low or high. Preserve full request coverage and real dependencies, allowing
+independent children to run in parallel. Repeat step 3 for **each proposed child**, reusing suitable existing issues
+instead of duplicating them. Parent containment and blocked-by dependencies remain separate.
 
 ### 5. Draft the issue and present it for acceptance
 
@@ -177,9 +183,9 @@ duplicating them. Parent containment and blocked-by dependencies remain separate
    - **Context / Background** — why this matters; the reported symptom or motivation; the affected output surface(s). **For a narrow bug**, embed the offending code as a fenced snippet (from the subagent's `codeSnippet`) with a `file:line` caption so the future agent sees exactly what code the task refers to. **For a feature/refactor/rename**, describe the *pattern* and the surfaces involved — do not paste a frozen multi-line snapshot or an occurrence count that the tree will invalidate.
    - **Affected surfaces & crates** — for a narrow bug, the specific `file` -> `symbol` -> reason sites. For a feature/refactor/rename, the **surfaces/categories** (from the subagent's `surfaces`) with **one representative entry point each** plus the **discovery command** that finds the rest (from `searchStrategy`). Prefix this section with a standing note to the implementing agent: *"This is a starting map, not an exhaustive inventory — re-run the discovery searches below and treat their output as authoritative; occurrences may have been added since this issue was filed."* Reference the "Where to extend" / "Architecture reality" notes in `AGENTS.md` where relevant.
    - **Proposed approach** — the subagent's `approach`, plus root cause for bugs. Call out any contract that must **not** break.
-   - **Source complexity** — each implementation leaf records its actual rating and concise production-code rationale
-     under step 4. Carry any `mergeProposals` and their approval status into the draft, including the specifically
-     approved scope. A tracking-only parent instead states that it is not an implementation assignment and records
+   - **Source complexity** — every issue records its actual rating, matching label, and concise source rationale under
+     step 4. Carry any `mergeProposals` and their approval status into the draft, including the specifically approved
+     scope. A tracking-only parent also states that it is not an implementation assignment and records
      scope, completion criteria, child coverage, and dependencies; its validation is the linked children's validation.
    - **Acceptance criteria** — a checklist of concrete, verifiable outcomes. Include each leaf's investigation
      `deliverable`: named consumer/use and completion demonstration under step 4.
@@ -199,8 +205,8 @@ duplicating them. Parent containment and blocked-by dependencies remain separate
      sees the connection. Use this for plain associations; keep parent containment and blocked-by dependencies in the
      next bullet.
    - **Dependencies / sub-issues** — identify parent containment separately from `Depends on #NN` prerequisites.
-     Record planned and reused children, their category labels, and the native hierarchy. Every child, including one
-     attached to an existing parent or nested recursively, needs the exact `sub-issue` label plus its categories.
+     Record planned and reused children, their category and complexity labels, and the native hierarchy. Every child,
+     including one attached to an existing parent or nested recursively, needs the exact `sub-issue` label as well.
      A parent receives this label only if it is itself another issue's child.
 3. Write the main draft to `tmp/triage-issue.md` (git-ignored) so the user can edit it directly. For a split plan, use
    distinct `tmp\triage-<guid>-<slug>.md` child drafts. Link them from the parent without duplicating their bodies.
@@ -228,7 +234,8 @@ ask it to check specifically that:
   consumer/demo details, unused prerequisites awaiting later integration, testing-derived sizing, unresolved design,
   and higher-complexity leaves without the specific merge approval and recorded scope/rationale.
 - The whole hierarchy covers the request without gaps/overlap, preserves real dependencies, and includes every
-  required native parent link, category label, and `sub-issue` label.
+  required native parent link, category label, and `sub-issue` label. Every issue has exactly one canonical complexity
+  label matching its source rating and rationale under step 4.
 
 Address the rubber-duck's findings in the affected drafts before moving on. Only proceed once the whole plan holds up
 to review; scope changes after acceptance require this review again.
@@ -258,13 +265,16 @@ Use the bundled helper script — it derives the repo root, ensures each label e
 
 ```ps1
 pwsh -NoProfile -ExecutionPolicy Bypass `
-  -File .github/skills/triage/scripts/new-issue.ps1 `
-  -Draft tmp/triage-issue.md -Label <cat1>,<cat2>
+  -File .github\skills\triage\scripts\new-issue.ps1 `
+  -Complexity <low|medium|high> -Draft tmp\triage-issue.md -Label <cat1>,<cat2>
 ```
 
+Pass each draft's accepted source rating as the required `-Complexity`; the helper does not infer it. It normalizes
+matching duplicate complexity labels and rejects conflicting ones before any GitHub call.
 Pass the chosen categories as a single comma-separated `-Label` value (`pwsh -File` passes
-arguments as literal strings, so repeating `-Label` fails to bind). Create accepted parents before their children,
-using each issue's own draft and categories. For **every child**, pass `-Parent <parent_number>` to the same helper:
+arguments as literal strings, so repeating `-Label` fails to bind); native PowerShell calls may pass a string array.
+Create accepted parents before their children, using each issue's own draft, rating, and categories.
+For **every child**, pass `-Parent <parent_number>` to the same helper:
 it ensures the `sub-issue` label and creates the native relationship via `gh issue create --parent`.
 This also covers existing parents and recursively nested children.
 
@@ -275,6 +285,12 @@ and attach the existing issue without creating a duplicate:
 gh issue edit <child_number> --add-label sub-issue
 gh issue edit <parent_number> --add-sub-issue <child_number>
 ```
+
+For reused issues and accepted backlog backfills, reassess current scope under step 4, including tracking parents.
+Read existing labels and ensure the matching canonical complexity label exists using the helper's label list/create
+mechanism. Use `gh issue edit --add-label` for that label and `--remove-label` only for conflicting complexity labels
+actually present. Preserve categories and unrelated metadata; never replace the whole label list. Clarify unrateable
+scope instead of guessing, and use the same readback below.
 
 Link agreed prerequisites separately with `gh issue edit <dependent_number> --add-blocked-by <prerequisite_number>`.
 Do not attach an issue merely because it is a prerequisite. On any creation/link failure, report partial results and
@@ -291,12 +307,14 @@ gh issue comment <new_issue_number> --body "Related to #NN — <reason>"
 
 Then report the created issue URL to the user.
 
-Verify each created/reused issue's labels with `gh issue view <number> --json labels`. For every planned child, confirm
-the exact `sub-issue` label and expected native parent using `gh api repos/<owner>/<repo>/issues/<child_number>/parent`;
+Verify each created/reused/backfilled issue's labels with `gh issue view <number> --json labels`: exactly one canonical
+complexity label matching its accepted source rating, alongside its categories and unrelated metadata.
+For every planned child, confirm the exact `sub-issue` label and expected native parent using
+`gh api repos/<owner>/<repo>/issues/<child_number>/parent`;
 also check the parent's paginated `sub_issues` endpoint and each dependent's `dependencies/blocked_by` endpoint.
 Body text or child counts do not prove relationships. Report any missing labels or links explicitly.
 
 ### 9. Cleanup
 
 1. Delete the plan's draft files and any temp body file.
-2. Show a short summary: all issue URLs, titles, assigned categories/labels, and verified parent/child links.
+2. Show a short summary: all issue URLs, titles, source ratings, assigned labels, and verified parent/child links.
