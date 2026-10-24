@@ -9,14 +9,10 @@ Turn a rough task, bug, or idea into a **well-formed GitHub issue** that a *diff
 
 ## Principles
 
-- **Discuss first, create last.** Never run `gh issue create` until the user has reviewed and explicitly accepted
-  the whole plan, including every parent and child draft.
+- **Discuss first, create last.** Never run `gh issue create` until the user has reviewed and explicitly accepted the whole plan, including every parent and child draft.
 - **The issue is for another agent, at another time.** Write it as a self-contained task: enough context, file references, and acceptance criteria that an agent with zero conversation history can pick it up and implement it.
 - **Anchor to stable identifiers, not coordinates.** An issue is implemented at an unknown later time against a changed tree. Reference symbols, string literals, config keys, and search patterns — never line numbers, occurrence counts, or verbatim multi-line snapshots that the codebase will invalidate. A frozen inventory goes stale *and* misleads: the implementing agent trusts it as exhaustive and skips rediscovering occurrences added after the issue was filed. The issue points the way; the implementing agent re-discovers the exact scope.
-- **Match detail to task type.** For a narrow **bug**, the exact offending lines are diagnostic evidence — a tight
-  snippet of the actual defect is worth freezing. For **features / refactors / renames / broad sweeps**, staleness
-  dominates: give a discovery recipe (search patterns + stable anchors) and the contract/invariant rules, not an
-  enumerated file list.
+- **Match detail to task type.** For a narrow **bug**, the exact offending lines are diagnostic evidence — a tight snippet of the actual defect is worth freezing. For **features / refactors / renames / broad sweeps**, staleness dominates: give a discovery recipe (search patterns + stable anchors) and the contract/invariant rules, not an enumerated file list.
 - **Ask for missing details.** Do not guess when scope, expected behavior, or acceptance criteria are ambiguous.
 - **Check what already exists.** Search the repo's open and closed issues before filing — surface duplicates to the user, and link genuinely related issues rather than creating disconnected ones.
 
@@ -53,8 +49,7 @@ The subagent prompt must include:
 The subagent is responsible for:
 1. Reading the root `AGENTS.md` for crate layout, conventions, contracts, and the "Architecture reality" / "Where to extend" guidance.
 2. Using grep/glob/view to locate the work. **Scale the output to the task type** (see the "Match detail to task type" principle):
-   - **Narrow bug:** capture the exact offending lines as a short verbatim snippet with a `file:line` ref — use this as
-     diagnostic evidence for the fix.
+   - **Narrow bug:** capture the exact offending lines as a short verbatim snippet with a `file:line` ref — use this as diagnostic evidence for the fix.
    - **Feature / refactor / rename / broad sweep:** do **not** enumerate every hit. Identify the **distinct surfaces/categories** the work touches, give **one representative entry point** per surface (as a stable anchor — a symbol, string literal, or config key), and record the **grep/glob patterns** that locate the rest. Prefer "find the remaining refs via `<pattern>`" over a frozen file list or an occurrence count.
 3. Identifying the **crate(s)** involved (e.g., `mdview-core`, `mdview-theme`, `mdview-ext-*`, `mdview-render-*`, `apps/mdview`, `sidecar/`).
 4. Confirming the **root cause** (for bugs) by tracing the actual code — not guessing. Remember the app is plain `wry` + `tao` (not Tauri), and most GUI features live as embedded JS/CSS in `apps/mdview/src/render.rs`.
