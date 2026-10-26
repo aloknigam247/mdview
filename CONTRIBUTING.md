@@ -141,7 +141,7 @@ The workflow installs the locked Node versioning tools from `.github/release`;
 these are CI tooling, not application or test dependencies. Cargo file updates
 use Python's standard library, without a Rust toolchain installation or build.
 Only `Cargo.toml`, `Cargo.lock`, and `CHANGELOG.md` are included
-in generated `chore(version): ... [skip ci]` commits.
+in generated `chore(release): ... [skip ci]` commits.
 If there are no qualifying commits since the last version tag, no version
 commit or tag is created. Do not delete or move version tags.
 The tool's generic "Published release" log message refers to a completed

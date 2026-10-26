@@ -26,7 +26,7 @@ module.exports = {
     }],
     [require.resolve('@semantic-release/git'), {
       assets: ['CHANGELOG.md', 'Cargo.lock', 'Cargo.toml'],
-      message: 'chore(version): ${nextRelease.version} [skip ci]',
+      message: 'chore(release): ${nextRelease.version} [skip ci]',
     }],
   ],
   tagFormat: 'v${version}',
