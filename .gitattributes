@@ -1,5 +1,6 @@
 apps/mdview/webview/*.mjs text eol=lf
 apps/mdview/webview/src/**/*.ts text eol=lf
+biome.json text eol=lf
 crates/**/mdv-*-init.js text eol=lf
 crates/**/tests/**/*.mjs text eol=lf
 crates/**/tests/**/*.ts text eol=lf
