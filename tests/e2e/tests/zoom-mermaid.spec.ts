@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import assert from "node:assert/strict";
 
 test("zoom scales rendered mermaid svg", async ({ page }) => {
   await page.setViewportSize({ width: 640, height: 720 });
@@ -18,6 +19,7 @@ test("zoom scales rendered mermaid svg", async ({ page }) => {
     width: el.scrollWidth,
   }));
   expect(before).not.toBeNull();
+  assert(before);
 
   await page.evaluate(() => {
     window.dispatchEvent(
@@ -44,8 +46,9 @@ test("zoom scales rendered mermaid svg", async ({ page }) => {
     width: el.scrollWidth,
   }));
   expect(zoomedIn).not.toBeNull();
-  expect(zoomedIn!.width).toBeGreaterThan(before!.width * 1.05);
-  expect(zoomedIn!.height).toBeGreaterThan(before!.height * 1.05);
+  assert(zoomedIn);
+  expect(zoomedIn.width).toBeGreaterThan(before.width * 1.05);
+  expect(zoomedIn.height).toBeGreaterThan(before.height * 1.05);
   expect(zoomedInLayout.width).toBeGreaterThan(beforeLayout.width * 1.05);
   expect(zoomedInLayout.height).toBeGreaterThan(beforeLayout.height * 1.05);
 
@@ -54,7 +57,9 @@ test("zoom scales rendered mermaid svg", async ({ page }) => {
     const followingBox = await following.boundingBox();
     expect(diagramBox).not.toBeNull();
     expect(followingBox).not.toBeNull();
-    expect(followingBox!.y).toBeGreaterThanOrEqual(diagramBox!.y + diagramBox!.height);
+    assert(diagramBox);
+    assert(followingBox);
+    expect(followingBox.y).toBeGreaterThanOrEqual(diagramBox.y + diagramBox.height);
   }
 
   await page.evaluate(() => {
@@ -80,6 +85,7 @@ test("zoom scales rendered mermaid svg", async ({ page }) => {
 
   const zoomedOut = await svg.boundingBox();
   expect(zoomedOut).not.toBeNull();
-  expect(zoomedOut!.width).toBeLessThan(before!.width * 0.95);
-  expect(zoomedOut!.height).toBeLessThan(before!.height * 0.95);
+  assert(zoomedOut);
+  expect(zoomedOut.width).toBeLessThan(before.width * 0.95);
+  expect(zoomedOut.height).toBeLessThan(before.height * 0.95);
 });

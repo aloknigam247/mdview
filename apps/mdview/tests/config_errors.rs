@@ -5,7 +5,11 @@
 //!   2. Exit with a non-zero status.
 //!   3. NOT spawn the GUI / detached child (no daemonize fork).
 
-use std::process::{Command, Stdio};
+mod support;
+
+use std::time::Duration;
+
+use tokio::process::Command;
 
 fn write_config(dir: &std::path::Path, body: &str) -> std::path::PathBuf {
     let cfg_dir = dir.join("mdview");
@@ -15,14 +19,15 @@ fn write_config(dir: &std::path::Path, body: &str) -> std::path::PathBuf {
     cfg_path
 }
 
-fn run_with_config(body: &str) -> (std::process::Output, std::path::PathBuf) {
+async fn run_with_config(body: &str) -> (std::process::Output, std::path::PathBuf) {
     let bin = env!("CARGO_BIN_EXE_mdview");
     let tmp = tempfile::tempdir().expect("tempdir");
     let cfg_path = write_config(tmp.path(), body);
     let fixture = std::env::current_dir()
         .unwrap()
         .join("../../fixtures/gfm.md");
-    let out = Command::new(bin)
+    let mut command = Command::new(bin);
+    command
         .arg(&fixture)
         .env("XDG_CONFIG_HOME", tmp.path())
         .env("HOME", tmp.path())
@@ -30,20 +35,18 @@ fn run_with_config(body: &str) -> (std::process::Output, std::path::PathBuf) {
         // Belt-and-braces: even if the child somehow tries to fork, this
         // env flag keeps it in-process so the parent exit status reflects
         // what main.rs decided. (preflight_config runs before daemonize.)
-        .env("MDVIEW_NO_DAEMONIZE", "1")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .output()
-        .expect("spawn mdview");
+        .env("MDVIEW_NO_DAEMONIZE", "1");
+    let (out, _) = support::run(command, Duration::from_secs(10))
+        .await
+        .expect("run mdview within its deadline");
     (out, cfg_path)
 }
 
-#[test]
-fn malformed_toml_hard_fails_with_line_and_message_on_stderr() {
+#[tokio::test]
+async fn malformed_toml_hard_fails_with_line_and_message_on_stderr() {
     // Bad TOML on line 3.
     let body = "[toc]\n#good comment\nthis is = not [valid toml\n";
-    let (out, cfg_path) = run_with_config(body);
+    let (out, cfg_path) = run_with_config(body).await;
 
     assert!(
         !out.status.success(),
@@ -80,11 +83,11 @@ fn malformed_toml_hard_fails_with_line_and_message_on_stderr() {
     assert!(line_no >= 1, "line number should be >= 1; got {line_no}");
 }
 
-#[test]
-fn validation_error_hard_fails_with_line_and_message_on_stderr() {
+#[tokio::test]
+async fn validation_error_hard_fails_with_line_and_message_on_stderr() {
     // [toc] levels = 9 is out of range (1..=6) — value-validation error.
     let body = "[toc]\nlevels = 9\n";
-    let (out, cfg_path) = run_with_config(body);
+    let (out, cfg_path) = run_with_config(body).await;
 
     assert!(
         !out.status.success(),

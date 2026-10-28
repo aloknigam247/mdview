@@ -1,17 +1,13 @@
-(function () {
-  "use strict";
-
+(() => {
   function themedLayout(userLayout) {
     var root = document.documentElement;
     var style = getComputedStyle(root);
     var bg =
-      style.getPropertyValue("--mdv-bg").trim() ||
-      style.getPropertyValue("background-color").trim() ||
-      "#ffffff";
+      style.getPropertyValue("--mdv-bg").trim() || style.getPropertyValue("background-color").trim() || "#ffffff";
     var base = { paper_bgcolor: bg, plot_bgcolor: bg };
     if (!userLayout) return base;
     for (var k in userLayout) {
-      if (Object.prototype.hasOwnProperty.call(userLayout, k)) {
+      if (Object.hasOwn(userLayout, k)) {
         base[k] = userLayout[k];
       }
     }
@@ -26,7 +22,7 @@
     var spec;
     try {
       spec = JSON.parse(raw);
-    } catch (e) {
+    } catch {
       div.textContent = "[plotly: invalid JSON]";
       div.dataset.mdvPlotlyMounted = "1";
       return;
@@ -46,7 +42,7 @@
 
   function mountAll() {
     var nodes = document.querySelectorAll(".plotly-chart");
-    for (var i = 0; i < nodes.length; i++) mount(nodes[i]);
+    for (let i = 0; i < nodes.length; i++) mount(nodes[i]);
   }
 
   if (document.readyState === "loading") {

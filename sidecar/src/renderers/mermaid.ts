@@ -20,7 +20,11 @@ async function loadMermaid(): Promise<MermaidLike> {
 export async function renderMermaid(source: string, opts?: Record<string, unknown>): Promise<string> {
   const m = await loadMermaid();
   if (opts && typeof opts === "object") {
-    try { m.initialize({ startOnLoad: false, securityLevel: "loose", ...opts }); } catch { /* ignore */ }
+    try {
+      m.initialize({ startOnLoad: false, securityLevel: "loose", ...opts });
+    } catch {
+      /* ignore */
+    }
   }
   const id = "mdview-mermaid-" + Math.random().toString(36).slice(2);
   const { svg } = await m.render(id, source);

@@ -1,0 +1,284 @@
+defaults:
+  run:
+    shell: pwsh
+
+env:
+  CARGO_TERM_COLOR: never
+  RUST_BACKTRACE: "1"
+
+jobs:
+  quality:
+    name: Product quality (Windows)
+    runs-on: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "26.12.1"
+          package-manager-cache: false
+
+      - id: bun
+        name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.3.12"
+
+      - id: rust
+        name: Select the repository Rust toolchain
+        run: |
+          rustup show active-toolchain
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = rustc --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          cargo clippy --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo fmt --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Cache Cargo state
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          key: cargo-${{ runner.os }}-${{ steps.rust.outputs.version }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          path: |
+            ~\.cargo\registry
+            ~\.cargo\git
+            target
+
+      - name: Cache Bun downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          key: bun-${{ runner.os }}-${{ steps.bun.outputs.bun-version }}-${{ hashFiles('**/bun.lock') }}
+          path: ~\.bun\install\cache
+
+      - name: Discover product packages
+        run: |
+          $manifests = @(git ls-files --cached --others --exclude-standard -- "*package.json")
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $directories = @($manifests |
+            Where-Object { $_ -notlike ".github/release/*" } |
+            ForEach-Object {
+              $directory = Split-Path -Parent $_.Replace("/", "\")
+              if ($directory) { $directory } else { "." }
+            } | Sort-Object -Unique)
+          if ($directories.Count -eq 0) { throw "No product packages were discovered." }
+          "MDVIEW_PACKAGES=$(ConvertTo-Json -InputObject $directories -Compress)" >> $env:GITHUB_ENV
+          "XDG_CONFIG_HOME=$env:RUNNER_TEMP\mdview-config-$([guid]::NewGuid())" >> $env:GITHUB_ENV
+
+      - name: Install locked product dependencies
+        run: |
+          foreach ($directory in (ConvertFrom-Json $env:MDVIEW_PACKAGES)) {
+            Push-Location $directory
+            try {
+              if (Test-Path -LiteralPath "bun.lock") {
+                bun install --frozen-lockfile
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              } elseif (Test-Path -LiteralPath "package-lock.json") {
+                npm ci --ignore-scripts --no-audit --no-fund
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              } else {
+                throw "Missing dependency lockfile in $directory."
+              }
+            } finally {
+              Pop-Location
+            }
+          }
+        timeout-minutes: 15
+
+      - name: Check Windows build and GUI prerequisites
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path -LiteralPath $vswhere)) { throw "Visual Studio discovery is unavailable." }
+          $visualStudio = & $vswhere -latest -products "*" `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or -not $visualStudio) { throw "MSVC build tools are missing." }
+          $kits = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows Kits\Installed Roots"
+          if (-not (Test-Path -LiteralPath (Join-Path $kits.KitsRoot10 "Lib"))) {
+            throw "Windows SDK libraries are missing."
+          }
+          function Test-WebView2 {
+            foreach ($root in @(
+              "$env:LOCALAPPDATA\Microsoft\EdgeWebView\Application",
+              "$env:ProgramFiles\Microsoft\EdgeWebView\Application",
+              "${env:ProgramFiles(x86)}\Microsoft\EdgeWebView\Application"
+            )) {
+              if (Test-Path -LiteralPath $root) {
+                foreach ($version in (Get-ChildItem -LiteralPath $root -Directory)) {
+                  if (Test-Path -LiteralPath (Join-Path $version.FullName "msedgewebview2.exe")) { return $true }
+                }
+              }
+            }
+            return $false
+          }
+          if (-not (Test-WebView2)) {
+            $installer = Join-Path $env:RUNNER_TEMP "webview2-$([guid]::NewGuid()).exe"
+            try {
+              Invoke-WebRequest "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $installer
+              $signature = Get-AuthenticodeSignature -LiteralPath $installer
+              if ($signature.Status -ne "Valid" -or $signature.SignerCertificate.Subject -notlike "*Microsoft*") {
+                throw "The WebView2 installer does not have a valid Microsoft signature."
+              }
+              $process = Start-Process -FilePath $installer -ArgumentList "/silent", "/install" -PassThru
+              if (-not $process.WaitForExit(300000)) {
+                $process.Kill($true)
+                throw "WebView2 installation timed out."
+              }
+              if ($process.ExitCode -ne 0) { throw "WebView2 installation failed with exit $($process.ExitCode)." }
+            } finally {
+              if (Test-Path -LiteralPath $installer) { Remove-Item -LiteralPath $installer }
+            }
+          }
+          if (-not (Test-WebView2)) { throw "WebView2 is unavailable after setup." }
+        timeout-minutes: 10
+
+      - name: Build webview bundle
+        run: |
+          bun run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        working-directory: apps\mdview\webview
+
+      - name: Check JavaScript and TypeScript formatting and lint
+        run: |
+          node .\node_modules\@biomejs\biome\bin\biome ci --error-on-warnings --assist-enabled=false .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Check TypeScript types
+        run: |
+          $checked = 0
+          foreach ($directory in (ConvertFrom-Json $env:MDVIEW_PACKAGES)) {
+            if (Test-Path -LiteralPath (Join-Path $directory "tsconfig.json")) {
+              Push-Location $directory
+              try {
+                node .\node_modules\typescript\bin\tsc --noEmit --pretty false
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                $checked++
+              } finally {
+                Pop-Location
+              }
+            }
+          }
+          if ($checked -eq 0) { throw "No TypeScript packages were checked." }
+
+      - name: Check Rust formatting
+        run: |
+          cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Check Rust lint
+        run: |
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build Rust workspace
+        run: |
+          cargo build --workspace --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run Rust workspace tests
+        run: |
+          cargo test --workspace --locked --no-fail-fast
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run each Rust package in isolation
+        run: |
+          $metadata = cargo metadata --locked --no-deps --format-version 1 | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $packages = @($metadata.packages |
+            Where-Object { $_.id -in $metadata.workspace_members } | Sort-Object name)
+          if ($packages.Count -eq 0) { throw "No workspace packages were discovered." }
+          foreach ($package in $packages) {
+            cargo test --locked --package $package.name
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Build the release application
+        run: |
+          cargo build --release --locked -p mdview
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run sidecar tests
+        run: |
+          bun test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        working-directory: sidecar
+
+      - name: Build the sidecar
+        run: |
+          bun run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        working-directory: sidecar
+
+      - name: Install matching Playwright Chromium
+        run: |
+          $installed = 0
+          foreach ($directory in (ConvertFrom-Json $env:MDVIEW_PACKAGES)) {
+            $cli = $null
+            $package = Get-Content -LiteralPath (Join-Path $directory "package.json") -Raw | ConvertFrom-Json
+            if ($package.devDependencies."@playwright/test" -or $package.dependencies."@playwright/test") {
+              $cli = ".\node_modules\@playwright\test\cli.js"
+            } elseif ($package.devDependencies.playwright -or $package.dependencies.playwright) {
+              $cli = ".\node_modules\playwright\cli.js"
+            }
+            if ($cli) {
+              Push-Location $directory
+              try {
+                node $cli install chromium
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                $installed++
+              } finally {
+                Pop-Location
+              }
+            }
+          }
+          if ($installed -eq 0) { throw "No Playwright installations were discovered." }
+        timeout-minutes: 10
+
+      - name: Run managed Playwright suites
+        run: |
+          $configs = @(git ls-files --cached --others --exclude-standard -- "*playwright*.config.ts")
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($configs.Count -eq 0) { throw "No Playwright configurations were discovered." }
+          foreach ($config in ($configs | Sort-Object)) {
+            $path = $config.Replace("/", "\")
+            Push-Location (Split-Path -Parent $path)
+            try {
+              node .\node_modules\@playwright\test\cli.js test --config (Split-Path -Leaf $path) `
+                --workers=1 --forbid-only --fail-on-flaky-tests --global-timeout=600000
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            } finally {
+              Pop-Location
+            }
+          }
+
+      - name: Run standalone browser harnesses
+        run: |
+          pwsh -NoProfile -File .\tests\run_standalone.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - if: always()
+        name: Retain test diagnostics
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          if-no-files-found: ignore
+          name: product-quality-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            **/artifacts/**
+            **/playwright-report/**
+            **/test-results/**
+          retention-days: 7
+    timeout-minutes: 90
+
+name: Product quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read

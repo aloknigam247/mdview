@@ -10,12 +10,8 @@ test("toc click resets horizontal scroll position", async ({ page }) => {
   await page.waitForLoadState("networkidle");
 
   // Without real horizontal overflow the assertions below would pass even unfixed.
-  const maxX = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-  expect(maxX, "fixture must overflow horizontally for this test to mean anything").toBeGreaterThan(
-    100,
-  );
+  const maxX = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(maxX, "fixture must overflow horizontally for this test to mean anything").toBeGreaterThan(100);
 
   // The TOC is emitted hidden by design and revealed only through the toggle.
   await page.evaluate(() => (window as unknown as { __mdvToggleToc: () => void }).__mdvToggleToc());

@@ -1,0 +1,8 @@
+apps/mdview/webview/*.mjs text eol=lf
+apps/mdview/webview/src/**/*.ts text eol=lf
+crates/**/mdv-*-init.js text eol=lf
+crates/**/tests/**/*.mjs text eol=lf
+crates/**/tests/**/*.ts text eol=lf
+sidecar/**/*.ts text eol=lf
+tests/**/*.mjs text eol=lf
+tests/**/*.ts text eol=lf

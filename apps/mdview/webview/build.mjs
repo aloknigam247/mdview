@@ -1,5 +1,5 @@
 import { build, context } from "esbuild";
-import { mkdirSync, copyFileSync, existsSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdirSync, copyFileSync, existsSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27,10 +27,7 @@ function copyStatic() {
     if (existsSync(indexSrc)) {
         copyFileSync(indexSrc, resolve(distDir, "index.html"));
     } else {
-        writeFileSync(
-            resolve(distDir, "index.html"),
-            "<!doctype html><meta charset=utf-8><title>mdview</title>"
-        );
+        writeFileSync(resolve(distDir, "index.html"), "<!doctype html><meta charset=utf-8><title>mdview</title>");
     }
 }
 

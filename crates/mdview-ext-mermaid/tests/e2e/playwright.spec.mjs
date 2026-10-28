@@ -1,12 +1,14 @@
 import { chromium } from "playwright";
 import { mkdirSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const crateDir = join(__dirname, "..", "..");
-const artifactsDir = join(crateDir, "artifacts");
+const artifactsDir = process.env.MDVIEW_ARTIFACTS_DIR
+  ? resolve(process.env.MDVIEW_ARTIFACTS_DIR)
+  : join(crateDir, "artifacts", "standalone", "mermaid");
 mkdirSync(artifactsDir, { recursive: true });
 
 const url = "http://127.0.0.1:7684/";

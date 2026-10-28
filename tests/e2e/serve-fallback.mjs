@@ -35,7 +35,8 @@ function escapeAttr(s) {
 }
 
 const spec = extractPlotlyBlock(md);
-const body = `<h1>Plotly fixture</h1><p>A simple scatter plot served via the mdview plotly extension.</p>` +
+const body =
+  `<h1>Plotly fixture</h1><p>A simple scatter plot served via the mdview plotly extension.</p>` +
   `<div class="plotly-chart" data-spec="${escapeAttr(spec)}"></div>`;
 
 const html =

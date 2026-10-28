@@ -1,6 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
 import { statSync } from "node:fs";
-import { join } from "node:path";
 
 test.describe.configure({ mode: "serial" });
 
@@ -30,13 +29,7 @@ const FIXTURES: FixtureExpectation[] = [
   {
     name: "everything",
     headings: ["Everything"],
-    selectors: [
-      ".drawio-viewer.mxgraph > svg",
-      ".katex",
-      ".mermaid svg",
-      ".plotly-chart .svg-container",
-      "pre code",
-    ],
+    selectors: [".drawio-viewer.mxgraph > svg", ".katex", ".mermaid svg", ".plotly-chart .svg-container", "pre code"],
   },
   {
     name: "gfm",
@@ -60,15 +53,14 @@ const FIXTURES: FixtureExpectation[] = [
   },
 ];
 
-async function screenshotAndAssertSize(page: Page, name: string) {
-  const path = join("artifacts", `${name}.png`);
+async function screenshotAndAssertSize(page: Page, name: string, path: string) {
   await page.screenshot({ path, fullPage: true });
   const size = statSync(path).size;
   expect(size, `${name} screenshot should be > 10 KB`).toBeGreaterThan(10 * 1024);
 }
 
 for (const fixture of FIXTURES) {
-  test(`fixture: ${fixture.name}`, async ({ page }) => {
+  test(`fixture: ${fixture.name}`, async ({ page }, testInfo) => {
     const response = await page.goto(`/fixtures/${fixture.name}.md`);
     expect(response?.ok(), `GET /fixtures/${fixture.name}.md should be 2xx`).toBeTruthy();
     await page.waitForLoadState("networkidle");
@@ -82,30 +74,32 @@ for (const fixture of FIXTURES) {
 
     if (fixture.selectors) {
       for (const selector of fixture.selectors) {
-        await expect(
-          page.locator(selector).first(),
-          `expected ${selector} on ${fixture.name}`,
-        ).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator(selector).first(), `expected ${selector} on ${fixture.name}`).toBeVisible({
+          timeout: 15_000,
+        });
       }
     }
 
     if (fixture.name === "drawio") {
-      const drawioState = await page.locator(".drawio-viewer.mxgraph").first().evaluate((element) => ({
-        config: element.getAttribute("data-mxgraph"),
-        viewerReady:
-          typeof (
-            window as unknown as {
-              GraphViewer?: { processElements?: unknown };
-            }
-          ).GraphViewer?.processElements === "function",
-      }));
+      const drawioState = await page
+        .locator(".drawio-viewer.mxgraph")
+        .first()
+        .evaluate((element) => ({
+          config: element.getAttribute("data-mxgraph"),
+          viewerReady:
+            typeof (
+              window as unknown as {
+                GraphViewer?: { processElements?: unknown };
+              }
+            ).GraphViewer?.processElements === "function",
+        }));
       const config = JSON.parse(drawioState.config ?? "null") as { xml?: string } | null;
 
       expect(drawioState.viewerReady, "draw.io viewer API should be available").toBe(true);
       expect(config?.xml, "draw.io viewer config should contain the source XML").toContain("<mxfile");
     }
 
-    await screenshotAndAssertSize(page, fixture.name);
+    await screenshotAndAssertSize(page, fixture.name, testInfo.outputPath(`${fixture.name}.png`));
   });
 }
 

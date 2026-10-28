@@ -32,9 +32,7 @@ async function installThemeBinding(page: Page): Promise<void> {
 async function readDiagramColors(page: Page) {
   return page.evaluate(() => ({
     drawio: document.querySelector(".mxgraph svg [fill]")?.getAttribute("fill") ?? null,
-    mermaid:
-      document.querySelector(".mermaid svg style")?.textContent?.match(/fill:([^;}]+)/)?.[1] ??
-      null,
+    mermaid: document.querySelector(".mermaid svg style")?.textContent?.match(/fill:([^;}]+)/)?.[1] ?? null,
     plotly: document.querySelector(".plotly-chart .main-svg .ygrid")?.getAttribute("style") ?? null,
   }));
 }

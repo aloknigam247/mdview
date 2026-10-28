@@ -888,7 +888,7 @@ mod tests {
         let mut cols = Vec::new();
         let mut col = 0usize;
         for g in line.graphemes(true) {
-            if g.chars().next() == Some(border) && g.chars().count() == 1 {
+            if g.starts_with(border) && g.chars().count() == 1 {
                 cols.push(col);
             }
             col += display_width_for_test(g);

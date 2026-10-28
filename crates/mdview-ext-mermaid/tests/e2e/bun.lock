@@ -1,0 +1,19 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "mdview-ext-mermaid-e2e",
+      "dependencies": {
+        "playwright": "1.59.1",
+      },
+    },
+  },
+  "packages": {
+    "fsevents": ["fsevents@2.3.2", "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fsevents/-/fsevents-2.3.2.tgz", { "os": "darwin" }, "sha1-ilJveLj99GI7cJ4Ll1xSwkwC/Ro="],
+
+    "playwright": ["playwright@1.59.1", "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/playwright/-/playwright-1.59.1.tgz", { "dependencies": { "playwright-core": "1.59.1" }, "optionalDependencies": { "fsevents": "2.3.2" }, "bin": { "playwright": "cli.js" } }, "sha1-97DKYWN64lJkzsNw32cbvh82iko="],
+
+    "playwright-core": ["playwright-core@1.59.1", "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/playwright-core/-/playwright-core-1.59.1.tgz", { "bin": { "playwright-core": "cli.js" } }, "sha1-2KKyi8uPK9CO89+TsCroPIEyRLI="],
+  }
+}

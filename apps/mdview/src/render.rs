@@ -339,10 +339,8 @@ fn resolve_to_mdview_url(url: &str, source_dir: Option<&Path>) -> Option<String>
     let raw = PathBuf::from(url);
     let abs: PathBuf = if raw.is_absolute() {
         raw
-    } else if let Some(dir) = source_dir {
-        dir.join(raw)
     } else {
-        return None;
+        source_dir?.join(raw)
     };
     let abs = std::fs::canonicalize(&abs).unwrap_or(abs);
     let s = abs.to_string_lossy();
@@ -2640,6 +2638,26 @@ mod tests {
         assert!(
             html.contains("    indented"),
             "expected tab expanded to 4 spaces in code block HTML"
+        );
+    }
+
+    #[test]
+    fn resolves_local_image_paths_with_optional_source_directory() {
+        let dir = tempfile::tempdir().expect("source directory");
+        let path = dir.path().join("image.png");
+        let expected = format!(
+            "{MDVIEW_PROTOCOL_BASE}{}",
+            urlencoding::encode(&path.to_string_lossy())
+        );
+
+        assert_eq!(resolve_to_mdview_url("image.png", None), None);
+        assert_eq!(
+            resolve_to_mdview_url("image.png", Some(dir.path())),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            resolve_to_mdview_url(&path.to_string_lossy(), None),
+            Some(expected)
         );
     }
 }

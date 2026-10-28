@@ -65,36 +65,23 @@ Keep commits focused; squash fixup commits before review.
 
 ## Required checks
 
-Run all of these locally before you push:
+Use the [product quality workflow](.github/workflows/ci.yml) as the complete checklist for tool versions,
+locked dependency installation, prerequisites, and required gates. Use a consistent Rust installation for
+Cargo, Clippy, rustc, rustdoc, and rustfmt.
 
-```sh
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+After prerequisite setup, these commands run local lint and browser checks from the repository root:
+
+```ps1
+bun run lint
+pwsh -NoProfile -File .\tests\e2e\scripts\run.ps1
+pwsh -NoProfile -File .\tests\run_standalone.ps1
+npm --prefix .\crates\mdview-render-html\tests\e2e-local test -- `
+    --workers=1 --forbid-only --fail-on-flaky-tests --global-timeout=600000
 ```
 
-For HTML-producing crates (`mdview-render-html`, `mdview-server`,
-`mdview-ext-*`, `apps/mdview`), also run the Playwright end-to-end suite:
-
-```sh
-# Unix / macOS / WSL
-./tests/e2e/scripts/run.sh
-
-# Windows (pwsh 7)
-pwsh -NoProfile -File ./tests/e2e/scripts/run.ps1
-```
-
-The script builds the release binary, starts it with `--serve-only`, runs
-`npx playwright test`, and tears everything down. Screenshots land in
-`tests/e2e/artifacts/`.
-
-For the Bun-compiled sidecar (`sidecar/`):
-
-```sh
-cd sidecar
-bun test
-bun build --compile ./src/index.ts --outfile ./mdview-sidecar
-```
+The browser launchers own their fixture servers; do not start servers manually or reuse occupied ports.
+Their output identifies diagnostic files. These convenience commands do not replace the workflow's Rust,
+sidecar, or TypeScript gates.
 
 ## Release automation
 

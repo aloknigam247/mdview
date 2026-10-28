@@ -1,4 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 const port = Number(process.env.MDVIEW_E2E_PORT ?? 7681);
@@ -25,7 +27,7 @@ export default defineConfig({
   // is a bare `playwright test`, so without this a stale binary (or a clean
   // checkout with none at all) would silently be what gets tested.
   webServer: {
-    command: `cargo run --release -p mdview -- --serve-only --port ${port} fixtures/everything.md`,
+    command: `cargo run --release --locked -p mdview -- --serve-only --port ${port} fixtures/everything.md`,
     cwd: repoRoot,
     url: baseURL,
     // Never reuse: a stray process on this port would both taint results and
@@ -34,6 +36,7 @@ export default defineConfig({
     timeout: 300_000,
     stdout: "pipe",
     stderr: "pipe",
+    env: { XDG_CONFIG_HOME: resolve(tmpdir(), `mdview-e2e-${randomUUID()}`) },
   },
   projects: [
     {

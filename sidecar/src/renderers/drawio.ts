@@ -31,7 +31,10 @@ function parseStyle(style: string): Record<string, string> {
   for (const part of style.split(";")) {
     if (!part) continue;
     const eq = part.indexOf("=");
-    if (eq < 0) { out[part] = "1"; continue; }
+    if (eq < 0) {
+      out[part] = "1";
+      continue;
+    }
     out[part.slice(0, eq)] = part.slice(eq + 1);
   }
   return out;
@@ -49,7 +52,7 @@ function escapeXml(s: string): string {
 function findRootMxCells(doc: Document): Element[] {
   const roots: Element[] = [];
   const all = doc.getElementsByTagName("mxCell");
-  for (let i = 0; i < all.length; i++) roots.push(all[i]!);
+  for (let i = 0; i < all.length; i++) roots.push(all[i]);
   return roots;
 }
 
@@ -145,8 +148,14 @@ export async function renderDrawio(source: string, _opts?: Record<string, unknow
   for (const c of cells) byId.set(c.id, c);
 
   const { w, h } = bounds(cells);
-  const vertices = cells.filter((c) => c.vertex).map(renderVertex).join("");
-  const edges = cells.filter((c) => c.edge).map((c) => renderEdge(c, byId)).join("");
+  const vertices = cells
+    .filter((c) => c.vertex)
+    .map(renderVertex)
+    .join("");
+  const edges = cells
+    .filter((c) => c.edge)
+    .map((c) => renderEdge(c, byId))
+    .join("");
 
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +

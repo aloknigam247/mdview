@@ -50,7 +50,11 @@ export async function renderPlotly(source: string, opts?: Record<string, unknown
     const svg = decodeURIComponent(payload);
     return svg;
   } finally {
-    try { p.purge(gd); } catch { /* ignore */ }
+    try {
+      p.purge(gd);
+    } catch {
+      /* ignore */
+    }
     gd.remove();
   }
 }

@@ -1,4 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
+import { resolve } from "node:path";
+
+const baseURL = "http://127.0.0.1:7681";
+const repoRoot = resolve(__dirname, "..", "..", "..", "..");
 
 export default defineConfig({
   testDir: ".",
@@ -8,9 +12,12 @@ export default defineConfig({
   retries: 0,
   reporter: [["list"]],
   use: {
-    baseURL: "http://127.0.0.1:7681",
+    actionTimeout: 15_000,
+    baseURL,
+    navigationTimeout: 30_000,
     screenshot: "only-on-failure",
-    trace: "off",
+    trace: "retain-on-failure",
+    video: "retain-on-failure",
   },
   projects: [
     {
@@ -18,4 +25,14 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
+  outputDir: "artifacts/test-results",
+  webServer: {
+    command: "cargo run --locked -p mdview-render-html --example render_html_serve",
+    cwd: repoRoot,
+    reuseExistingServer: false,
+    stderr: "pipe",
+    stdout: "pipe",
+    timeout: 300_000,
+    url: baseURL,
+  },
 });

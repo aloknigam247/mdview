@@ -1,4 +1,4 @@
-(function () {
+(() => {
   function run() {
     if (typeof window.mermaid === "undefined") {
       return;
