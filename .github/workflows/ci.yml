@@ -19,7 +19,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: "26.12.1"
+          node-version: "24.22.1"
           package-manager-cache: false
 
       - id: bun
