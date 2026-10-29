@@ -39,29 +39,32 @@ function installSvgShims(win: Record<string, unknown>): void {
     return approxTextWidth(txt, fs);
   };
 
-  proto.getCTM = function () {
-    return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
-  };
+  proto.getCTM = () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
 
-  proto.getScreenCTM = function () {
-    return {
-      a: 1, b: 0, c: 0, d: 1, e: 0, f: 0,
-      inverse() { return this; },
-      multiply(_: unknown) { return this; },
-    };
-  };
+  proto.getScreenCTM = () => ({
+    a: 1,
+    b: 0,
+    c: 0,
+    d: 1,
+    e: 0,
+    f: 0,
+    inverse() {
+      return this;
+    },
+    multiply(_: unknown) {
+      return this;
+    },
+  });
 
-  proto.createSVGMatrix = function () {
-    return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
-  };
+  proto.createSVGMatrix = () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
 
-  proto.createSVGPoint = function () {
-    return {
-      x: 0,
-      y: 0,
-      matrixTransform() { return { x: this.x, y: this.y }; },
-    };
-  };
+  proto.createSVGPoint = () => ({
+    x: 0,
+    y: 0,
+    matrixTransform() {
+      return { x: this.x, y: this.y };
+    },
+  });
 }
 
 function installCanvasShim(win: Record<string, unknown>): void {
@@ -122,20 +125,22 @@ function installCanvasShim(win: Record<string, unknown>): void {
     isPointInPath: () => false,
     isPointInStroke: () => false,
   };
-  proto.getContext = function (kind: string) {
+  proto.getContext = (kind: string) => {
     if (kind === "2d") return ctx2d;
     return null;
   };
-  proto.toDataURL = function () { return "data:image/png;base64,"; };
-  proto.toBlob = function (cb: (b: unknown) => void) { cb(null); };
+  proto.toDataURL = () => "data:image/png;base64,";
+  proto.toBlob = (cb: (b: unknown) => void) => {
+    cb(null);
+  };
 }
 
 export function getDom(): JSDOM {
   if (cached) return cached;
-  cached = new JSDOM(
-    "<!DOCTYPE html><html><head></head><body></body></html>",
-    { pretendToBeVisual: true, url: "http://localhost/" },
-  );
+  cached = new JSDOM("<!DOCTYPE html><html><head></head><body></body></html>", {
+    pretendToBeVisual: true,
+    url: "http://localhost/",
+  });
   const g = globalThis as Record<string, unknown>;
   const win = cached.window as unknown as Record<string, unknown>;
   installSvgShims(win);

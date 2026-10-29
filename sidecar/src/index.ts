@@ -10,9 +10,7 @@ type Command = {
   opts?: Record<string, unknown>;
 };
 
-type Response =
-  | { ok: true; svg: string }
-  | { ok: false; error: string };
+type Response = { ok: true; svg: string } | { ok: false; error: string };
 
 function writeLine(obj: Response): void {
   process.stdout.write(JSON.stringify(obj) + "\n");
@@ -67,11 +65,12 @@ async function main(): Promise<void> {
 
   stdin.on("data", (chunk: string) => {
     buffer += chunk;
-    let idx: number;
-    while ((idx = buffer.indexOf("\n")) >= 0) {
+    let idx = buffer.indexOf("\n");
+    while (idx >= 0) {
       const line = buffer.slice(0, idx);
       buffer = buffer.slice(idx + 1);
       chain = chain.then(() => processLine(line));
+      idx = buffer.indexOf("\n");
     }
   });
 
@@ -87,7 +86,7 @@ async function main(): Promise<void> {
   });
 }
 
-const isMain = import.meta.main ?? (import.meta.url === `file://${process.argv[1]}`);
+const isMain = import.meta.main ?? import.meta.url === `file://${process.argv[1]}`;
 if (isMain) {
   main().catch((err) => {
     writeLine({ ok: false, error: err instanceof Error ? err.message : String(err) });

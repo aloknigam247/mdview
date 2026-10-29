@@ -5,35 +5,47 @@ const MERMAID_TIMEOUT_MS = 30_000;
 const PLOTLY_TIMEOUT_MS = 30_000;
 
 describe("mermaid renderer", () => {
-  test("returns non-empty SVG for a simple graph", async () => {
-    const res = await dispatch({ kind: "mermaid", source: "graph TD; A-->B;" });
-    expect(res.ok).toBe(true);
-    if (res.ok) {
-      expect(res.svg.length).toBeGreaterThan(0);
-      expect(res.svg).toContain("<svg");
-      expect(res.svg).toContain("</svg>");
-    }
-  }, MERMAID_TIMEOUT_MS);
+  test(
+    "returns non-empty SVG for a simple graph",
+    async () => {
+      const res = await dispatch({ kind: "mermaid", source: "graph TD; A-->B;" });
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.svg.length).toBeGreaterThan(0);
+        expect(res.svg).toContain("<svg");
+        expect(res.svg).toContain("</svg>");
+      }
+    },
+    MERMAID_TIMEOUT_MS,
+  );
 
-  test("reports errors on invalid input", async () => {
-    const res = await dispatch({ kind: "mermaid", source: "!!not a mermaid diagram!!" });
-    expect(res.ok).toBe(false);
-  }, MERMAID_TIMEOUT_MS);
+  test(
+    "reports errors on invalid input",
+    async () => {
+      const res = await dispatch({ kind: "mermaid", source: "!!not a mermaid diagram!!" });
+      expect(res.ok).toBe(false);
+    },
+    MERMAID_TIMEOUT_MS,
+  );
 });
 
 describe("plotly renderer", () => {
-  test("renders a scatter spec to SVG", async () => {
-    const spec = JSON.stringify({
-      data: [{ x: [1, 2, 3, 4], y: [10, 15, 13, 17], type: "scatter" }],
-      layout: { title: { text: "demo" }, width: 320, height: 240 },
-    });
-    const res = await dispatch({ kind: "plotly", source: spec });
-    expect(res.ok).toBe(true);
-    if (res.ok) {
-      expect(res.svg.length).toBeGreaterThan(0);
-      expect(res.svg).toContain("<svg");
-    }
-  }, PLOTLY_TIMEOUT_MS);
+  test(
+    "renders a scatter spec to SVG",
+    async () => {
+      const spec = JSON.stringify({
+        data: [{ x: [1, 2, 3, 4], y: [10, 15, 13, 17], type: "scatter" }],
+        layout: { title: { text: "demo" }, width: 320, height: 240 },
+      });
+      const res = await dispatch({ kind: "plotly", source: spec });
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.svg.length).toBeGreaterThan(0);
+        expect(res.svg).toContain("<svg");
+      }
+    },
+    PLOTLY_TIMEOUT_MS,
+  );
 });
 
 describe("drawio renderer", () => {

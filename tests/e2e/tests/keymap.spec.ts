@@ -73,8 +73,7 @@ async function installKeymap(page: Page, bindings: Record<string, Chord>): Promi
   }, bindings);
 }
 
-const actionLog = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __mdvActions: string[] }).__mdvActions);
+const actionLog = (page: Page) => page.evaluate(() => (window as unknown as { __mdvActions: string[] }).__mdvActions);
 
 async function openFixture(page: Page): Promise<void> {
   const response = await page.goto("/fixtures/gfm.md");
@@ -133,9 +132,7 @@ test("duplicate exact chord fires first action only", async ({ page }) => {
 // independently of the dispatcher, so `m` ran two actions per press.
 
 const codemapVisible = (page: Page) =>
-  page.evaluate(
-    () => (window as unknown as { __mdvCodemapVisible: () => boolean }).__mdvCodemapVisible(),
-  );
+  page.evaluate(() => (window as unknown as { __mdvCodemapVisible: () => boolean }).__mdvCodemapVisible());
 
 test("m toggles codemap exactly once", async ({ page }) => {
   await openFixture(page);
@@ -195,9 +192,7 @@ test("'?' binding toggles toc when '?' is typed", async ({ page }) => {
   await expect(page.locator("#mdv-toc")).toHaveAttribute("aria-hidden", "false");
 });
 
-test("'?' binding matches shifted and unshifted events and rejects a different key", async ({
-  page,
-}) => {
+test("'?' binding matches shifted and unshifted events and rejects a different key", async ({ page }) => {
   await openFixture(page);
   await installKeymap(page, { "toggle-toc": QUESTION });
 

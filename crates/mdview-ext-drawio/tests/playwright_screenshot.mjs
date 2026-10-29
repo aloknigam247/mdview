@@ -6,6 +6,7 @@ import path from "node:path";
 import url from "node:url";
 import { chromium } from "playwright";
 
+let browser;
 const here = path.dirname(url.fileURLToPath(import.meta.url));
 const crateRoot = path.resolve(here, "..");
 const repoRoot = path.resolve(crateRoot, "../..");
@@ -42,10 +43,7 @@ function extractDrawio(md) {
 
 const blocks = extractDrawio(FIXTURE);
 const divs = blocks
-  .map(
-    (b) =>
-      `<div class="drawio-viewer" data-xml-b64="${Buffer.from(b.body).toString("base64")}"></div>`,
-  )
+  .map((b) => `<div class="drawio-viewer" data-xml-b64="${Buffer.from(b.body).toString("base64")}"></div>`)
   .join("\n");
 
 const html = `<!doctype html><html><head><meta charset="utf-8"><title>drawio demo</title>
@@ -54,19 +52,26 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><title>drawio dem
 </style></head><body><h1>drawio fixture</h1>${divs}
 <script>${VIEWER}</script><script>${INIT}</script></body></html>`;
 
-const server = http.createServer((req, res) => {
+const server = http.createServer((_req, res) => {
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(html);
 });
-await new Promise((resolve) => server.listen(7685, "127.0.0.1", resolve));
-console.log("serving on http://127.0.0.1:7685");
-
 try {
-  const browser = await chromium.launch();
+  await new Promise((done, reject) => {
+    server.once("error", reject);
+    server.listen(7685, "127.0.0.1", () => {
+      server.off("error", reject);
+      done();
+    });
+  });
+  console.log("serving on http://127.0.0.1:7685");
+  browser = await chromium.launch();
   const page = await browser.newPage();
   await page.goto("http://127.0.0.1:7685/");
   await page.waitForSelector(".drawio-viewer svg, .drawio-viewer iframe", { timeout: 10000 });
-  const outDir = path.join(repoRoot, "artifacts");
+  const outDir = process.env.MDVIEW_ARTIFACTS_DIR
+    ? path.resolve(process.env.MDVIEW_ARTIFACTS_DIR)
+    : path.join(repoRoot, "artifacts", "standalone", "drawio");
   fs.mkdirSync(outDir, { recursive: true });
   const outPath = path.join(outDir, "unit-09.png");
   await page.screenshot({ path: outPath, fullPage: true });
@@ -75,7 +80,15 @@ try {
   if (size < 10 * 1024) {
     throw new Error(`screenshot too small: ${size} bytes`);
   }
-  await browser.close();
 } finally {
-  server.close();
+  try {
+    await browser?.close();
+  } finally {
+    if (server.listening) {
+      await new Promise((done, reject) => {
+        server.close((error) => (error ? reject(error) : done()));
+        server.closeAllConnections();
+      });
+    }
+  }
 }

@@ -8,16 +8,21 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const outDir = resolve(__dirname, "..", "artifacts");
+const outDir = process.env.MDVIEW_ARTIFACTS_DIR
+  ? resolve(process.env.MDVIEW_ARTIFACTS_DIR)
+  : resolve(__dirname, "..", "artifacts", "standalone", "math");
 mkdirSync(outDir, { recursive: true });
 const outPath = resolve(outDir, "unit-07.png");
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 960, height: 720 } });
-await page.goto("http://127.0.0.1:7683/", { waitUntil: "networkidle" });
-await page.waitForSelector(".katex", { state: "visible", timeout: 10_000 });
-await page.screenshot({ path: outPath, fullPage: true });
-await browser.close();
+try {
+  const page = await browser.newPage({ viewport: { width: 960, height: 720 } });
+  await page.goto("http://127.0.0.1:7683/", { waitUntil: "networkidle" });
+  await page.waitForSelector(".katex", { state: "visible", timeout: 10_000 });
+  await page.screenshot({ path: outPath, fullPage: true });
+} finally {
+  await browser.close();
+}
 
 const size = statSync(outPath).size;
 if (size <= 10_240) {

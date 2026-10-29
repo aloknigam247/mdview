@@ -5,13 +5,16 @@
 
 import { chromium } from "playwright";
 import { createServer } from "node:http";
-import { readFileSync, statSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, statSync, mkdirSync } from "node:fs";
 import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+let browser;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dist = resolve(__dirname, "dist");
-const artifactsDir = resolve(__dirname, "../../../artifacts");
+const artifactsDir = process.env.MDVIEW_ARTIFACTS_DIR
+    ? resolve(process.env.MDVIEW_ARTIFACTS_DIR)
+    : resolve(__dirname, "../../../artifacts/standalone/webview");
 mkdirSync(artifactsDir, { recursive: true });
 const outPath = join(artifactsDir, "unit-15.png");
 
@@ -39,9 +42,6 @@ const server = createServer((req, res) => {
 });
 
 const port = 7681;
-await new Promise((r) => server.listen(port, "127.0.0.1", r));
-console.log("[unit-15] static server listening on", port);
-
 const sampleHtml = `
 <h1>mdview — Unit 15 smoke screenshot</h1>
 <p>The Tauri webview client bundle is loaded and renders this sample HTML
@@ -60,40 +60,46 @@ payload. Rounded corners come from the inline theme.</p>
 </table>
 `;
 
-const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+try {
+    const errors = [];
+    await new Promise((done, reject) => {
+        server.once("error", reject);
+        server.listen(port, "127.0.0.1", () => {
+            server.off("error", reject);
+            done();
+        });
+    });
+    console.log("[unit-15] static server listening on", port);
+    browser = await chromium.launch();
+    const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+    page.on("pageerror", (e) => errors.push(String(e)));
 
-let errors = [];
-page.on("pageerror", (e) => errors.push(String(e)));
+    // No WebSocket endpoint exists in this static fixture.
+    await page.goto(`http://127.0.0.1:${port}/`);
+    await page.waitForLoadState("domcontentloaded");
+    await page.evaluate((html) => {
+        const el = document.getElementById("mdv-content");
+        if (el) el.innerHTML = html;
+    }, sampleHtml);
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: outPath, fullPage: true });
 
-// Navigate and let the client bundle boot. The WS connection will fail
-// (no server endpoint) but the page content we inject via DOM remains.
-await page.goto(`http://127.0.0.1:${port}/`);
-await page.waitForLoadState("domcontentloaded");
-
-// Inject the sample content directly into #mdv-content — this exercises the
-// same DOM surface that `apply({op:"full", html: ...})` would populate.
-await page.evaluate((html) => {
-    const el = document.getElementById("mdv-content");
-    if (el) el.innerHTML = html;
-}, sampleHtml);
-
-await page.waitForTimeout(500);
-
-await page.screenshot({ path: outPath, fullPage: true });
-
-const size = statSync(outPath).size;
-console.log(`[unit-15] screenshot ${outPath} (${size} bytes)`);
-if (size <= 10 * 1024) {
-    console.error(`[unit-15] FAIL: screenshot must be >10 KB (got ${size})`);
-    await browser.close();
-    server.close();
-    process.exit(1);
+    const size = statSync(outPath).size;
+    console.log(`[unit-15] screenshot ${outPath} (${size} bytes)`);
+    if (size <= 10 * 1024) {
+        throw new Error(`[unit-15] FAIL: screenshot must be >10 KB (got ${size})`);
+    }
+    if (errors.length) console.warn("[unit-15] page errors (non-fatal):", errors);
+} finally {
+    try {
+        await browser?.close();
+    } finally {
+        if (server.listening) {
+            await new Promise((done, reject) => {
+                server.close((error) => (error ? reject(error) : done()));
+                server.closeAllConnections();
+            });
+        }
+    }
 }
-if (errors.length) {
-    console.warn("[unit-15] page errors (non-fatal):", errors);
-}
-
-await browser.close();
-server.close();
 console.log("[unit-15] OK");

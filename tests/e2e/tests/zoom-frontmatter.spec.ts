@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import assert from "node:assert/strict";
 
 test("ctrl+wheel zoom scales the frontmatter hero card like body text", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -19,22 +20,19 @@ test("ctrl+wheel zoom scales the frontmatter hero card like body text", async ({
   const bodyBefore = await fontSize(bodyProbe);
   const boxBefore = await title.boundingBox();
   expect(boxBefore).not.toBeNull();
+  assert(boxBefore);
 
   // Five ctrl+wheel-up steps: --mdv-zoom 1.0 -> 1.5 (0.1 per step).
   for (let i = 0; i < 5; i += 1) {
     await page.evaluate(() =>
-      window.dispatchEvent(
-        new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -100 }),
-      ),
+      window.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -100 })),
     );
     await page.waitForTimeout(120);
   }
 
   await expect
     .poll(async () =>
-      page.evaluate(() =>
-        getComputedStyle(document.documentElement).getPropertyValue("--mdv-zoom").trim(),
-      ),
+      page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--mdv-zoom").trim()),
     )
     .toBe("1.5");
 
@@ -42,6 +40,7 @@ test("ctrl+wheel zoom scales the frontmatter hero card like body text", async ({
   const bodyAfter = await fontSize(bodyProbe);
   const boxAfter = await title.boundingBox();
   expect(boxAfter).not.toBeNull();
+  assert(boxAfter);
 
   const bodyRatio = bodyAfter / bodyBefore;
   const titleRatio = titleAfter / titleBefore;
@@ -50,22 +49,18 @@ test("ctrl+wheel zoom scales the frontmatter hero card like body text", async ({
   // The card title must grow by ~the same ratio as body text, not stay fixed.
   expect(titleRatio).toBeGreaterThanOrEqual(bodyRatio * 0.95);
   expect(titleRatio).toBeLessThanOrEqual(bodyRatio * 1.05);
-  expect(boxAfter!.height).toBeGreaterThan(boxBefore!.height * 1.3);
+  expect(boxAfter.height).toBeGreaterThan(boxBefore.height * 1.3);
 
   // Cycle back out; the card must shrink consistently with body text.
   for (let i = 0; i < 5; i += 1) {
     await page.evaluate(() =>
-      window.dispatchEvent(
-        new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: 100 }),
-      ),
+      window.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: 100 })),
     );
     await page.waitForTimeout(120);
   }
   await expect
     .poll(async () =>
-      page.evaluate(() =>
-        getComputedStyle(document.documentElement).getPropertyValue("--mdv-zoom").trim(),
-      ),
+      page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--mdv-zoom").trim()),
     )
     .toBe("1.0");
   await expect.poll(async () => fontSize(title)).toBeLessThan(titleBefore * 1.05);

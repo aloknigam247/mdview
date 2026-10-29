@@ -1,0 +1,12 @@
+{
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "playwright": "1.59.1"
+  },
+  "name": "mdview-quality",
+  "private": true,
+  "scripts": {
+    "lint": "biome ci --error-on-warnings --assist-enabled=false .",
+    "test:standalone": "pwsh -NoProfile -File tests\\run_standalone.ps1"
+  }
+}

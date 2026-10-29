@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import assert from "node:assert/strict";
 
 test("ctrl+wheel zoom scales plotly and drawio crisply via geometry", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -19,31 +20,33 @@ test("ctrl+wheel zoom scales plotly and drawio crisply via geometry", async ({ p
   const beforeDrawio = await drawioSvg.boundingBox();
   expect(beforePlotlyAttr).toBeGreaterThan(0);
   expect(beforeDrawio).not.toBeNull();
+  assert(beforeDrawio);
 
   // roots must never be transform-scaled (blurry); geometry drives the size
   const transforms = () =>
-    page.evaluate(() => ({
-      plotly: getComputedStyle(document.querySelector(".plotly-chart")!).transform,
-      drawio: getComputedStyle(document.querySelector(".mxgraph")!).transform,
-    }));
+    page.evaluate(() => {
+      const drawioElement = document.querySelector(".mxgraph");
+      const plotlyElement = document.querySelector(".plotly-chart");
+      if (!drawioElement || !plotlyElement) throw new Error("Diagram elements are missing");
+      return {
+        plotly: getComputedStyle(plotlyElement).transform,
+        drawio: getComputedStyle(drawioElement).transform,
+      };
+    });
   const beforeTransforms = await transforms();
   expect(beforeTransforms.plotly).toBe("none");
   expect(beforeTransforms.drawio).toBe("none");
 
   for (let i = 0; i < 3; i += 1) {
     await page.evaluate(() =>
-      window.dispatchEvent(
-        new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -100 }),
-      ),
+      window.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -100 })),
     );
     await page.waitForTimeout(150);
   }
 
   await expect
     .poll(async () =>
-      page.evaluate(() =>
-        getComputedStyle(document.documentElement).getPropertyValue("--mdv-zoom").trim(),
-      ),
+      page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--mdv-zoom").trim()),
     )
     .toBe("1.3");
 
@@ -52,8 +55,9 @@ test("ctrl+wheel zoom scales plotly and drawio crisply via geometry", async ({ p
 
   const zoomedDrawio = await drawioSvg.boundingBox();
   expect(zoomedDrawio).not.toBeNull();
-  expect(zoomedDrawio!.width).toBeGreaterThan(beforeDrawio!.width * 1.2);
-  expect(zoomedDrawio!.height).toBeGreaterThan(beforeDrawio!.height * 1.2);
+  assert(zoomedDrawio);
+  expect(zoomedDrawio.width).toBeGreaterThan(beforeDrawio.width * 1.2);
+  expect(zoomedDrawio.height).toBeGreaterThan(beforeDrawio.height * 1.2);
 
   const afterTransforms = await transforms();
   expect(afterTransforms.plotly).toBe("none");
@@ -62,17 +66,13 @@ test("ctrl+wheel zoom scales plotly and drawio crisply via geometry", async ({ p
   // cycle back out to base and confirm plotly re-lays out down again
   for (let i = 0; i < 3; i += 1) {
     await page.evaluate(() =>
-      window.dispatchEvent(
-        new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: 100 }),
-      ),
+      window.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: 100 })),
     );
     await page.waitForTimeout(150);
   }
   await expect
     .poll(async () =>
-      page.evaluate(() =>
-        getComputedStyle(document.documentElement).getPropertyValue("--mdv-zoom").trim(),
-      ),
+      page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--mdv-zoom").trim()),
     )
     .toBe("1.0");
   await expect.poll(plotlyWidthAttr).toBeLessThan(beforePlotlyAttr * 1.05);

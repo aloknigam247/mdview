@@ -7,7 +7,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const url = process.env.MDVIEW_URL ?? "http://127.0.0.1:7682/";
 const outDir = process.env.MDVIEW_ARTIFACTS_DIR
   ? resolve(process.env.MDVIEW_ARTIFACTS_DIR)
-  : resolve(here, "../../crates/mdview-ext-highlight/artifacts");
+  : resolve(here, "../../crates/mdview-ext-highlight/artifacts/standalone/highlight");
 const outFile = resolve(outDir, "unit-06.png");
 
 mkdirSync(outDir, { recursive: true });
