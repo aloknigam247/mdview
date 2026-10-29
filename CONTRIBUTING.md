@@ -80,6 +80,7 @@ npm --prefix .\crates\mdview-render-html\tests\e2e-local test -- `
 ```
 
 The browser launchers own their fixture servers; do not start servers manually or reuse occupied ports.
+Run Cargo commands and fixed-port browser suites sequentially within a local checkout; CI uses separate runners.
 Their output identifies diagnostic files. These convenience commands do not replace the workflow's Rust,
 sidecar, or TypeScript gates.
 
