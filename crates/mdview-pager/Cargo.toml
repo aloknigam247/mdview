@@ -7,6 +7,7 @@ description = "ratatui + crossterm pager for mdview terminal output"
 license = "MIT"
 
 [dependencies]
+ansitok = "=0.3.0"
 crossterm = "0.28"
 dirs = "5"
 mdview-config = { path = "../mdview-config" }

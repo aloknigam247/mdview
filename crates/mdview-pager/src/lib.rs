@@ -4,11 +4,12 @@
 //!
 //! Consumes a stream of [`TermChunks`] on a channel and renders them in an
 //! alt-screen pager with vim-flavoured keybinds, incremental search and an
-//! optional follow-mode. ANSI escape sequences already baked into the chunks
-//! are passed through to the terminal; sixel chunks are written directly to
-//! stdout at the correct cell coordinates (bypassing ratatui's cell grid).
+//! optional follow-mode. ANSI colors and modifiers baked into the chunks
+//! are decoded into styled lines when content changes; sixel chunks are written
+//! directly to stdout at the correct cell coordinates (bypassing ratatui's cell grid).
 
 pub mod _stubs;
+mod ansi;
 pub mod keymap;
 pub mod search;
 
@@ -32,10 +33,13 @@ use ratatui::Terminal;
 
 pub use _stubs::{StyleSpec, TermChunk, TermChunks, Theme};
 use mdview_config::ConfigError;
+use mdview_render_terminal::TermChunksExt;
 use search::{Match, SearchIndex};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PagerError {
+    #[error("invalid ANSI SGR sequence: {0:?}")]
+    Ansi(String),
     #[error("io: {0}")]
     Io(#[from] io::Error),
     #[error("keymap: {0}")]
@@ -102,6 +106,7 @@ pub struct Pager {
     errors: Vec<ConfigError>,
     banner_dismissed: bool,
     theme_slot: ThemeSlot,
+    rendered_lines: Vec<Line<'static>>,
 }
 
 impl Pager {
@@ -122,6 +127,7 @@ impl Pager {
             errors: Vec::new(),
             banner_dismissed: false,
             theme_slot: ThemeSlot::Dark,
+            rendered_lines: Vec::new(),
         }
     }
 
@@ -153,16 +159,23 @@ impl Pager {
         self.banner_dismissed = true;
     }
 
-    /// Replace the current scrollback and rebuild the search index.
-    pub fn set_chunks(&mut self, chunks: TermChunks) {
-        self.index = SearchIndex::build(&chunks);
+    /// Replace the scrollback and rebuild its styled lines and plaintext search index.
+    /// Invalid SGR leaves the current scrollback unchanged.
+    pub fn set_chunks(&mut self, chunks: TermChunks) -> Result<(), PagerError> {
+        let rendered_lines = ansi::lines(&chunks.to_ansi())?;
+        let index = SearchIndex {
+            lines: rendered_lines.iter().map(ToString::to_string).collect(),
+        };
+        self.index = index;
         self.chunks = chunks;
+        self.rendered_lines = rendered_lines;
         if !self.query.is_empty() {
             self.matches = self.index.search(&self.query);
         }
         if self.follow {
             self.scroll_to_bottom();
         }
+        Ok(())
     }
 
     pub fn total_lines(&self) -> usize {
@@ -301,7 +314,7 @@ fn event_loop<B: ratatui::backend::Backend + io::Write>(
 ) -> Result<(), PagerError> {
     loop {
         match rx.try_recv() {
-            Ok(chunks) => pager.set_chunks(chunks),
+            Ok(chunks) => pager.set_chunks(chunks)?,
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => {}
         }
@@ -430,14 +443,21 @@ struct AnsiView<'a> {
 impl<'a> Widget for AnsiView<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let _ = self.theme;
-        let lines: Vec<Line<'_>> = self
+        let lines: Vec<_> = self
             .pager
-            .index
-            .lines
+            .rendered_lines
             .iter()
             .skip(self.pager.scroll)
-            .take(area.height as usize)
-            .map(|l| Line::from(l.clone()))
+            .take(usize::from(area.height))
+            .map(|cached| Line {
+                alignment: cached.alignment,
+                spans: cached
+                    .spans
+                    .iter()
+                    .map(|span| Span::styled(span.content.as_ref(), span.style))
+                    .collect(),
+                style: cached.style,
+            })
             .collect();
         Paragraph::new(lines).render(area, buf);
     }
@@ -529,6 +549,176 @@ mod tests {
         vec![TermChunk::plain(s)]
     }
 
+    fn render_pager(pager: &Pager, width: u16, height: u16) -> Buffer {
+        let area = Rect::new(0, 0, width, height);
+        let mut buffer = Buffer::empty(area);
+        let theme = mdview_theme::find("catppuccin-mocha").unwrap();
+        AnsiView { pager, theme }.render(area, &mut buffer);
+        buffer
+    }
+
+    #[test]
+    fn ansi_chunk_styles_and_boundaries() {
+        let chunks = vec![
+            TermChunk::plain("\x1b[38;2;108;"),
+            TermChunk::plain("124;255mA"),
+            TermChunk::plain("\nB\x1b[0m"),
+            TermChunk::new("C", StyleSpec::fg("#6b7280").with_bold()),
+        ];
+        let mut pager = Pager::new(String::new());
+        pager.set_chunks(chunks).unwrap();
+        let buffer = render_pager(&pager, 10, 2);
+        assert_eq!(pager.index.lines, ["A", "BC"]);
+        assert_eq!(buffer[(0, 0)].fg, Color::Rgb(108, 124, 255));
+        assert_eq!(buffer[(0, 1)].fg, Color::Rgb(108, 124, 255));
+        assert_eq!(buffer[(1, 1)].fg, Color::Rgb(107, 114, 128));
+        assert!(buffer[(1, 1)].modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn ansi_invalid_sgr_preserves_previous_chunks() {
+        let original = "\x1b[31mold\nkept";
+        let mut pager = Pager::new(String::new());
+        pager.set_chunks(chunks_from(original)).unwrap();
+        pager.set_viewport(1);
+        pager.scroll_to_bottom();
+        let before = render_pager(&pager, 10, 1);
+        let error = pager
+            .set_chunks(chunks_from("new\x1b[38;2;999;0;0m"))
+            .unwrap_err();
+        assert!(matches!(error, PagerError::Ansi(_)));
+        assert!(!error.to_string().contains('\x1b'));
+        assert_eq!(pager.chunks[0].text, original);
+        assert_eq!(pager.index.lines, ["old", "kept"]);
+        assert_eq!(pager.scroll(), 1);
+        assert_eq!(render_pager(&pager, 10, 1), before);
+    }
+
+    #[test]
+    fn ansi_view_clips_wide_text() {
+        let mut pager = Pager::new(String::new());
+        pager
+            .set_chunks(chunks_from("\x1b[31mab中\x1b[32mc tail"))
+            .unwrap();
+        let buffer = render_pager(&pager, 3, 1);
+        assert_eq!(buffer[(0, 0)].symbol(), "a");
+        assert_eq!(buffer[(1, 0)].symbol(), "b");
+        assert_eq!(buffer[(2, 0)].symbol(), " ");
+        assert_eq!(buffer[(0, 0)].fg, Color::Red);
+        assert!(render_pager(&pager, 0, 1).content.is_empty());
+        assert!(render_pager(&pager, 1, 0).content.is_empty());
+    }
+
+    #[test]
+    fn ansi_view_preserves_colors() {
+        let mut pager = Pager::new(String::new());
+        let quote = format!(
+            "\x1b[48;2;240;242;255m\x1b[38;2;108;124;255m\u{258e} \
+             \x1b[38;2;107;114;128mquoted line{}\x1b[0m\noutside",
+            " ".repeat(47)
+        );
+        pager.set_chunks(chunks_from(&quote)).unwrap();
+        let buffer = render_pager(&pager, 80, 2);
+        for x in 0..60 {
+            assert_eq!(buffer[(x, 0)].bg, Color::Rgb(240, 242, 255), "column {x}");
+        }
+        for x in 60..80 {
+            assert_eq!(buffer[(x, 0)].bg, Color::Reset, "column {x}");
+        }
+        assert_eq!(buffer[(0, 0)].fg, Color::Rgb(108, 124, 255));
+        assert_eq!(buffer[(2, 0)].fg, Color::Rgb(107, 114, 128));
+        assert_eq!(buffer[(59, 0)].fg, Color::Rgb(107, 114, 128));
+        assert_eq!(buffer[(0, 1)].symbol(), "o");
+        assert_eq!(buffer[(0, 1)].bg, Color::Reset);
+        assert_eq!(buffer[(0, 1)].fg, Color::Reset);
+    }
+
+    #[test]
+    fn ansi_view_preserves_inline_styles() {
+        let input = "\x1b[48;2;240;242;255m\x1b[38;2;107;114;128m\
+                     a\x1b[1mb\x1b[22mc\x1b[3md\x1b[23me\x1b[4mf\x1b[24mg\
+                     \x1b[7mh\x1b[27mi\x1b[0m";
+        let mut pager = Pager::new(String::new());
+        pager.set_chunks(chunks_from(input)).unwrap();
+        let buffer = render_pager(&pager, 20, 1);
+        for (x, ch) in (0u16..).zip("abcdefghi".chars()) {
+            assert_eq!(buffer[(x, 0)].symbol(), ch.to_string());
+            assert_eq!(buffer[(x, 0)].bg, Color::Rgb(240, 242, 255), "column {x}");
+        }
+        for (x, modifier) in [
+            (1, Modifier::BOLD),
+            (3, Modifier::ITALIC),
+            (5, Modifier::UNDERLINED),
+            (7, Modifier::REVERSED),
+        ] {
+            assert!(buffer[(x, 0)].modifier.contains(modifier), "column {x}");
+            assert!(
+                !buffer[(x + 1, 0)].modifier.contains(modifier),
+                "column {}",
+                x + 1
+            );
+        }
+    }
+
+    #[test]
+    fn ansi_view_preserves_unicode_panel_width() {
+        let cases = [
+            ("e\u{301}", 57),
+            ("\u{2764}\u{fe0f}", 56),
+            ("\u{4e2d}", 56),
+            (
+                "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f466}",
+                56,
+            ),
+        ];
+        for (text, padding) in cases {
+            let mut pager = Pager::new(String::new());
+            let quote = format!(
+                "\x1b[48;2;240;242;255m\u{258e} {text}{}\x1b[0m",
+                " ".repeat(padding)
+            );
+            pager.set_chunks(chunks_from(&quote)).unwrap();
+            let buffer = render_pager(&pager, 80, 1);
+            assert_eq!(buffer[(2, 0)].symbol(), text);
+            assert_eq!(buffer[(59, 0)].bg, Color::Rgb(240, 242, 255), "{text:?}");
+            assert_eq!(buffer[(60, 0)].bg, Color::Reset, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn ansi_view_scrolls_and_refreshes() {
+        let mut pager = Pager::new(String::new());
+        pager
+            .set_chunks(chunks_from("\x1b[31malpha\n\x1b[32m中 beta\n"))
+            .unwrap();
+        pager.set_viewport(1);
+        pager.query = "beta".to_owned();
+        pager.commit_search();
+        let buffer = render_pager(&pager, 20, 1);
+        assert_eq!(pager.index.lines, ["alpha", "中 beta"]);
+        assert_eq!(
+            pager.matches,
+            [Match {
+                col: "中 ".len(),
+                len: "beta".len(),
+                line: 1
+            }]
+        );
+        assert_eq!(pager.scroll(), 1);
+        assert_eq!(buffer[(0, 0)].symbol(), "中");
+        assert_eq!(buffer[(0, 0)].fg, Color::Green);
+
+        pager
+            .set_chunks(chunks_from("plain\n\u{258e} literal marker\n"))
+            .unwrap();
+        let buffer = render_pager(&pager, 20, 1);
+        assert_eq!(buffer[(0, 0)].symbol(), "\u{258e}");
+        assert_eq!(buffer[(0, 0)].bg, Color::Reset);
+        assert_eq!(buffer[(0, 0)].fg, Color::Reset);
+        assert!(pager.matches.is_empty());
+        assert_eq!(pager.total_lines(), 2);
+    }
+
     #[test]
     fn keymap_defaults_contains_core_bindings() {
         let km = keymap::Keymap::defaults();
@@ -598,7 +788,7 @@ mod tests {
         for i in 0..20 {
             text.push_str(&format!("line {i}\n"));
         }
-        pager.set_chunks(chunks_from(&text));
+        pager.set_chunks(chunks_from(&text)).unwrap();
         // 21 lines total (trailing empty), viewport 5 → scroll = 16.
         assert_eq!(pager.total_lines(), 20);
         assert_eq!(pager.scroll(), 15);
@@ -609,7 +799,7 @@ mod tests {
         let mut pager = Pager::new("a.md".into());
         pager.set_viewport(5);
         let text: String = (0..20).map(|i| format!("l{i}\n")).collect();
-        pager.set_chunks(chunks_from(&text));
+        pager.set_chunks(chunks_from(&text)).unwrap();
         assert_eq!(pager.scroll(), 0);
     }
 
@@ -618,7 +808,7 @@ mod tests {
         let mut pager = Pager::new("a.md".into());
         pager.set_viewport(4);
         let text: String = (0..10).map(|i| format!("l{i}\n")).collect();
-        pager.set_chunks(chunks_from(&text));
+        pager.set_chunks(chunks_from(&text)).unwrap();
         for _ in 0..20 {
             pager.apply(Action::PageDown);
         }
