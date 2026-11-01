@@ -1,26 +1,75 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use comrak::nodes::{AstNode, ListType, NodeValue, TableAlignment};
 use comrak::Arena;
 use mdview_core::{parse, Registry, RenderCtx, TermChunks, TerminalCaps, Theme};
 use mdview_ext_highlight::Highlight;
 use mdview_pager::search::strip_ansi;
+use mdview_render_terminal::color::parse_hex;
 use std::path::Path;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::builtins::builtin_extensions;
 
+#[derive(Debug)]
+struct QuotePalette {
+    background: String,
+    foreground: String,
+    marker: String,
+}
+
+impl QuotePalette {
+    fn new(theme: &Theme) -> Result<Self> {
+        let blend =
+            |accent: u8, background: u8| (u16::from(accent) + 9 * u16::from(background) + 5) / 10;
+        let accent = quote_rgb(theme, "accent")?;
+        let background = quote_rgb(theme, "bg")?;
+        let foreground = quote_rgb(theme, "muted")?;
+        Ok(Self {
+            background: format!(
+                "\x1b[48;2;{};{};{}m",
+                blend(accent.0, background.0),
+                blend(accent.1, background.1),
+                blend(accent.2, background.2)
+            ),
+            foreground: format!(
+                "\x1b[38;2;{};{};{}m",
+                foreground.0, foreground.1, foreground.2
+            ),
+            marker: format!("\x1b[38;2;{};{};{}m", accent.0, accent.1, accent.2),
+        })
+    }
+}
+
+fn quote_rgb(theme: &Theme, key: &str) -> Result<(u8, u8, u8)> {
+    let value = theme
+        .color(key)
+        .with_context(|| format!("theme {:?} is missing color {key:?}", theme.name))?;
+    let rgb = if value.is_ascii() {
+        parse_hex(value)
+    } else {
+        None
+    };
+    rgb.with_context(|| {
+        format!(
+            "theme {:?} color {key:?}: expected #RRGGBB, got {value:?}",
+            theme.name
+        )
+    })
+}
+
 #[allow(dead_code)]
 pub fn render_ansi(src: &str) -> Result<String> {
-    render_ansi_with_source(src, None, 4)
+    render_ansi_with_source(src, None, 4, mdview_theme::themes::catppuccin_mocha::get())
 }
 
 pub fn render_ansi_with_source(
     src: &str,
     source_dir: Option<&Path>,
     tab_width: u8,
+    quote_theme: &Theme,
 ) -> Result<String> {
-    render_ansi_with_source_and_width(src, source_dir, tab_width, terminal_width())
+    render_ansi_with_source_and_width(src, source_dir, tab_width, terminal_width(), quote_theme)
 }
 
 fn render_ansi_with_source_and_width(
@@ -28,8 +77,10 @@ fn render_ansi_with_source_and_width(
     source_dir: Option<&Path>,
     tab_width: u8,
     width: usize,
+    quote_theme: &Theme,
 ) -> Result<String> {
     let mut registry = Registry::new();
+    let quote_palette = QuotePalette::new(quote_theme)?;
     for ext in builtin_extensions() {
         registry.register(ext);
     }
@@ -57,7 +108,15 @@ fn render_ansi_with_source_and_width(
         }
     }
     for child in ast.children() {
-        render_block(child, &ctx, &registry, &mut out, 0, tab_width);
+        render_block(
+            child,
+            &ctx,
+            &registry,
+            &mut out,
+            0,
+            tab_width,
+            &quote_palette,
+        );
         out.push('\n');
     }
     Ok(out)
@@ -70,6 +129,7 @@ fn render_block<'a>(
     out: &mut String,
     depth: usize,
     tab_width: u8,
+    quote_palette: &QuotePalette,
 ) {
     // Code blocks always get the rounded frame; the extension (if any) only
     // colors the interior. Every other node type is handled by the
@@ -89,7 +149,7 @@ fn render_block<'a>(
     match &data.value {
         NodeValue::Document => {
             for c in node.children() {
-                render_block(c, ctx, registry, out, depth, tab_width);
+                render_block(c, ctx, registry, out, depth, tab_width, quote_palette);
             }
         }
         NodeValue::Heading(h) => {
@@ -110,19 +170,27 @@ fn render_block<'a>(
             let nested = std::iter::successors(node.parent(), |parent| parent.parent())
                 .any(|parent| matches!(parent.data.borrow().value, NodeValue::BlockQuote));
             for c in node.children() {
-                render_block(c, ctx, registry, &mut inner, depth, tab_width);
+                render_block(
+                    c,
+                    ctx,
+                    registry,
+                    &mut inner,
+                    depth,
+                    tab_width,
+                    quote_palette,
+                );
             }
             for line in inner.trim_end().split('\n') {
                 let row_start = out.len();
-                out.push_str(QUOTE_BG);
-                out.push_str(ACCENT);
+                out.push_str(&quote_palette.background);
+                out.push_str(&quote_palette.marker);
                 out.push_str("▎ ");
-                out.push_str(MUTED);
+                out.push_str(&quote_palette.foreground);
                 for part in line.split_inclusive(RESET) {
                     out.push_str(part);
                     if part.ends_with(RESET) {
-                        out.push_str(QUOTE_BG);
-                        out.push_str(MUTED);
+                        out.push_str(&quote_palette.background);
+                        out.push_str(&quote_palette.foreground);
                     }
                 }
                 if !nested {
@@ -141,7 +209,17 @@ fn render_block<'a>(
             let children: Vec<_> = node.children().collect();
             let total = children.len();
             for (i, c) in children.into_iter().enumerate() {
-                render_list_item(c, ctx, registry, out, depth, i + 1, total, tab_width);
+                render_list_item(
+                    c,
+                    ctx,
+                    registry,
+                    out,
+                    depth,
+                    i + 1,
+                    total,
+                    tab_width,
+                    quote_palette,
+                );
             }
         }
         NodeValue::ThematicBreak => {
@@ -162,7 +240,15 @@ fn render_block<'a>(
             out.push_str(&format!("[{}]: ", def.name));
             let mut inner = String::new();
             for c in node.children() {
-                render_block(c, ctx, registry, &mut inner, depth, tab_width);
+                render_block(
+                    c,
+                    ctx,
+                    registry,
+                    &mut inner,
+                    depth,
+                    tab_width,
+                    quote_palette,
+                );
             }
             out.push_str(inner.trim_end());
             out.push_str(RESET);
@@ -173,7 +259,7 @@ fn render_block<'a>(
             render_inlines(node, None, out);
             if node.children().next().is_some() {
                 for c in node.children() {
-                    render_block(c, ctx, registry, out, depth, tab_width);
+                    render_block(c, ctx, registry, out, depth, tab_width, quote_palette);
                 }
             }
         }
@@ -361,6 +447,7 @@ fn render_list_item<'a>(
     index: usize,
     _total: usize,
     tab_width: u8,
+    quote_palette: &QuotePalette,
 ) {
     let indent = "  ".repeat(depth);
     let data = node.data.borrow();
@@ -382,7 +469,15 @@ fn render_list_item<'a>(
     let mut first_line = true;
     let mut inner = String::new();
     for c in node.children() {
-        render_block(c, ctx, registry, &mut inner, depth + 1, tab_width);
+        render_block(
+            c,
+            ctx,
+            registry,
+            &mut inner,
+            depth + 1,
+            tab_width,
+            quote_palette,
+        );
     }
     for line in inner.trim_end().split('\n') {
         if first_line {
@@ -647,12 +742,15 @@ const LINK: &str = "\x1b[38;2;37;99;235m"; // #2563eb
 const CODE_BG: &str = "\x1b[48;2;246;248;250m\x1b[38;2;17;24;39m"; // #f6f8fa bg + dark fg
 const BOLD_ACCENT: &str = "\x1b[1m\x1b[38;2;108;124;255m";
 
-const QUOTE_BG: &str = "\x1b[48;2;240;242;255m";
 const QUOTE_WIDTH: usize = 60;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mdview_theme::themes::{catppuccin_latte, catppuccin_mocha};
+
+    const QUOTE_BG: &str = "\x1b[48;2;41;45;66m";
+    const QUOTE_FG: &str = "\x1b[38;2;166;173;200m";
 
     fn strip_ansi(s: &str) -> String {
         let mut out = String::new();
@@ -717,7 +815,7 @@ mod tests {
             ("> first\n> second\n", vec!["first", "second"]),
             ("> quoted line\n", vec!["quoted line"]),
         ];
-        let prefix = "\x1b[48;2;240;242;255m\x1b[38;2;108;124;255m\u{258e} \x1b[38;2;107;114;128m";
+        let prefix = "\x1b[48;2;41;45;66m\x1b[38;2;137;180;250m\u{258e} \x1b[38;2;166;173;200m";
         for (src, expected) in cases {
             let out = render_ansi(src).unwrap();
             let rows: Vec<_> = out.lines().filter(|row| row.contains('\u{258e}')).collect();
@@ -748,7 +846,7 @@ mod tests {
             ("> before [link](https://e.x) after\n", LINK),
             ("> before ~~strike~~ after\n", STRIKE),
         ];
-        let restore = format!("{QUOTE_BG}{MUTED}");
+        let restore = format!("{QUOTE_BG}{QUOTE_FG}");
         for (src, style) in cases {
             let out = render_ansi(src).unwrap();
             let row = out.lines().find(|row| row.contains('\u{258e}')).unwrap();
@@ -770,7 +868,8 @@ mod tests {
     fn blockquote_code_rows_keep_styles() {
         let expected_markers = ['╭', '│', '│', '│', '╰'];
         let src = "> ```rust hl_lines=\"2\"\n> let first = 1;\n> let second = 2;\n> let third = 3;\n> ```\n";
-        let out = render_ansi_with_source_and_width(src, None, 4, 24).unwrap();
+        let out =
+            render_ansi_with_source_and_width(src, None, 4, 24, catppuccin_mocha::get()).unwrap();
         let plain = strip_ansi(&out);
         let rows: Vec<_> = out.lines().filter(|row| row.contains('\u{258e}')).collect();
         assert_eq!(rows.len(), expected_markers.len(), "{out:?}");
@@ -860,6 +959,100 @@ mod tests {
         assert_eq!(strip_ansi(rows[0]), format!("\u{258e} {text}"));
         assert!(rows[0].starts_with(QUOTE_BG), "{out:?}");
         assert!(rows[0].ends_with(RESET), "{out:?}");
+    }
+
+    #[test]
+    fn blockquote_uses_selected_theme_colors() {
+        let src = "> before **bold** after\n\nplain\n";
+        let cases = [
+            (
+                catppuccin_latte::get(),
+                "\x1b[48;2;218;227;245m",
+                "\x1b[38;2;108;111;133m",
+                "\x1b[38;2;30;102;245m",
+            ),
+            (
+                catppuccin_mocha::get(),
+                "\x1b[48;2;41;45;66m",
+                "\x1b[38;2;166;173;200m",
+                "\x1b[38;2;137;180;250m",
+            ),
+        ];
+        for (theme, background, foreground, marker) in cases {
+            let out = render_ansi_with_source_and_width(src, None, 4, 80, theme).unwrap();
+            let row = out.lines().find(|row| row.contains("before")).unwrap();
+            assert!(
+                row.starts_with(&format!("{background}{marker}\u{258e} {foreground}")),
+                "{row:?}"
+            );
+            assert!(
+                row.contains(&format!("{RESET}{background}{foreground} after")),
+                "{row:?}"
+            );
+            assert_eq!(
+                UnicodeWidthStr::width(strip_ansi(row).as_str()),
+                60,
+                "{row:?}"
+            );
+            assert!(row.ends_with(RESET), "{row:?}");
+            assert_eq!(
+                out.lines().find(|row| row.contains("plain")).unwrap(),
+                "plain"
+            );
+        }
+    }
+
+    #[test]
+    fn quote_palette_rejects_invalid_colors() {
+        let invalid = ["#12", "#gg0000", "\u{1f49c}ab"];
+        for key in ["accent", "bg", "muted"] {
+            let mut theme = catppuccin_mocha::get().clone();
+            theme.colors.remove(key);
+            let error = QuotePalette::new(&theme).unwrap_err().to_string();
+            assert!(
+                error.contains(key) && error.contains(&theme.name),
+                "{error}"
+            );
+            for value in invalid {
+                theme.colors.insert(key.to_owned(), value.to_owned());
+                let error = QuotePalette::new(&theme).unwrap_err().to_string();
+                assert!(
+                    error.contains(key) && error.contains(&theme.name),
+                    "{error}"
+                );
+                assert!(error.contains("#RRGGBB"), "{error}");
+            }
+        }
+    }
+
+    #[test]
+    fn quote_palette_rounds_channel_blends() {
+        let cases = [
+            ("#000000", "#000000", "\x1b[48;2;0;0;0m"),
+            ("#050505", "#000000", "\x1b[48;2;1;1;1m"),
+            ("#ffffff", "#ffffff", "\x1b[48;2;255;255;255m"),
+        ];
+        for (accent, background, expected) in cases {
+            let mut theme = catppuccin_mocha::get().clone();
+            theme.colors.insert("accent".to_owned(), accent.to_owned());
+            theme.colors.insert("bg".to_owned(), background.to_owned());
+            assert_eq!(QuotePalette::new(&theme).unwrap().background, expected);
+        }
+    }
+
+    #[test]
+    fn unquoted_output_is_unchanged_across_quote_themes() {
+        let src = concat!(
+            "---\ntitle: Unquoted\n---\n# Heading\n\n",
+            "Use `#!rust let value = 1;` with **bold** text.\n\n",
+            "```rust\nlet value = 1;\n```\n\n",
+            "| a | b |\n|---|---|\n| 1 | 2 |\n\n- item\n"
+        );
+        let dark =
+            render_ansi_with_source_and_width(src, None, 4, 80, catppuccin_mocha::get()).unwrap();
+        let light =
+            render_ansi_with_source_and_width(src, None, 4, 80, catppuccin_latte::get()).unwrap();
+        assert_eq!(dark, light);
     }
 
     #[test]
@@ -964,6 +1157,7 @@ mod tests {
             None,
             4,
             width,
+            catppuccin_mocha::get(),
         )
         .unwrap();
         let rows = code_frame_rows(&out);
@@ -992,6 +1186,7 @@ mod tests {
             None,
             4,
             width,
+            catppuccin_mocha::get(),
         )
         .unwrap();
         let body_rows: Vec<_> = code_frame_rows(&out)
@@ -1019,6 +1214,7 @@ mod tests {
             None,
             4,
             width,
+            catppuccin_mocha::get(),
         )
         .unwrap();
         let body_rows: Vec<_> = code_frame_rows(&out)
@@ -1051,9 +1247,9 @@ mod tests {
     #[test]
     fn code_block_expands_tabs() {
         let src = "```\n\tindented\n```\n";
-        let out = render_ansi_with_source(src, None, 4).unwrap();
+        let out = render_ansi_with_source(src, None, 4, catppuccin_mocha::get()).unwrap();
         assert!(out.contains("    indented"), "got: {out}");
-        let out2 = render_ansi_with_source(src, None, 2).unwrap();
+        let out2 = render_ansi_with_source(src, None, 2, catppuccin_mocha::get()).unwrap();
         assert!(out2.contains("  indented"), "got: {out2}");
     }
 

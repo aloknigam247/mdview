@@ -172,6 +172,9 @@ light = "catppuccin-latte"
 dark = "catppuccin-mocha"
 ```
 
+Terminal blockquote panels blend the selected preset's accent into its background, with themed muted text.
+This follows mdview's configured light/dark selection rather than querying the terminal emulator's colors.
+
 The GUI dispatches a client-side `colorscheme` event after a live theme toggle. Built-in diagram
 renderers listen through the shared bus, and other embedded client code can use the same API:
 

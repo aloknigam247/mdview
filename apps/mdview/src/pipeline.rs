@@ -41,8 +41,21 @@ fn render_once(file: &Path, cli: &Cli) -> Result<()> {
         std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
     let source_dir = file.parent();
     let config = mdview_config::Config::load();
-    let ansi =
-        crate::render_terminal::render_ansi_with_source(&src, source_dir, config.code.tab_width)?;
+    let theme_name = if config.theme.mode.resolve_is_light() {
+        &config.theme.light
+    } else {
+        &config.theme.dark
+    };
+    let pager_theme = mdview_theme::find(theme_name)
+        .or_else(|| mdview_theme::find("catppuccin-mocha"))
+        .or_else(|| mdview_theme::presets::builtin_themes().into_iter().next())
+        .expect("at least one built-in theme");
+    let ansi = crate::render_terminal::render_ansi_with_source(
+        &src,
+        source_dir,
+        config.code.tab_width,
+        pager_theme,
+    )?;
 
     if cli.no_pager {
         use std::io::Write;
@@ -54,15 +67,6 @@ fn render_once(file: &Path, cli: &Cli) -> Result<()> {
         tx.send(vec![mdview_render_terminal::TermChunk::plain(ansi)])
             .context("sending terminal render to pager")?;
         drop(tx);
-        let theme_name = if config.theme.mode.resolve_is_light() {
-            &config.theme.light
-        } else {
-            &config.theme.dark
-        };
-        let pager_theme = mdview_theme::find(theme_name)
-            .or_else(|| mdview_theme::find("catppuccin-mocha"))
-            .or_else(|| mdview_theme::presets::builtin_themes().into_iter().next())
-            .expect("at least one built-in theme");
         mdview_pager::run(rx, pager_theme)?;
     }
     Ok(())
