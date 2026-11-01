@@ -1,3 +1,9 @@
+## [1.0.3](https://github.com/aloknigam247/mdview/compare/v1.0.2...v1.0.3) (2026-11-01)
+
+### Fixed
+
+* **terminal:** fill themed blockquote panels ([6e2698e](https://github.com/aloknigam247/mdview/commit/6e2698ef23b6ca3f3525a51be647378cd743811a)), closes [#19](https://github.com/aloknigam247/mdview/issues/19)
+
 ## [1.0.2](https://github.com/aloknigam247/mdview/compare/v1.0.1...v1.0.2) (2026-10-24)
 
 ### Fixed
