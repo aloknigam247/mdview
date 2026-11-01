@@ -3,9 +3,10 @@ use comrak::nodes::{AstNode, ListType, NodeValue, TableAlignment};
 use comrak::Arena;
 use mdview_core::{parse, Registry, RenderCtx, TermChunks, TerminalCaps, Theme};
 use mdview_ext_highlight::Highlight;
+use mdview_pager::search::strip_ansi;
 use std::path::Path;
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthChar;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::builtins::builtin_extensions;
 
@@ -106,15 +107,32 @@ fn render_block<'a>(
         }
         NodeValue::BlockQuote => {
             let mut inner = String::new();
+            let nested = std::iter::successors(node.parent(), |parent| parent.parent())
+                .any(|parent| matches!(parent.data.borrow().value, NodeValue::BlockQuote));
             for c in node.children() {
                 render_block(c, ctx, registry, &mut inner, depth, tab_width);
             }
             for line in inner.trim_end().split('\n') {
+                let row_start = out.len();
+                out.push_str(QUOTE_BG);
                 out.push_str(ACCENT);
                 out.push_str("▎ ");
-                out.push_str(RESET);
                 out.push_str(MUTED);
-                out.push_str(line);
+                for part in line.split_inclusive(RESET) {
+                    out.push_str(part);
+                    if part.ends_with(RESET) {
+                        out.push_str(QUOTE_BG);
+                        out.push_str(MUTED);
+                    }
+                }
+                if !nested {
+                    let plain = strip_ansi(&out[row_start..]);
+                    let padding =
+                        QUOTE_WIDTH.saturating_sub(UnicodeWidthStr::width(plain.as_str()));
+                    for _ in 0..padding {
+                        out.push(' ');
+                    }
+                }
                 out.push_str(RESET);
                 out.push('\n');
             }
@@ -629,6 +647,9 @@ const LINK: &str = "\x1b[38;2;37;99;235m"; // #2563eb
 const CODE_BG: &str = "\x1b[48;2;246;248;250m\x1b[38;2;17;24;39m"; // #f6f8fa bg + dark fg
 const BOLD_ACCENT: &str = "\x1b[1m\x1b[38;2;108;124;255m";
 
+const QUOTE_BG: &str = "\x1b[48;2;240;242;255m";
+const QUOTE_WIDTH: usize = 60;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -687,6 +708,158 @@ mod tests {
     fn blockquote_has_bar_prefix() {
         let out = render_ansi("> quoted\n").unwrap();
         assert!(out.contains('▎'));
+    }
+
+    #[test]
+    fn blockquote_background_covers_row() {
+        let cases = [
+            (">\n", vec![""]),
+            ("> first\n> second\n", vec!["first", "second"]),
+            ("> quoted line\n", vec!["quoted line"]),
+        ];
+        let prefix = "\x1b[48;2;240;242;255m\x1b[38;2;108;124;255m\u{258e} \x1b[38;2;107;114;128m";
+        for (src, expected) in cases {
+            let out = render_ansi(src).unwrap();
+            let rows: Vec<_> = out.lines().filter(|row| row.contains('\u{258e}')).collect();
+            assert_eq!(rows.len(), expected.len(), "{out:?}");
+            for (row, text) in rows.iter().zip(expected) {
+                let plain = strip_ansi(row);
+                let text_prefix = format!("\u{258e} {text}");
+                assert!(row.starts_with(prefix), "{row:?}");
+                assert!(row.ends_with(RESET), "{row:?}");
+                assert_eq!(row.matches(RESET).count(), 1, "{row:?}");
+                assert_eq!(UnicodeWidthStr::width(plain.as_str()), 60, "{row:?}");
+                assert!(plain.starts_with(&text_prefix), "{row:?}");
+                assert!(
+                    plain[text_prefix.len()..].chars().all(|ch| ch == ' '),
+                    "{row:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn blockquote_background_reopens_after_inline_resets() {
+        let cases = [
+            ("> before **bold** after\n", BOLD),
+            ("> before `code` after\n", CODE_BG),
+            ("> before *italic* after\n", ITALIC),
+            ("> before `#!rust let x = 1;` after\n", CODE_BG),
+            ("> before [link](https://e.x) after\n", LINK),
+            ("> before ~~strike~~ after\n", STRIKE),
+        ];
+        let restore = format!("{QUOTE_BG}{MUTED}");
+        for (src, style) in cases {
+            let out = render_ansi(src).unwrap();
+            let row = out.lines().find(|row| row.contains('\u{258e}')).unwrap();
+            let plain = strip_ansi(row);
+            assert!(row.starts_with(QUOTE_BG), "{row:?}");
+            assert!(row.contains(style), "{row:?}");
+            assert!(row.contains(" after"), "{row:?}");
+            assert_eq!(UnicodeWidthStr::width(plain.as_str()), 60, "{row:?}");
+            assert!(row.matches(RESET).count() > 1, "{row:?}");
+            for (position, _) in row.match_indices(RESET) {
+                let tail = &row[position + RESET.len()..];
+                assert!(tail.is_empty() || tail.starts_with(&restore), "{row:?}");
+            }
+            assert!(row.ends_with(RESET), "{row:?}");
+        }
+    }
+
+    #[test]
+    fn blockquote_code_rows_keep_styles() {
+        let expected_markers = ['╭', '│', '│', '│', '╰'];
+        let src = "> ```rust hl_lines=\"2\"\n> let first = 1;\n> let second = 2;\n> let third = 3;\n> ```\n";
+        let out = render_ansi_with_source_and_width(src, None, 4, 24).unwrap();
+        let plain = strip_ansi(&out);
+        let rows: Vec<_> = out.lines().filter(|row| row.contains('\u{258e}')).collect();
+        assert_eq!(rows.len(), expected_markers.len(), "{out:?}");
+        for (row, marker) in rows.iter().zip(expected_markers) {
+            let visible = strip_ansi(row);
+            assert!(row.starts_with(QUOTE_BG), "{row:?}");
+            assert!(row.ends_with(RESET), "{row:?}");
+            assert!(
+                visible.starts_with(&format!("\u{258e} {marker}")),
+                "{row:?}"
+            );
+            assert_eq!(UnicodeWidthStr::width(visible.as_str()), 60, "{row:?}");
+        }
+        assert!(plain.contains("let first = 1;"), "{out:?}");
+        assert!(plain.contains("let second = 2;"), "{out:?}");
+        assert!(plain.contains("let third = 3;"), "{out:?}");
+        assert!(out.contains("\x1b[7m"), "{out:?}");
+        assert!(out.contains("\x1b[27m"), "{out:?}");
+    }
+
+    #[test]
+    fn blockquote_does_not_style_following_paragraph() {
+        let out =
+            render_ansi("> quoted\n\nOutside blockquote.\n\n\u{258e} literal marker\n").unwrap();
+        let literal = out.lines().find(|row| row.contains("literal")).unwrap();
+        let outside = out.lines().find(|row| row.contains("Outside")).unwrap();
+        assert_eq!(outside, "Outside blockquote.");
+        assert_eq!(literal, "\u{258e} literal marker");
+    }
+
+    #[test]
+    fn blockquote_nested_rows_share_padding() {
+        let expected = ["▎ outer", "▎ ▎ inner", "▎ ▎ ▎ deepest", "▎ final"];
+        let src = "> outer\n>\n> > inner\n> >\n> > > deepest\n>\n> final\n";
+        let out = render_ansi(src).unwrap();
+        let rows: Vec<_> = out.lines().filter(|row| row.contains('\u{258e}')).collect();
+        assert_eq!(rows.len(), expected.len(), "{out:?}");
+        for (row, prefix) in rows.iter().zip(expected) {
+            let plain = strip_ansi(row);
+            assert_eq!(plain.trim_end(), prefix, "{row:?}");
+            assert_eq!(UnicodeWidthStr::width(plain.as_str()), 60, "{row:?}");
+        }
+
+        let out = render_ansi("> - item\n>\n>   > nested\n").unwrap();
+        let nested = out.lines().find(|row| row.contains("nested")).unwrap();
+        let plain = strip_ansi(nested);
+        assert_eq!(plain.matches('\u{258e}').count(), 2, "{nested:?}");
+        assert_eq!(UnicodeWidthStr::width(plain.as_str()), 60, "{nested:?}");
+    }
+
+    #[test]
+    fn blockquote_padding_respects_display_width() {
+        let cases = [
+            ("ascii", "x", 57),
+            ("combining", "e\u{301}", 57),
+            ("emoji", "\u{1f980}", 56),
+            ("presentation", "\u{2764}\u{fe0f}", 56),
+            ("wide", "\u{4e2d}", 56),
+            (
+                "zwj",
+                "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f466}",
+                56,
+            ),
+        ];
+        for (name, text, padding) in cases {
+            let out = render_ansi(&format!("> {text}\n")).unwrap();
+            let row = out.lines().find(|row| row.contains('\u{258e}')).unwrap();
+            assert_eq!(
+                strip_ansi(row),
+                format!("\u{258e} {text}{}", " ".repeat(padding)),
+                "{name}"
+            );
+        }
+
+        let text = "x".repeat(58);
+        let out = render_ansi(&format!("> {text}\n")).unwrap();
+        let row = out.lines().find(|row| row.contains('\u{258e}')).unwrap();
+        assert_eq!(strip_ansi(row), format!("\u{258e} {text}"));
+    }
+
+    #[test]
+    fn blockquote_preserves_long_lines() {
+        let text = format!("start {} end", "x".repeat(80));
+        let out = render_ansi(&format!("> {text}\n")).unwrap();
+        let rows: Vec<_> = out.lines().filter(|row| row.contains('\u{258e}')).collect();
+        assert_eq!(rows.len(), 1, "{out:?}");
+        assert_eq!(strip_ansi(rows[0]), format!("\u{258e} {text}"));
+        assert!(rows[0].starts_with(QUOTE_BG), "{out:?}");
+        assert!(rows[0].ends_with(RESET), "{out:?}");
     }
 
     #[test]
