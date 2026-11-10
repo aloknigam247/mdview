@@ -330,10 +330,18 @@ Link agreed prerequisites, including the order between sibling children, separat
 gh api -X POST repos/<owner>/<repo>/issues/<dependent_number>/dependencies/blocked_by -F issue_id=<prerequisite_id>
 ```
 
-A failed link call, HTTP 422 included, is never success by itself: re-read the parent's `sub_issues` or the dependent's
-`dependencies/blocked_by` and accept only if that exact edge exists; otherwise fail explicitly and leave issue bodies
-untouched. Do not attach an issue merely because it is a prerequisite. On any creation/link failure, report partial
-results and inspect GitHub before retrying; never blindly create the issue again.
+A failed link call, HTTP 422 included, is never success by itself. Confirm every edge by paginated readback matched on
+issue database id, never on issue number (sub-issues can come from other repos with the same numbers); the first
+command must list `<child_id>`, the second `<prerequisite_id>`:
+
+```ps1
+gh api --paginate repos/<owner>/<repo>/issues/<parent_number>/sub_issues --jq ".[].id"
+gh api --paginate repos/<owner>/<repo>/issues/<dependent_number>/dependencies/blocked_by --jq ".[].id"
+```
+
+If the id is missing, fail explicitly and leave issue bodies untouched. Do not attach an issue merely because it is a
+prerequisite. On any creation/link failure, report partial results and inspect GitHub before retrying; never blindly
+create the issue again.
 
 Then report the created issue URL to the user.
 
