@@ -226,9 +226,21 @@ instead of duplicating them. Parent containment and blocked-by dependencies rema
    - **Style** — each fact once; no filler, history, or narrative. Hard-wrap prose at 120 chars; leave tables and URLs
      unwrapped. Prefer tables for comparisons (Today / After). Tag every code fence with a language; PowerShell fences
      use `ps1`.
-   - **Diagrams** — add a Mermaid diagram only when it makes the change clearer than prose (data flow, before/after
-     structure, state). Use `flowchart LR`; explicit `classDef` with fill, stroke and color; label lines ≤ 24 chars
-     split with `<br/>`; no `#` or `{}` inside labels; short subgraph titles; pipe edge labels.
+   - **Diagrams** — add a Mermaid diagram only when it makes the change clearer than prose. Choose by what changes:
+
+     | Change | Diagram |
+     |---|---|
+     | A local fix in one function | None; use a table or snippet |
+     | Several branches or decisions | `flowchart LR` |
+     | Order of calls across components | `sequenceDiagram` |
+     | States and transitions | `stateDiagram-v2` |
+     | Classes, interfaces, inheritance, or ownership | `classDiagram` |
+     | Data schema | `erDiagram` |
+     | Dependencies across modules | `flowchart LR` with one subgraph per module |
+
+     Label it Current or Proposed and highlight what changes; use one diagram unless the two differ in shape.
+     Use explicit `classDef` with fill, stroke, and color where supported. Keep labels short; no `#` or `{}` inside labels.
+     For flowcharts, limit label lines to 24 characters, split with `<br/>`; use short subgraph titles and pipe edge labels.
    - **Relations** — never in the body: parent/child and blocked-by relations exist only as native links (step 8), and a
      tracking parent's children only as its native sub-issues, ordered by blocked-by links between children. No
      relation headings (Related, Dependencies, Links), no list of children, and no sentence whose only purpose is to
