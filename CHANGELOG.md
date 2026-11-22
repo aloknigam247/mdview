@@ -1,3 +1,9 @@
+## [1.1.0](https://github.com/aloknigam247/mdview/compare/v1.0.3...v1.1.0) (2026-11-22)
+
+### Added
+
+* **ai:** add mdview code review workflow ([#100](https://github.com/aloknigam247/mdview/issues/100)) ([b9a7394](https://github.com/aloknigam247/mdview/commit/b9a7394da276894ee8aa2cda437891ac918ce594))
+
 ## [1.0.3](https://github.com/aloknigam247/mdview/compare/v1.0.2...v1.0.3) (2026-11-01)
 
 ### Fixed
