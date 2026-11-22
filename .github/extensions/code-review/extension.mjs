@@ -3,6 +3,13 @@ import { fileURLToPath } from "node:url";
 import { defineWorkflow, joinSession } from "@microsoft/copilot-sdk/extension";
 
 const CRITIC_AGENTS = ["rubber-duck", "general-purpose"];
+// Workflow-declared agents get no file or shell tools, so lenses run as a built-in catalog agent.
+const LENS_AGENT = "rubber-duck";
+const LOCAL_REVIEW_RULE =
+  "Use only this repository's local diff and relevant source, tests, configuration, and documentation; follow " +
+  "code references only as needed to verify findings. Do not use web searches or fetches, remote GitHub lookups, " +
+  "past sessions, other repositories, or network commands. If local evidence is insufficient, report that " +
+  "limitation instead of researching externally.";
 const GUIDES =
   "Before assessing conventions, read the root AGENTS.md and every AGENTS.md in a changed file's parent " +
   "directories. Check the actual implementation where the guide describes aspirational architecture.";
@@ -108,6 +115,7 @@ const VERDICTS_SCHEMA = {
 const REVIEWER_PROMPT = `You are one lens of a multi-lens code reviewer for mdview, a Rust Markdown renderer with GUI,
 terminal, and Neovim surfaces, and a TypeScript diagram sidecar.
 - Read-only: never edit, stage, commit, push, or post anywhere. Do not build or run tests.
+- ${LOCAL_REVIEW_RULE}
 - Report only issues within your lens, in the change or in code the change directly affects.
 - Verify every finding in the source and cite its file and line (0 when no line applies). No speculation.
 - ${GUIDES}
@@ -147,15 +155,17 @@ function changeBrief(scope) {
 }
 
 function lensPrompt(lens, scope) {
-  return `${changeBrief(scope)}
+  return `${REVIEWER_PROMPT}
 
-${GUIDES}
+${changeBrief(scope)}
 
 Your lens (${lens.heading}): ${lens.task}`;
 }
 
 function criticPrompt(findings, scope) {
   return `You are the critic of a multi-lens code review. ${changeBrief(scope)}
+
+${LOCAL_REVIEW_RULE}
 
 Validate every finding below against the source and give exactly one verdict per id:
 - reject: wrong, baseless, outside the change, enforced by CI, or a duplicate (name the kept id).
@@ -193,14 +203,6 @@ const codeReview = defineWorkflow({
     phases: [{ title: "Scope" }, { title: "Review" }, { title: "Critique" }, { title: "Report" }],
     argsSchema: { type: "object", properties: { base: { type: "string" } } },
   },
-  agents: {
-    reviewer: {
-      name: "code-review-lens",
-      description: "Read-only reviewer for one lens of an mdview code review.",
-      tools: ["execute", "read", "search"],
-      prompt: REVIEWER_PROMPT,
-    },
-  },
   run: async (ctx) => {
     ctx.phase("Scope");
     const scope = await ctx.step("scope-v1", () => resolveScope(ctx.args.base));
@@ -213,7 +215,7 @@ const codeReview = defineWorkflow({
       keys.map(
         (key) => () =>
           ctx.agent(lensPrompt(LENSES[key], scope), {
-            agent: ctx.agents.reviewer,
+            agent: LENS_AGENT,
             label: `review:${key}`,
             schema: FINDINGS_SCHEMA,
           }),
