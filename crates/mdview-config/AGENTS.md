@@ -21,8 +21,9 @@
   [the Lua entrypoint](../../lua/mdview/init.lua).
 - Loaders return recovered values and diagnostics in `LoadResult`; `Config::load` discards the returned diagnostics.
   The application separately rejects reported errors before UI startup or detachment in
-  [main.rs::preflight_config](../../apps/mdview/src/main.rs), covered by
-  [app config-error tests](../../apps/mdview/tests/config_errors.rs).
+  [main.rs::preflight_config](../../apps/mdview/src/main.rs).
+  [App config-error tests](../../apps/mdview/tests/config_errors.rs) assert non-zero exits and stderr diagnostics
+  with detachment disabled.
 - Theme toggles do not write config. Follow the consumers in
   [app rendering](../../apps/mdview/src/render.rs) and [pager interaction](../mdview-pager/src/lib.rs).
 

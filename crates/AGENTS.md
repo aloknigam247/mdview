@@ -21,6 +21,7 @@ To add an extension:
 2. Implement the contract; use [mdview-ext-math/src/lib.rs](mdview-ext-math/src/lib.rs) for selective node matching
    or [mdview-ext-frontmatter/src/lib.rs](mdview-ext-frontmatter/src/lib.rs) for document pre-render hooks.
 3. Add the app dependency and register in [apps/mdview/src/builtins.rs](../apps/mdview/src/builtins.rs).
+   Do not register in the [unused core stub](mdview-core/src/builtins.rs).
    Registration order is semantic: selective fenced-block handlers must precede the catch-all `Highlight`, which
    must remain last. Do not alphabetize this registry.
 4. Wire client requirements through the actual [app page path](../apps/mdview/AGENTS.md#native-host-and-page);
