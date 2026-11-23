@@ -1,5 +1,14 @@
 # AGENTS.md — mdview
 
+## Code review
+
+Complete the [code review](.github/agents/code-review.md) before reporting changes ready, opening a PR, or merging it.
+Run it in a session rooted in the worktree containing the change. For a PR, review its head against its target branch.
+Stop and report if the review covered no changed files, covered the wrong diff, failed, was incomplete, or was
+unavailable. The implementer fixes accepted findings within scope; ask the user before skipping one or expanding scope.
+Rerun after any change to the diff, including review fixes. Proceed only when a complete review covers the final diff
+and every accepted finding is fixed or explicitly waived by the user.
+
 ## Project
 `mdview` is a lightweight, extensible markdown renderer built in **Rust** (core,
 renderers, Tauri shell, CLI) with a tiny **Bun-compiled TypeScript sidecar**
