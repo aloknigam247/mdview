@@ -17,7 +17,8 @@
 - Configuration paths are resolved by `Config::config_path`. Missing files yield defaults without creating a file;
   `DEFAULT_CONFIG_TOML` is a template, not evidence of an automatic write.
 - Diagnostics must retain the offending key/value, expectation, and available source location through `ConfigError`.
-  `report` owns the `mdview-config-error:` stderr prefix.
+  `report` owns the `mdview-config-error:` stderr prefix parsed by `on_stderr` in
+  [the Lua entrypoint](../../lua/mdview/init.lua).
 - Loaders return recovered values and diagnostics in `LoadResult`; `Config::load` discards the returned diagnostics.
   The application separately rejects reported errors before UI startup or detachment in
   [main.rs::preflight_config](../../apps/mdview/src/main.rs), covered by

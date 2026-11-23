@@ -33,8 +33,8 @@
 ## Validation
 
 Use the [crate isolation check](../AGENTS.md#dependencies-and-validation) and the existing unit cases for the changed
-language, fallback, inline, or line-marking behavior. Snapshot/demo entrypoints live in [Cargo.toml](Cargo.toml);
-expected outputs live in `__snapshots__/`.
+language, fallback, inline, or line-marking behavior. The snapshot entrypoints in [Cargo.toml](Cargo.toml) write
+`.actual` files for manual comparison with `__snapshots__/`; they do not assert `.expected` contents.
 Browser integration for [fixtures/code.md](../../fixtures/code.md) is in
 [fixtures.spec.ts](../../tests/e2e/tests/fixtures.spec.ts); harness commands are in the
 [test guide](../../tests/AGENTS.md).
