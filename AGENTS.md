@@ -17,6 +17,8 @@ Keep the visual style rounded: CSS border-radius in HTML and curved box-drawing 
 ## Architecture reality
 
 Read the owning guide before editing; verify the entrypoint for the affected output surface.
+No Neovim renderer is wired: `run_nvim` in [pipeline.rs](apps/mdview/src/pipeline.rs) binds the socket and drops its
+events.
 
 | Area | Navigation |
 |------|------------|

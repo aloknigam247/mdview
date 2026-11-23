@@ -23,6 +23,9 @@ Before changing framing or payloads, compare the Rust callers:
 - [Mermaid](../crates/mdview-ext-mermaid/src/sidecar.rs)
 - [Plotly](../crates/mdview-ext-plotly/src/lib.rs)
 
+These callers read stdout as bare SVG and check only exit status, so error responses (which exit 0) bypass their
+fallbacks; change both sides together.
+
 Each caller owns executable discovery and its terminal fallback. Do not infer native GUI behavior from these paths;
 see the [app page guide](../apps/mdview/AGENTS.md#native-host-and-page).
 
