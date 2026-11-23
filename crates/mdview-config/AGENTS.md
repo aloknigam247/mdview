@@ -31,8 +31,9 @@
 
 Keep types, defaults, parsing/validation, and `DEFAULT_CONFIG_TOML` aligned in `src/lib.rs`.
 Read the parser for accepted keys and bounds rather than copying a settings table; TOC heading selection uses `levels`.
-For actions, update `Action::ALL`, string conversions, and the consumers on each affected output surface.
-Keep binding normalization consistent with the GUI key dispatcher and terminal key matching.
+`config.toml`'s `[keymap]` drives the GUI. For action changes, update `Action::ALL`, string conversions, and
+`keymap_json` in [app rendering](../../apps/mdview/src/render.rs). Keep `KeyBinding::matches` and the GUI dispatcher
+consistent with binding normalization. The pager has a separate [`keymap.toml`](../mdview-pager/src/keymap.rs).
 
 Update the relevant configuration documentation and `tests/config.rs` for each config change.
 For startup-policy changes, also cover the app integration target linked above.

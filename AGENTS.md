@@ -79,6 +79,7 @@ App launch, Bun build, and browser commands live in their scoped guides.
 
 ## Conventions
 
+- [Code style](CONTRIBUTING.md#code-style) covers ordering and comments.
 - Commit scopes: [.commitlint-scopes.json](.commitlint-scopes.json).
 - Dependency reuse and crate-isolation requirements: [crate guide](crates/AGENTS.md#dependencies-and-validation).
 - Formatting and lint checks above must pass.
