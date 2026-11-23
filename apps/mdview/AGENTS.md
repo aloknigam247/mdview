@@ -13,7 +13,7 @@
 | [src/profile.rs](src/profile.rs) | Launch timing output |
 | [src/render.rs](src/render.rs) | `render_page_full`, `wrap_page`, GUI CSS and JavaScript |
 | [src/render_terminal.rs](src/render_terminal.rs) | App ANSI rendering and block layout |
-| [src/server.rs](src/server.rs) | `serve_html` snapshots and `serve_dir` request-time rendering |
+| [src/server.rs](src/server.rs) | `serve_html` snapshots and `serve_dir` request-time rendering; keep both listeners loopback-only |
 | [tests/](tests/) | Binary-input, config-error, detachment, and terminal-theme integration tests |
 | [webview/src/client.ts](webview/src/client.ts) | Separate bundled WebSocket client |
 

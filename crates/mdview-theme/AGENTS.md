@@ -18,6 +18,10 @@ Do not break the shared theme contract in [mdview-core/src/types.rs](../mdview-c
 | [src/themes/mod.rs](src/themes/mod.rs) | Preset modules |
 | [tests/integration.rs](tests/integration.rs) | Required keys, preset ordering, CSS, ANSI, and cache checks |
 
+`src/ansi.rs` and `src/cache.rs` are library helpers. For terminal colors, follow the
+[app renderer](../../apps/mdview/src/render_terminal.rs) and [color conversion](../mdview-render-terminal/src/color.rs).
+For Neovim theme caching, edit [mdview-nvim](../mdview-nvim/src/lib.rs).
+
 ## Adding a preset
 
 1. Use [catppuccin_mocha.rs](src/themes/catppuccin_mocha.rs) as the preset template and reuse the palette builder.
