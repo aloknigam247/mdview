@@ -10,6 +10,10 @@ unavailable. The implementer fixes accepted findings within scope; ask the user 
 Rerun after any change to the diff, including review fixes. Proceed only when a complete review covers the final diff
 and every accepted finding is fixed or explicitly waived by the user.
 
+## Pull requests
+
+Include `Copilot-Session: <session-id>` in the PR description, using the current Copilot session ID.
+
 ## Project
 
 `mdview` is a Rust Markdown viewer with desktop, terminal, and Neovim entrypoints.
