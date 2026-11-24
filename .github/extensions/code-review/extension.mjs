@@ -251,9 +251,7 @@ const codeReview = defineWorkflow({
     }
     ctx.phase("Review");
     const keys = Object.keys(LENSES);
-    const results = await ctx.parallel(
-      keys.map((key) => () => reviewLens(ctx, key, scope)),
-    );
+    const results = await ctx.parallel(keys.map((key) => () => reviewLens(ctx, key, scope)));
     const failedLenses = keys.filter((_, index) => results[index] === null);
     const findings = keys.flatMap((key, index) =>
       (results[index]?.findings ?? []).map((finding, n) => ({ id: `${key}-${n + 1}`, lens: key, ...finding })),
