@@ -34,11 +34,13 @@ const LENSES = {
   design: {
     heading: "Logic and design",
     task:
-      "Find logic errors, and places where the change departs from the repository's established patterns " +
-      "or where a better-organised, more maintainable design exists that is no larger. Follow changed data " +
-      "across the affected GUI, terminal, and Neovim surfaces, extension registry and sidecar where relevant. " +
-      "Check the contracts and Architecture reality in AGENTS.md against the actual code. Cite the existing " +
-      "pattern (file and line) the change should follow.",
+      "First check that the implementation produces the intended result and preserves behavior callers still " +
+      "rely on. Compare behavior before and after the change on success, at boundaries, and on failure. " +
+      "Trace changed data across the affected GUI, terminal, and Neovim surfaces, extension registry and " +
+      "sidecar where relevant. Check the contracts and Architecture reality in AGENTS.md against the actual " +
+      "code. For each defect, give a concrete input or state, the expected result, and what the changed code " +
+      "does instead. Then consider departures from established patterns or a more maintainable design that " +
+      "is no larger. For design suggestions, cite the existing pattern (file and line) the change should follow.",
   },
   performance: {
     heading: "Performance",
